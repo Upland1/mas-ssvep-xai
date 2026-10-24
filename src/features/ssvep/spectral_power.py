@@ -84,15 +84,30 @@ def mean_spectrum(power: np.ndarray, channels: Optional[Sequence[int]] = None) -
   return p.mean(axis=(0, 1))
 
 
+def response_bin(f_hz: float, n_samples: int, header_fs: float) -> int:
+  """DFT bin a true `f_hz` response occupies in an `n_samples` window sampled at `header_fs`.
+
+  `k = round(f_hz * n_samples / header_fs)` (half up). It does not depend on the
+  fs used to label the axis: under the legacy fs 250 a 24 Hz response stays in
+  bin 24 (labelled 23.4375 Hz), while the bin nearest 24 Hz on that axis is 25
+  (PF-04).
+  """
+  return int(np.floor(float(f_hz) * int(n_samples) / float(header_fs) + 0.5))
+
+
 def spectrum_peaks(freqs: np.ndarray, spectrum: np.ndarray, freq_range: tuple,
-                   target_hz: Optional[float] = None, n_harmonics: int = 2) -> dict:
-  """Maximum of `spectrum` in `freq_range` and the power at the bins nearest the target harmonics.
+                   target_hz: Optional[float] = None, n_harmonics: int = 2,
+                   header_fs: Optional[float] = None, n_samples: Optional[int] = None) -> dict:
+  """Maximum of `spectrum` in `freq_range` and the power at the target harmonics' bins.
 
   Returns `f_max`, `p_max`, `k_max` (bin index of the maximum on the full
   axis), `band_median` (median power in the range) and `harmonics`: a list of
-  `{h, f_target, k, f_bin, power}` for `h = 1..n_harmonics` whose `h * target_hz`
-  lies in the range, where `k` is the bin nearest `h * target_hz` on the
-  labelled axis (ties to the lower bin).
+  dicts for `h = 1..n_harmonics` whose `h * target_hz` lies in the range, with
+  `h`, `f_target`; the **nearest-labelled** bin `k`, `f_bin`, `power` (bin
+  nearest `h * target_hz` on the labelled axis, ties to the lower bin); and the
+  **response** bin `k_resp`, `f_resp` (its label on the axis in use), `power_resp`
+  = `response_bin(h * target_hz, n_samples, header_fs)`. Without `header_fs`
+  the axis is taken as correct and the response bin is the nearest-labelled one.
   """
   f = np.asarray(freqs, dtype=np.float64)
   s = np.asarray(spectrum, dtype=np.float64)
@@ -104,13 +119,18 @@ def spectrum_peaks(freqs: np.ndarray, spectrum: np.ndarray, freq_range: tuple,
          "band_median": float(np.median(s[sel])), "harmonics": []}
   if target_hz is not None:
     lo, hi = freq_range
+    n = int(n_samples) if n_samples is not None else 2 * (f.size - 1)
     for h in range(1, n_harmonics + 1):
       ft = h * float(target_hz)
       if not lo <= ft <= hi:
         continue
       k = int(np.argmin(np.abs(f - ft)))
+      kr = k if header_fs is None else response_bin(ft, n, header_fs)
+      if not 0 <= kr < f.size:
+        raise ValueError(f"response bin {kr} of {ft:g} Hz outside the axis ({f.size} bins)")
       out["harmonics"].append({"h": h, "f_target": ft, "k": k, "f_bin": float(f[k]),
-                               "power": float(s[k])})
+                               "power": float(s[k]), "k_resp": kr, "f_resp": float(f[kr]),
+                               "power_resp": float(s[kr])})
   return out
 
 

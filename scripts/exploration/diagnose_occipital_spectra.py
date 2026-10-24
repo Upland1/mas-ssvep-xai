@@ -6,8 +6,11 @@ y_labels}.npy (P02, never the root arrays: PF-09), keep the stimulus windows
 `channels.scalp`, PF-06), compute `|rfft|^2` of each window, average over the
 windows and the three channels and plot 5-35 Hz (config `features.psd_range_hz`),
 one panel per class, with the target frequency (solid) and its 2nd harmonic
-(dotted) marked. Prints per class the frequency of the maximum in the range and
-the power at the bin nearest the target (and 2f0).
+(dotted) marked. Prints per class the frequency of the maximum in the range; per
+harmonic (f0, 2f0) the power at the response bin round(h*f0*T/header_fs), where a
+true response lies whatever fs labels the axis, and, when it differs, at the bin
+nearest h*f0 on the labelled axis; and a specificity ratio (own power at the 1f0
+response bin over the median of the other classes at that bin).
 
 fs: the legacy arrays store no sampling rate. Default `--fs 250` reproduces the
 Era-A assumption (legacy, PF-04: every peak sits at f * 250/256, e.g. 24 -> 23.44
@@ -138,24 +141,30 @@ def header_fs(n_samples: int, sub_window_sec: float) -> float:
 def occipital_class_spectra(X_time: np.ndarray, y: np.ndarray, fs: float,
                             channel_names: Sequence[str], conditions: Sequence[int],
                             freq_range: tuple = (5.0, 35.0),
-                            occipital: Sequence[str] = OCCIPITAL) -> dict:
-  """FFT power per class over the occipital channels (by name) and its peaks.
+                            occipital: Sequence[str] = OCCIPITAL,
+                            header_fs: Optional[float] = None) -> dict:
+  """FFT power per class over the occipital channels (by name), its peaks and specificity.
 
-  Returns `freqs (F,)`, `channels` (indices of `occipital` in `channel_names`),
-  `spectra` {code: (F,) mean |rfft|^2 over the class windows and the occipital
-  channels}, `counts` {code: windows}, `peaks` {code: `spectrum_peaks` output
-  with the code's stimulation frequency}. Classes with no window are left out
-  of `spectra` and `peaks` (count 0). Rows of other labels (201, 202) are ignored.
-  Raises ValueError when the names do not match the channel axis (PF-06).
+  Returns `freqs (F,)` (axis labelled with `fs`), `channels` (indices of
+  `occipital` in `channel_names`), `spectra` {code: (F,) mean |rfft|^2 over the
+  class windows and the occipital channels}, `counts` {code: windows}, `peaks`
+  {code: `spectrum_peaks` output with the code's stimulation frequency, response
+  bins from `header_fs` and the window length} and `specificity` {code:
+  `specificity_ratio` output}. `header_fs` None = the axis is taken as correct
+  (response bin = nearest-labelled bin). Classes with no window are left out of
+  `spectra`, `peaks` and `specificity` (count 0). Rows of labels not in
+  `conditions` are ignored; a code without a stimulation frequency (201, 202)
+  gets its maximum only. Raises ValueError when the names do not match the
+  channel axis (PF-06).
   """
   X = np.asarray(X_time, dtype=np.float64)
   y = np.asarray(y).reshape(-1)
   if len(X) != len(y):
     raise ValueError(f"length mismatch: X_time {len(X)}, y {len(y)}")
   chans = select_channels_by_name(channel_names, occipital, X.shape[1])
-  out = {"channels": chans, "spectra": {}, "counts": {}, "peaks": {}, "freqs": None}
-  freqs = np.fft.rfftfreq(X.shape[-1], d=1.0 / float(fs))
-  out["freqs"] = freqs
+  n_samples = X.shape[-1]
+  out = {"channels": chans, "spectra": {}, "counts": {}, "peaks": {}, "specificity": {},
+         "freqs": np.fft.rfftfreq(n_samples, d=1.0 / float(fs))}
   for code in conditions:
     rows = X[y == code]
     out["counts"][int(code)] = int(len(rows))
@@ -164,13 +173,40 @@ def occipital_class_spectra(X_time: np.ndarray, y: np.ndarray, fs: float,
     _, power = fft_power(rows[:, chans, :], fs)
     s = mean_spectrum(power)
     out["spectra"][int(code)] = s
-    out["peaks"][int(code)] = spectrum_peaks(freqs, s, freq_range,
-                                             target_hz=STIM_FREQS_HZ.get(int(code)))
+    out["peaks"][int(code)] = spectrum_peaks(out["freqs"], s, freq_range,
+                                             target_hz=STIM_FREQS_HZ.get(int(code)),
+                                             header_fs=header_fs, n_samples=n_samples)
+  for code, pk in out["peaks"].items():
+    h1 = [h for h in pk["harmonics"] if h["h"] == 1]
+    if h1:
+      out["specificity"][code] = specificity_ratio(out["spectra"], code, h1[0]["k_resp"])
   return out
 
 
+def specificity_ratio(spectra: dict, code: int, k: int) -> dict:
+  """Own power at bin `k` over the median power of the other stimulus classes at that bin.
+
+  `spectra` {code: (F,)}; "other stimulus classes" = the other codes of
+  `spectra` that have a stimulation frequency (201/202 excluded). Returns
+  `{k, own, others_median, n_others, ratio}`; `ratio` and `others_median` are
+  None without another class. A shared rhythm (alpha in every class) gives
+  ratio ~1, a class-specific SSVEP gives ratio >> 1.
+  """
+  own = float(np.asarray(spectra[code])[k])
+  others = [float(np.asarray(v)[k]) for c, v in spectra.items()
+            if c != code and c in STIM_FREQS_HZ]
+  med = float(np.median(others)) if others else None
+  ratio = (own / med if med else float("inf")) if med is not None else None
+  return {"k": int(k), "own": own, "others_median": med, "n_others": len(others), "ratio": ratio}
+
+
 def format_peaks(subject: str, result: dict, conditions: Sequence[int]) -> str:
-  """Console block: one line per class with the maximum and the target-bin powers."""
+  """Console block: one line per class with the maximum, the harmonic bins and specificity.
+
+  Per harmonic: the response bin (where a true h*f0 response lies) and, when it
+  differs, the nearest-labelled bin (nearest h*f0 on the axis in use). Codes
+  without a stimulation frequency print the maximum only.
+  """
   lines = []
   for code in conditions:
     n = result["counts"].get(int(code), 0)
@@ -179,11 +215,21 @@ def format_peaks(subject: str, result: dict, conditions: Sequence[int]) -> str:
       continue
     pk = result["peaks"][int(code)]
     f0 = STIM_FREQS_HZ.get(int(code))
-    parts = [f"  {subject} {code}: n={n}, target {f0:.2f} Hz; max in band at {pk['f_max']:.3f} Hz "
-             f"(bin {pk['k_max']}, P={pk['p_max']:.4g}); band median P={pk['band_median']:.4g}"]
+    head = f"  {subject} {code}: n={n}, " + (f"target {f0:.2f} Hz; " if f0 is not None else "")
+    parts = [f"{head}max in band at {pk['f_max']:.3f} Hz (bin {pk['k_max']}, P={pk['p_max']:.4g}); "
+             f"band median P={pk['band_median']:.4g}"]
+    med = pk["band_median"]
     for h in pk["harmonics"]:
-      parts.append(f"; {h['h']}f0 nearest bin {h['k']} ({h['f_bin']:.3f} Hz) P={h['power']:.4g}"
-                   f" (x{h['power'] / pk['band_median']:.2f} median)")
+      parts.append(f"; {h['h']}f0 response bin {h['k_resp']} ({h['f_resp']:.3f} Hz) "
+                   f"P={h['power_resp']:.4g} (x{h['power_resp'] / med:.2f} median)")
+      if h["k"] != h["k_resp"]:
+        parts.append(f", nearest-labelled bin {h['k']} ({h['f_bin']:.3f} Hz) P={h['power']:.4g} "
+                     f"(x{h['power'] / med:.2f} median)")
+    sp = result.get("specificity", {}).get(int(code))
+    if sp is not None:
+      r = "n/a" if sp["ratio"] is None else f"x{sp['ratio']:.2f}"
+      parts.append(f"; specificity {r} (1f0 response bin {sp['k']} vs median of "
+                   f"{sp['n_others']} other classes)")
     lines.append("".join(parts))
   return "\n".join(lines)
 
@@ -255,7 +301,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     try:
       d = load_legacy_windows(processed_dir, subject)
       hfs = header_fs(d["X_time"].shape[-1], sub_sec)
-      res = occipital_class_spectra(d["X_time"], d["y"], args.fs, scalp, conds, freq_range)
+      res = occipital_class_spectra(d["X_time"], d["y"], args.fs, scalp, conds, freq_range,
+                                    header_fs=hfs)
     except (FileNotFoundError, ValueError) as exc:
       print(f"[-] Skipping {subject}: {exc}")
       skipped.append(subject)
