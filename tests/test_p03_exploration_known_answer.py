@@ -535,3 +535,215 @@ def test_script_module_entry_point(tmp_path):
                      cwd=ROOT, capture_output=True, text=True, timeout=120)
   assert r.returncode == 0, r.stdout + r.stderr
   _check_smoke(r.stdout, r.returncode, figs)
+
+
+# --- Round 2: response bins, specificity, format_peaks (07_review pre-run audit fix 2) ------
+
+# In-band (5-35 Hz) harmonics h * f0, h = 1, 2, of the five targets (STIM_FREQS_HZ):
+# 101: 24 (48 out); 102: 20 (40 out); 103: 15, 30; 104: 120/11 = 10.909, 240/11 = 21.818;
+# 105: 60/7 = 8.571, 120/7 = 17.143 -> eight harmonics. With T = 256 samples at header fs 256
+# the response bin is round(f * 256 / 256) = round(f): 24, 20, 15, 30, 11, 22, 9, 17.
+# The bin nearest f on the legacy axis k * 250 / 256 is round(f * 256 / 250):
+# 24.576 -> 25, 20.48 -> 20, 15.36 -> 15, 30.72 -> 31, 11.17 -> 11, 22.34 -> 22, 8.78 -> 9,
+# 17.55 -> 18: they differ for 24, 30 and 120/7 Hz only.
+HARMONICS = {  # code -> [(h, f_hz, response bin, nearest-labelled bin at fs 250)]
+  101: [(1, 24.0, 24, 25)],
+  102: [(1, 20.0, 20, 20)],
+  103: [(1, 15.0, 15, 15), (2, 30.0, 30, 31)],
+  104: [(1, 120 / 11, 11, 11), (2, 240 / 11, 22, 22)],
+  105: [(1, 60 / 7, 9, 9), (2, 120 / 7, 17, 18)],
+}
+
+
+def _check_response_bins(peaks_fn):
+  """24, 30 and 120/7 Hz sinusoids (A = 2) sampled at 256 Hz, axis labelled at fs 250."""
+  a = 2.0
+  for code, h, f_hz, k_resp, k_near in [(101, 1, 24.0, 24, 25), (103, 2, 30.0, 30, 31),
+                                        (105, 2, 120 / 7, 17, 18)]:
+    freqs, p = sp.fft_power(_sine(f_hz, a)[None, None], FS_LEGACY)
+    s = p[0, 0]
+    pk = peaks_fn(freqs, s, (5.0, 35.0), target_hz=STIM_FREQS[code], header_fs=256.0,
+                  n_samples=N)
+    hh = [x for x in pk["harmonics"] if x["h"] == h][0]
+    assert hh["k_resp"] == k_resp and hh["k"] == k_near
+    assert int(np.argmax(s)) == k_resp != k_near
+    assert abs(hh["f_resp"] - k_resp * 250 / 256) <= 1e-9
+    assert abs(hh["f_bin"] - k_near * 250 / 256) <= 1e-9
+    assert hh["power_resp"] == s[k_resp] and hh["power"] == s[k_near]
+    if f_hz == int(f_hz):  # exact bin: all power in k_resp, none in its neighbour
+      np.testing.assert_allclose(hh["power_resp"], (N / 2) ** 2 * a ** 2, rtol=1e-9)
+      assert hh["power"] <= 1e-12 * hh["power_resp"]
+    else:  # 120/7 Hz sits 0.143 bin above 17: leakage, still argmax at 17
+      assert hh["power_resp"] > 10 * hh["power"]
+
+
+STIM_FREQS = signal_plots.STIM_FREQS_HZ
+
+
+def test_response_bins_legacy_axis_24_30_17(monkeypatch):
+  """Known answer (PF-04, audit fix 2a): fs 250 labels, header 256, T = 256. Sinusoids at 24,
+  2*15 = 30 and 2*60/7 = 17.143 Hz -> response bins 24, 30, 17 (= argmax of the planted
+  spectrum), nearest-labelled bins 25, 31, 18 (not the argmax); labels k * 250/256 (1e-9);
+  for 24 and 30 Hz power_resp = (N/2)^2 A^2 = 65536 at A = 2 (rtol 1e-9) and the
+  nearest-labelled bin holds <= 1e-12 of it. Source: DFT, 07_review fix 1/2.
+  Variant: a response bin computed on the labelled axis (round(f * T / 250), i.e. the
+  nearest-labelled bin) -> the check fails.
+  """
+  _check_response_bins(sp.spectrum_peaks)
+  monkeypatch.setattr(sp, "response_bin",
+                      lambda f_hz, n_samples, header_fs: int(np.floor(f_hz * n_samples / 250.0 + 0.5)))
+  with pytest.raises(AssertionError):
+    _check_response_bins(sp.spectrum_peaks)
+
+
+def test_response_bins_through_class_spectra_and_console(capsys, tmp_path):
+  """Known answer: the script at the default fs 250 on 256-sample windows (header fs 256)
+  prints for 101 `1f0 response bin 24 (23.438 Hz)` followed by `nearest-labelled bin 25
+  (24.414 Hz)`, for 103 `2f0 response bin 30 (29.297 Hz)` + `nearest-labelled bin 31
+  (30.273 Hz)`; 102 and 104 print no nearest-labelled bin (they coincide). Exact.
+  Source: HARMONICS derivation above, 03_changes Round 2 console format.
+  """
+  X, y = _legacy_subject()
+  res = dos.occipital_class_spectra(X, y, FS_LEGACY, SCALP, STIM, (5.0, 35.0), header_fs=256.0)
+  for code, rows in HARMONICS.items():
+    got = {x["h"]: (x["k_resp"], x["k"]) for x in res["peaks"][code]["harmonics"]}
+    assert got == {h: (kr, kn) for h, _, kr, kn in rows}
+  _write_subject(tmp_path / "proc" / "S01", X, y)
+  assert dos.main(["--subject", "S01", "--no-figures", "--processed-dir", str(tmp_path / "proc")]) == 0
+  lines = {ln.split(":")[0].strip(): ln for ln in capsys.readouterr().out.splitlines()
+           if ln.startswith("  S01 1")}
+  assert "1f0 response bin 24 (23.438 Hz)" in lines["S01 101"]
+  assert ", nearest-labelled bin 25 (24.414 Hz)" in lines["S01 101"]
+  assert "2f0 response bin 30 (29.297 Hz)" in lines["S01 103"]
+  assert ", nearest-labelled bin 31 (30.273 Hz)" in lines["S01 103"]
+  assert "2f0 response bin 17 (16.602 Hz)" in lines["S01 105"]
+  assert ", nearest-labelled bin 18 (17.578 Hz)" in lines["S01 105"]
+  for c in ("S01 102", "S01 104"):
+    assert "nearest-labelled" not in lines[c]
+
+
+def test_response_bin_equals_nearest_at_header_fs(capsys, tmp_path):
+  """Known answer (audit fix 2b): at fs 256 = header fs, response bin = nearest bin for all
+  eight in-band harmonics: 24, 20, 15, 30, 11, 22, 9, 17 (list derived above), labels k Hz;
+  the console prints no nearest-labelled bin. Exact.
+  """
+  X, y = _legacy_subject()
+  res = dos.occipital_class_spectra(X, y, 256.0, SCALP, STIM, (5.0, 35.0), header_fs=256.0)
+  seen = []
+  for code, rows in HARMONICS.items():
+    hs = res["peaks"][code]["harmonics"]
+    assert [x["h"] for x in hs] == [h for h, _, _, _ in rows]
+    for x, (h, f_hz, kr, _) in zip(hs, rows):
+      assert x["k_resp"] == x["k"] == kr and x["f_resp"] == x["f_bin"] == float(kr)
+      assert abs(x["f_target"] - f_hz) <= 1e-12
+      seen.append(kr)
+  assert seen == [24, 20, 15, 30, 11, 22, 9, 17]
+  _write_subject(tmp_path / "proc" / "S01", X, y)
+  assert dos.main(["--subject", "S01", "--fs", "256", "--no-figures",
+                   "--processed-dir", str(tmp_path / "proc")]) == 0
+  out = capsys.readouterr().out
+  assert "fs=256 (header)" in out and "nearest-labelled" not in out
+
+
+def _specific_subject(shared_hz=None, seed=None, n_win=1):
+  """Classes 101..105. O1/Oz/O2 of every window = B * delta[n] (flat |rfft|^2 = B^2 floor)
+  plus, by default, A sin(2 pi k t) at the class's own response bin k (24, 20, 15, 11, 9 Hz,
+  exact bins at 256 Hz, phase 0). With shared_hz: the same A sin(2 pi shared_hz t) in every
+  class instead, plus N(0, 1) noise from `seed`."""
+  rng = np.random.default_rng(seed)
+  X, y = [], []
+  for code in STIM:
+    for _ in range(n_win):
+      w = np.zeros((7, N))
+      for c in ("O1", "Oz", "O2"):
+        i = SCALP.index(c)
+        if shared_hz is None:
+          w[i] = _sine(float(PLANT_BIN[code]), SPEC_A)
+          w[i, 0] += SPEC_B
+        else:
+          w[i] = _sine(shared_hz, SPEC_A) + rng.normal(0, 1.0, N)
+      X.append(w)
+      y.append(code)
+  return np.stack(X), np.asarray(y, dtype=np.int64)
+
+
+SPEC_A, SPEC_B = 10.0, 50.0
+
+
+def _check_specificity(class_spectra):
+  X, y = _specific_subject()
+  res = class_spectra(X, y, FS_LEGACY, SCALP, STIM, (5.0, 35.0), header_fs=256.0)
+  expected = 1.0 + (SPEC_A * N / (2 * SPEC_B)) ** 2  # 1 + 25.6^2 = 656.36
+  for code in STIM:
+    s = res["specificity"][code]
+    assert s["k"] == PLANT_BIN[code] and s["n_others"] == 4
+    np.testing.assert_allclose(s["own"], SPEC_B ** 2 + (SPEC_A * N / 2) ** 2, rtol=1e-9)
+    np.testing.assert_allclose(s["others_median"], SPEC_B ** 2, rtol=1e-9)
+    np.testing.assert_allclose(s["ratio"], expected, rtol=1e-9)
+
+
+def test_specificity_class_specific_analytic(monkeypatch):
+  """Known answer (audit fix 2c): each class carries A = 10 at its own exact response bin k
+  (phase 0, rfft = -i A N / 2) on top of B = 50 * delta[n] (|rfft|^2 = B^2 at every bin), so at
+  k the own power is |B - i A N/2|^2 = B^2 + (A N/2)^2 = 2500 + 1638400 and every other class
+  has B^2 = 2500 (its sine sits on another exact bin: no leakage). Ratio = 1 + (A N / 2B)^2 =
+  656.36 for every class at the legacy fs 250 with header 256, 4 other classes. rtol 1e-9.
+  Source: DFT of a sinusoid and of an impulse.
+  Variant: specificity read at the nearest-labelled bin (25 for 101) -> ratio 1 -> fails.
+  """
+  _check_specificity(dos.occipital_class_spectra)
+  orig = dos.specificity_ratio
+
+  def at_nearest(spectra, code, k):
+    near = {24: 25}.get(k, k)
+    return orig(spectra, code, near)
+
+  monkeypatch.setattr(dos, "specificity_ratio", at_nearest)
+  with pytest.raises(AssertionError):
+    _check_specificity(dos.occipital_class_spectra)
+
+
+def test_specificity_shared_rhythm_near_one():
+  """Known answer (audit fix 2c): the same 120/11 = 10.909 Hz sinusoid (A = 10, phase 0,
+  response bin 11) in all five classes plus N(0, 1) noise (seed 11), 20 windows per class.
+  Signal power at bin 11 is identical across classes, S = |DFT|^2 ~ (A N / 2)^2 = 1.6e6; noise
+  adds sigma^2 N = 256 on average and a cross term of std ~ 2 sqrt(S sigma^2 N / 2) ~ 2.9e4 per
+  window-channel, i.e. ~1.8 % of S, averaged over 60 window-channels -> ~0.23 %; own vs median
+  of 4 others differ by ~0.33 % (1 sigma). Ratio of 104 = 1 within 2 % (> 6 sigma).
+  Noise-free, every class's ratio is exactly 1 (checked, 1e-12).
+  Source: DFT, sample-mean variance.
+  """
+  X, y = _specific_subject(shared_hz=120 / 11, seed=11, n_win=20)
+  res = dos.occipital_class_spectra(X, y, FS_LEGACY, SCALP, STIM, (5.0, 35.0), header_fs=256.0)
+  s = res["specificity"][104]
+  assert s["k"] == 11 and s["n_others"] == 4
+  assert abs(s["ratio"] - 1.0) <= 0.02
+  assert res["peaks"][101]["k_max"] == 11  # the shared rhythm is every class's maximum
+  X0 = np.zeros_like(X)
+  for c in ("O1", "Oz", "O2"):
+    X0[:, SCALP.index(c)] = _sine(120 / 11, SPEC_A)
+  res0 = dos.occipital_class_spectra(X0, y, FS_LEGACY, SCALP, STIM, (5.0, 35.0), header_fs=256.0)
+  for code in STIM:
+    assert abs(res0["specificity"][code]["ratio"] - 1.0) <= 1e-12
+
+
+def test_format_peaks_with_rest_codes():
+  """Known answer (audit fix 2d): conditions (201, 202, 101..105) -> format_peaks does not raise;
+  the 201 and 202 lines are exactly `  S01 <code>: n=<n>, max in band at 29.297 Hz (bin 30, P=..);
+  band median P=..` (30 Hz rest rhythm, bin 30 on the legacy axis) with no target, response bin
+  or specificity; 201/202 are not counted among the 'other classes' (101: n_others 4).
+  Source: 07_review fix 1c; 01_DATA_SPEC section 6.
+  """
+  X, y = _legacy_subject()
+  conds = (201, 202) + STIM
+  res = dos.occipital_class_spectra(X, y, FS_LEGACY, SCALP, conds, (5.0, 35.0), header_fs=256.0)
+  text = dos.format_peaks("S01", res, conds)
+  lines = text.splitlines()
+  assert len(lines) == 7
+  for ln, code, n in [(lines[0], 201, 8), (lines[1], 202, 4)]:
+    pk = res["peaks"][code]
+    assert ln == (f"  S01 {code}: n={n}, max in band at 29.297 Hz (bin 30, P={pk['p_max']:.4g}); "
+                  f"band median P={pk['band_median']:.4g}")
+  assert 201 not in res["specificity"] and 202 not in res["specificity"]
+  assert res["specificity"][101]["n_others"] == 4
+  assert "vs median of 4 other classes" in lines[2]
