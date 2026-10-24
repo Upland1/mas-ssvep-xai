@@ -81,3 +81,66 @@ None.
 5. REQUEST — `mas/state/phases/P03-exploration/03_changes_signal-processing.md` (APIs, flags, bin-25 note).
 
 ## Questions
+
+## Round 2
+
+Trigger: `07_review.md` pre-run audit round 1 (b4bc757), required fix 2. Builder code at
+1869c0a / 78ea210 (`response_bin`, `spectrum_peaks` `k_resp`/`f_resp`/`power_resp`,
+`specificity_ratio`, `format_peaks` for codes without f0). Six tests appended to
+MODIFIED `tests/test_p03_exploration_known_answer.py` (18 tests in the file now).
+
+Analytic bin table used by the tests (T = 256 samples, header fs 256; in-band harmonics
+5–35 Hz): response bin = round(f·256/256); nearest-labelled bin on the legacy axis
+k·250/256 = round(f·256/250).
+
+| h·f0 (Hz) | 24 | 20 | 15 | 30 | 10.909 | 21.818 | 8.571 | 17.143 |
+|---|---|---|---|---|---|---|---|---|
+| response bin | 24 | 20 | 15 | 30 | 11 | 22 | 9 | 17 |
+| nearest-labelled at fs 250 | 25 | 20 | 15 | 31 | 11 | 22 | 9 | 18 |
+
+(computed with `.venv/bin/python -c` over `np.arange(129)*250/256`; 24.576 → 25, 30.72 → 31, 17.55 → 18.)
+
+| Test id | Simulates | Expected | Tolerance | Source | Catches bug | Result |
+|---|---|---|---|---|---|---|
+| `::test_response_bins_legacy_axis_24_30_17` | A = 2 sinusoids at 24, 30, 120/7 Hz sampled at 256 Hz, axis fs 250, header 256 | `k_resp` 24/30/17 = argmax; `k` 25/31/18 ≠ argmax; labels k·250/256; 24 and 30 Hz: `power_resp` = (N/2)²A² = 65536, nearest-labelled bin ≤ 1e-12 of it; 17.143 Hz: response > 10× nearest-labelled | exact bins; 1e-9 labels; rtol 1e-9 power | DFT, audit fix 2a | response bin computed on the labelled axis, round(f·T/250) (variant run, fails) | PASS |
+| `::test_response_bins_through_class_spectra_and_console` | legacy subject, default fs 250 | per class `(k_resp, k)` = table; console `1f0 response bin 24 (23.438 Hz)` + `, nearest-labelled bin 25 (24.414 Hz)`; 103 `2f0 response bin 30 (29.297 Hz)` + `31 (30.273 Hz)`; 105 `2f0 response bin 17 (16.602 Hz)` + `18 (17.578 Hz)`; no nearest-labelled for 102, 104 | exact | table, Round 2 console format | — | PASS |
+| `::test_response_bin_equals_nearest_at_header_fs` | same, fs 256 | all eight harmonics `k_resp == k` = 24, 20, 15, 30, 11, 22, 9, 17, labels k Hz; console has `fs=256 (header)` and no `nearest-labelled` | exact | table, audit fix 2b | — | PASS |
+| `::test_specificity_class_specific_analytic` | each class: A = 10 sine (phase 0) at its own exact response bin (24/20/15/11/9) + B = 50·δ[n] on O1/Oz/O2 | own = B² + (AN/2)² = 1640900, others' median = B² = 2500, ratio = 1 + (AN/2B)² = 656.36 for every class, 4 others (observed 101: 656.3599999999991) | rtol 1e-9 | DFT of a sinusoid and an impulse | specificity read at the nearest-labelled bin (25 for 101; variant run, ratio 1, fails) | PASS |
+| `::test_specificity_shared_rhythm_near_one` | same 120/11 Hz sine (A = 10, phase 0) in all classes + N(0, 1), seed 11, 20 windows | 104: k 11, ratio 1 within 2 % (derived: cross-term ≈ 1.8 % per window-channel, /√60 → 0.23 %, own vs median ≈ 0.33 % = 1σ; 2 % > 6σ); observed 0.9987388767116933; every class's maximum at bin 11; noise-free: every ratio = 1 within 1e-12 | 2 %; 1e-12 | DFT, sample-mean variance | — | PASS |
+| `::test_format_peaks_with_rest_codes` | conditions (201, 202, 101..105), 201/202 with a 30 Hz rhythm | no exception, 7 lines; 201/202 lines exactly `  S01 <code>: n=<n>, max in band at 29.297 Hz (bin 30, P=…); band median P=…` (no target, response bin or specificity); 201/202 not in `specificity` and not counted as others (101: `n_others` 4) | exact | audit fix 1c, 01_DATA_SPEC §6 | — | PASS |
+
+The Round 1 per-class variant (classes from `target_conditions`) still fails its check
+after the `format_peaks` fix: 7 spectra instead of 5 (`AssertionError`).
+
+### Command and output
+
+```bash
+.venv/bin/python -m pytest tests/
+```
+
+```
+311 passed in 20.72s
+```
+
+(305 after the builder's Round 2 + 6 new.)
+
+### Findings
+
+No bug found in the Round 2 code. Round 1 observation 1 (`format_peaks` TypeError on
+codes without f0) is fixed and covered by `test_format_peaks_with_rest_codes`.
+
+### Coverage gaps (Round 2)
+
+- `specificity n/a` (no other class with windows) and the out-of-axis `ValueError` of
+  `spectrum_peaks` are not exercised.
+
+### Reference consultations (R11)
+
+None.
+
+### Sources (Round 2)
+
+6. HANDOFF — `mas/state/phases/P03-exploration/07_review.md`, pre-run audit Round 1, required fixes 1 and 2.
+7. HANDOFF — `mas/state/phases/P03-exploration/03_changes_signal-processing.md`, Round 2 (APIs, console format).
+
+Status: READY (Round 2).
