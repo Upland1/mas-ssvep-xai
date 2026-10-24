@@ -51,3 +51,23 @@ Full report: `mas/state/reports/P01.md`. Date of all steps: 2026-10-24.
 **Deviations.** Seven accepted deviations (strict default and its extra checks, extra public parser names, stricter helper errors, exact `data_type`, header count defaults, whole-file reads with `--strict` flag, plan amendment); see `mas/state/decisions.md` and the report, section 9.
 
 **Findings for later phases.** All 10 delivered headers pass the strict checks, so P02 can call `load_ebr_file(path)` with its default. Strict mode also rejects a repeated unknown header key; if a future file trips it, the stop/blocker rule applies. Config v1 keeps the 7-channel montage until P07. No reference consultation was made (the two access-log lines are logged privacy greps, not reads). Next: P02.
+
+## P02 — Legacy preprocessing and windowing
+
+Full report: `mas/state/reports/P02.md`. Date of all steps: 2026-10-24.
+
+**Aim.** Rebuild the first data-bearing step of the original project: broadband-filter each continuous `OO` recording (1–60 Hz, order 4), cut condition windows (201, 202, 101–105), apply the legacy Vpp/std gate, and save `X_time_windows (n, 7, 256)`, `X_psd_features (n, 217)` and `y_labels` per subject (roadmap P02; `00_assignment.md`).
+
+**Build.** `src/preprocessing/signal/quality_check.py`, `src/features/ssvep/psd_extraction.py`, `src/visualization/signal_plots.py`, `scripts/preprocessing/run_preprocessing.py` and a `make preprocess` target (`03_changes_signal-processing.md`, `03_changes_data-engineer.md`). The gate passes `vpp_min=0.5` explicitly (PF-07). Windows and periodogram use the header fs 256 Hz: 217 = 7 × 31 bins needs it, so PF-04's `fs = 250` is not reproduced here and enters with the P04/P05 extractors (decisions.md).
+
+**Tests and review.** Final suite `283 passed in 12.37s` (`04_tests.md`); 23 known-answer tests, with variants that fail on PF-07, PF-13, PF-09, PF-04, R3 and R6. Pre-run audit PASS, no required fixes (`07_review.md`).
+
+**Run.** `python -m scripts.preprocessing.run_preprocessing --all` at `adbc5a01f098daf7eefb214174777a0f27c90797`: exit 0, 5 s. Log line: `Cohort: 5 subjects processed, 0 skipped (none); 1592 windows; gated 1600, accepted 1592, rejected 8, skipped segments 0` (`reports/logs/P02/run_preprocessing_20261024_171759.log`; `05_run.md`). The verifier re-ran from a clean checkout (`283 passed in 11.00s`), all 18 arrays bit-identical (`06_verify.md`).
+
+**Result.** R-1 reproduced exactly: n 320 / 318 / 317 / 317 / 320 and stimulus windows 200 / 199 / 200 / 198 / 200 for S01–S05 (data source: legacy, `data/processed/<S>/`, session `OO`). All 8 losses are `vpp_high` rejections (O2 in S02 and S04, PO8 in S03); none is `vpp_low`. Figure criterion: S04 and S05 5/5; S03 4/5, the 8.57 Hz target is partial (plateau at bins 8–9 in the 7-channel mean, local maximum over PO8, O1, Oz, O2 with ratio 1.918); the reviewer approved with the partial recorded (`07_review.md`).
+
+**Finding.** 178 of the 199 saved 202 windows are bit-identical to the second 201 sub-window of their trial and the other 21 are shifted by 8 samples (PF-13 on real data). 201 and 202 must never be used together as independent samples or in different CV groups.
+
+**Deviations and legacy.** PO7 excluded (config v1) and the per-script gate (R5 LEGACY by design) are the legacy behaviours; builder deviations accepted (extra kwargs and record keys, extra figure and CLI flags). `team.yaml` P02 flags corrected to `[]`.
+
+**Findings for later phases.** P03: S01 101 (24 Hz) shows a 10 Hz peak and S01/S02 show no clear SSVEP peaks. P07: `summarize_window_quality` must see ungated windows, stale outputs on skipped subjects need handling, PF-07 is reproduced with `--vpp-min 5.0`. P16: check S03 first-trial PO8 rejections for a filter start-up transient. No reference consultation was made (the two access-log lines are privacy greps from earlier phases). Next: P03.

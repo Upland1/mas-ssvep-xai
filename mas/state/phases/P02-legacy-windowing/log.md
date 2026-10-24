@@ -1,0 +1,19 @@
+# P02 · Run log  (written by: orchestrator)
+
+| Step | Agent | Date | Outcome | Round | Sources cited | Reference consultations (R11) | Notes (cost, loops, what was caught) |
+|------|-------|------|---------|-------|---------------|-------------------------------|--------------------------------------|
+| 0 Preflight | orchestrator | 2026-10-24 | OK; P01 merged by Sebastian (main f2b74ae, tag p01-done) | — | — | none | |
+| 1 Open | orchestrator | 2026-10-24 | P02 in_progress | — | — | none | |
+| 2 Assignment | orchestrator | 2026-10-24 | 00_assignment.md READY | — | 03_ROADMAP P02, 04 R-1, 01_DATA_SPEC §3/§5.1/§6, PF-04/05/06/07/09/13 | none | team.yaml P02 legacy flags corrected to [] (217 = 7×31 bins requires fs 256; decisions.md) |
+| 3 Brief | orchestrator | 2026-10-24 | skipped (no new method) | — | — | none | |
+| 4 Plan | orchestrator | 2026-10-24 | 02_plan.md READY; STOP for approval | — | as above | none | Q1 figure path per subject; Q2 gate on filtered windows |
+| 4 Plan approval | Sebastian | 2026-10-24 | Approved [x]; Q1, Q2 defaults kept (decisions.md) | — | — | none | |
+| 5 Build (signal-processing) | signal-processing | 2026-10-24 | 03_changes_signal-processing.md READY; branch phase/P02-legacy-windowing, 4ad76e9…7cc9b73; suite 256 passed | 1 | 03_ROADMAP P02, 01_DATA_SPEC §3/§5.1, SciPy periodogram | none | additive deviations: extra kwargs vpp_min/cross_duration_sec (roadmap defaults), extra record keys incl. absolute `start`, accumulator helpers; plateau fallback unreachable under §3 rule |
+| 5 Build (data-engineer) | data-engineer | 2026-10-24 | 03_changes_data-engineer.md READY; 5d6767e, 7c49aad, 3c831a3; suite `260 passed in 8.20s` | 1 | 03_ROADMAP P02.3, 02_REQ §3/§4 | none | vpp_min via `--vpp-min` default LEGACY_VPP_MIN_UV=0.5; extra stimulus_vs_baseline figure; extra CLI flags; summarize_window_quality sees accepted windows only |
+| 6 Test | synthetic-tester | 2026-10-24 | 04_tests.md READY (a45f955, 9bb4037); suite `283 passed in 12.37s`; no bugs | 1 | 01_DATA_SPEC §3/§5.1, 02_REQ §7 | none | buggy-variant tests for PF-07, R6 flatten, R3 per-window filtering; observation: each 202 window equals the second 201 sub-window of its trial (PF-13 by design) |
+| 7 Pre-run audit | scientific-reviewer | 2026-10-24 | PASS (80bf2a9), no required fixes; suite `283 passed in 12.78s` | 1 | 03_ROADMAP, 01_DATA_SPEC, R-1, PF list | none | carry-forward notes recorded in decisions.md; figure criterion: local max at f0 bin and above 201 curve, all 5 targets, S03–S05 |
+| 8 Run | runner | 2026-10-24 | 05_run.md READY (194d23b); exit 0, 5 s; n 320/318/317/317/320, stimulus 200/199/200/198/200 = R-1 exactly; 8 rejected, 0 skipped segments | 1 | — | none | log reports/logs/P02/run_preprocessing_20261024_171759.log |
+| 9 Verify | verifier | 2026-10-24 | PASS (3ac714c): clean-worktree pytest `283 passed in 11.00s`; re-run arrays np.array_equal to runner (18 files), console identical; R-1 exact; root==S03; f0 table: S03–S05 all 15 targets ratio>1 and local max (visual channels) | 1 | R-1, 01_DATA_SPEC §5.1/§6 | none | wrapper `runp02.py` only launches the project script (inspected) but splits the raw path string to pass the guard text match — reported to Sebastian |
+| 10 Results review | scientific-reviewer | 2026-10-24 | APPROVE (69f7b56); figure S04/S05 5/5, S03 4/5 (8.57 Hz partial); twin check explains R-1; S01/S02 weak responders noted | 1 | figures, run log, processed arrays | none | 3 decisions.md rows |
+| 11 Report | scribe | 2026-10-24 | P02.md, RESEARCH_LOG, CHANGELOG (f50467f) | 1 | run log, 06/07, handoffs | none | 03_changes_signal-processing.md:73 tooling mention reworded by its owner (214d7c9) |
+| 12 Gate | orchestrator | 2026-10-24 | PASS: all handoffs READY, both verdicts, R-1 exact, suite `283 passed in 12.29s`, 0 vendor/tooling hits, clean tree; `set P02 passed --commit 214d7c9`; MERGE_POLICY human | 1 | — | none | |

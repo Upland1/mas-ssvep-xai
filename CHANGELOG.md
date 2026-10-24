@@ -37,3 +37,23 @@ Changed
 Result and scope
 - Default and `--strict` inventories: exit 0, `10 files, 5 subjects, 0 deviations`, both byte-identical to the P00 CSV (sha256 `e134a372b164bf42b4911c56ca98be47742f45442f0bad37f9923ed4d1b16c14`).
 - Applies to the 10 of 23 §4 rows delivered (blocker B005). Seven accepted deviations are in `mas/state/decisions.md`.
+
+## P02 — Legacy preprocessing and windowing
+
+2026-10-24, branch `phase/P02-legacy-windowing`. Report: `mas/state/reports/P02.md`.
+
+Added
+- `src/preprocessing/signal/quality_check.py`: `validate_eeg_windows`, `filter_dataset`, `summarize_window_quality`, `window_quality_flags`, `segment_and_validate_eeg`, `quality_stats` helpers.
+- `src/features/ssvep/psd_extraction.py`: `extract_clean_subwindows_psd`, `process_condition_windows_with_baseline`, `prepare_feature_matrix`.
+- `src/visualization/signal_plots.py`: `plot_eeg_window`, `plot_average_psd_by_condition`, `plot_stimulus_vs_baseline_psd`.
+- `scripts/preprocessing/run_preprocessing.py` (`--subject`, `--all`, `--vpp-min`, `--raw-dir`, `--processed-dir`, `--figures-dir`) and `make preprocess`.
+- `tests/test_p02_signal_smoke.py`, `tests/test_p02_preprocessing_smoke.py`, `tests/test_p02_windowing_known_answer.py`; suite `283 passed`.
+
+Changed
+- `Makefile`: target `preprocess`.
+- `mas/state/team.yaml`: P02 legacy flags set to `[]` (header fs 256 Hz is used for windows and PSD).
+
+Result and scope
+- Run: exit 0, 5 s; `Cohort: 5 subjects processed, 0 skipped (none); 1592 windows; gated 1600, accepted 1592, rejected 8, skipped segments 0`. Window counts equal R-1 exactly (320 / 318 / 317 / 317 / 320; stimulus 200 / 199 / 200 / 198 / 200).
+- Figure criterion: S04 and S05 5/5, S03 4/5 (8.57 Hz partial).
+- On real data 178 of 199 legacy 202 windows are bit-identical to a 201 window and 21 are shifted by 8 samples; 201 and 202 are never to be used together.

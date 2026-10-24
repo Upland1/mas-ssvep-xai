@@ -17,12 +17,12 @@ phases:
     passed: '2026-10-24'
   P02:
     slug: legacy-windowing
-    status: pending
+    status: passed
     owner: orchestrator
-    branch: null
-    commit: null
-    opened: null
-    passed: null
+    branch: phase/P02-legacy-windowing
+    commit: 214d7c9
+    opened: '2026-10-24'
+    passed: '2026-10-24'
   P03:
     slug: exploration
     status: pending

@@ -3,12 +3,13 @@
 
 PYTHON ?= .venv/bin/python
 
-.PHONY: help venv test inventory
+.PHONY: help venv test inventory preprocess
 
 help:
 	@echo "make venv       create .venv and install requirements.txt"
 	@echo "make test       run the synthetic test suite (no real data)"
 	@echo "make inventory  P00: header + MARK inventory of the raw recordings -> reports/raw_inventory.csv"
+	@echo "make preprocess P02: legacy windows + PSD of every subject -> data/processed/<S>/"
 
 venv:
 	python3 -m venv .venv
@@ -20,3 +21,6 @@ test:
 
 inventory:
 	$(PYTHON) scripts/exploration/inventory_raw.py
+
+preprocess:
+	$(PYTHON) -m scripts.preprocessing.run_preprocessing --all
