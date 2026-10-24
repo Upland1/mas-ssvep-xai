@@ -1,4 +1,4 @@
-"""Signal figures for the legacy windows (P02): one window, PSD by condition, stimulus vs baseline.
+"""Signal figures for the legacy windows (P02 window/PSD/baseline figures, P03 class panels).
 
 Figures are rendered with the Agg backend, saved to the given path (parent
 folders created) and closed; nothing is shown. Inputs are the records of
@@ -173,4 +173,103 @@ def plot_stimulus_vs_baseline_psd(records: dict, save_path: PathLike,
     ax.legend(fontsize=7, frameon=False, loc="upper right")
   axes[0][0].set_ylabel("PSD (uV^2/Hz)", color=_INK)
   fig.suptitle(title or "Stimulus vs baseline PSD", color=_INK, fontsize=10, x=0.01, ha="left")
+  return _save(fig, save_path)
+
+
+def plot_class_spectra_panels(freqs: np.ndarray, spectra: dict, save_path: PathLike,
+                              freq_range: tuple = (5.0, 35.0), counts: Optional[dict] = None,
+                              n_harmonics: int = 2, title: Optional[str] = None,
+                              ylabel: str = "FFT power (uV^2)", log_scale: bool = True) -> Path:
+  """One panel per class (P03.1): its spectrum in `freq_range`, target frequency marked.
+
+  `spectra` maps condition code -> `(F,)` spectrum on the axis `freqs`, in
+  panel order. A solid vertical line marks the stimulation frequency of the
+  code and dotted lines its harmonics up to `n_harmonics` inside the range.
+  `counts` (code -> windows) goes into the panel titles. Returns the saved path.
+  """
+  lo, hi = freq_range
+  f = np.asarray(freqs, dtype=np.float64)
+  sel = (f >= lo) & (f <= hi)
+  codes = list(spectra)
+  n = max(len(codes), 1)
+  fig, axes = plt.subplots(1, n, figsize=(3.0 * n, 3.4), sharex=True, sharey=True, squeeze=False)
+  for ax, code in zip(axes[0], codes):
+    s = np.asarray(spectra[code], dtype=np.float64)
+    ax.plot(f[sel], s[sel], color=_CONDITION_COLOR.get(code, _SERIES[0]), linewidth=1.5)
+    f0 = STIM_FREQS_HZ.get(code)
+    if f0 is not None:
+      for h in range(1, n_harmonics + 1):
+        if lo <= h * f0 <= hi:
+          ax.axvline(h * f0, color=_INK if h == 1 else _MUTED, linestyle="-" if h == 1 else ":",
+                     linewidth=0.8, label=f"{h}f0 = {h * f0:.2f} Hz")
+      ax.legend(fontsize=7, frameon=False, loc="upper right")
+    if log_scale:
+      ax.set_yscale("log")
+    ax.set_xlim(lo, hi)
+    ax.set_xlabel("Frequency (Hz)", color=_INK)
+    _style_axes(ax)
+    name = CONDITION_NAMES.get(code, str(code))
+    if counts is not None and code in counts:
+      name += f" (n={counts[code]})"
+    ax.set_title(name, color=_INK, fontsize=9, loc="left")
+  axes[0][0].set_ylabel(ylabel, color=_INK)
+  fig.suptitle(title or "Spectrum per class", color=_INK, fontsize=10, x=0.01, ha="left")
+  fig.tight_layout(rect=(0, 0, 1, 0.86))
+  return _save(fig, save_path)
+
+
+def plot_psd_by_class_per_channel(freqs: np.ndarray, psd_by_class: dict,
+                                  channel_names: Sequence[str], save_path: PathLike,
+                                  counts: Optional[dict] = None, title: Optional[str] = None,
+                                  ylabel: str = "PSD (uV^2/Hz)", log_scale: bool = True) -> Path:
+  """One panel per channel (P03.2): the per-class mean PSD, one line per class.
+
+  `psd_by_class` maps condition code -> `(C, F)` mean PSD on the axis `freqs`
+  (already restricted to the feature range); `channel_names` labels the C
+  panels. Dotted lines in the class colour mark each stimulation frequency.
+  Returns the saved path.
+  """
+  f = np.asarray(freqs, dtype=np.float64)
+  names = list(channel_names)
+  codes = list(psd_by_class)
+  n_ch = len(names)
+  for code in codes:
+    if np.asarray(psd_by_class[code]).shape != (n_ch, f.size):
+      raise ValueError(f"class {code}: PSD {np.asarray(psd_by_class[code]).shape}, "
+                       f"expected ({n_ch}, {f.size})")
+  n_cols = min(4, max(n_ch, 1))
+  n_rows = int(np.ceil(max(n_ch, 1) / n_cols))
+  fig, axes = plt.subplots(n_rows, n_cols, figsize=(3.2 * n_cols, 2.8 * n_rows + 0.6),
+                           sharex=True, sharey=True, squeeze=False)
+  flat = axes.reshape(-1)
+  for c, ax in enumerate(flat):
+    if c >= n_ch:
+      ax.set_visible(False)
+      continue
+    for code in codes:
+      label = CONDITION_NAMES.get(code, str(code))
+      if counts is not None and code in counts:
+        label += f" (n={counts[code]})"
+      ax.plot(f, np.asarray(psd_by_class[code])[c], color=_CONDITION_COLOR.get(code, _MUTED),
+              linestyle=_CONDITION_STYLE.get(code, "-"), linewidth=1.3, label=label)
+      f0 = STIM_FREQS_HZ.get(code)
+      if f0 is not None and f.size and f[0] <= f0 <= f[-1]:
+        ax.axvline(f0, color=_CONDITION_COLOR.get(code, _MUTED), linestyle=":", linewidth=0.8)
+    if log_scale and codes:
+      ax.set_yscale("log")
+    if f.size:
+      ax.set_xlim(f[0], f[-1])
+    _style_axes(ax)
+    ax.set_title(names[c], color=_INK, fontsize=9, loc="left")
+    if c % n_cols == 0:
+      ax.set_ylabel(ylabel, color=_INK)
+    if c >= n_ch - n_cols:  # no panel below: label the axis
+      ax.set_xlabel("Frequency (Hz)", color=_INK)
+      ax.xaxis.set_tick_params(labelbottom=True)
+  if codes:
+    handles, labels = flat[0].get_legend_handles_labels()
+    fig.legend(handles, labels, fontsize=8, frameon=False, loc="lower center",
+               ncol=min(len(codes), 5), bbox_to_anchor=(0.5, -0.02))
+  fig.suptitle(title or "PSD by class per channel", color=_INK, fontsize=10, x=0.01, ha="left")
+  fig.tight_layout(rect=(0, 0.05, 1, 0.95))
   return _save(fig, save_path)
