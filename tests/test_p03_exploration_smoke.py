@@ -117,3 +117,35 @@ def test_length_mismatch_fails(tmp_path):
   _write(tmp_path / "S01", X, y[:-1])
   with pytest.raises(ValueError):
     dos.load_legacy_windows(tmp_path, "S01")
+
+
+def test_response_bin_vs_nearest_labelled():
+  assert sp.response_bin(24.0, 256, 256.0) == 24
+  t = np.arange(256) / 256
+  w = np.sin(2 * np.pi * 24 * t)[None, None] + np.sin(2 * np.pi * 30 * t)[None, None]
+  f, p = sp.fft_power(w, 250.0)
+  pk = sp.spectrum_peaks(f, p[0, 0], (5, 35), target_hz=15.0, header_fs=256.0, n_samples=256)
+  h2 = pk["harmonics"][1]
+  assert (h2["k_resp"], h2["k"]) == (30, 31) and h2["power_resp"] > 1e3 * h2["power"]
+  pk = sp.spectrum_peaks(f, p[0, 0], (5, 35), target_hz=24.0, header_fs=256.0, n_samples=256)
+  assert (pk["harmonics"][0]["k_resp"], pk["harmonics"][0]["k"]) == (24, 25)
+
+
+def test_specificity_and_format(tmp_path):
+  X, y = _legacy_arrays()
+  conds = (201,) + tuple(PLANT)
+  res = dos.occipital_class_spectra(X, y, 250.0, SCALP, conds, (5.0, 35.0), header_fs=256.0)
+  for c in PLANT:
+    assert res["specificity"][c]["ratio"] > 100 and res["specificity"][c]["n_others"] == 4
+  assert 201 not in res["specificity"]
+  out = dos.format_peaks("S01", res, conds)
+  assert "S01 201: n=8, max in band at" in out
+  assert "1f0 response bin 24 (23.438 Hz)" in out and "nearest-labelled bin 25 (24.414 Hz)" in out
+  res = dos.occipital_class_spectra(X, y, 256.0, SCALP, tuple(PLANT), (5.0, 35.0), header_fs=256.0)
+  assert "nearest-labelled" not in dos.format_peaks("S01", res, tuple(PLANT))
+  shared = X.copy()  # same 10 Hz rhythm in every class -> ratio ~ 1 at bin 10
+  t = np.arange(256) / 256
+  shared[:, 4:7] = 10 * np.sin(2 * np.pi * 10 * t)
+  r = dos.specificity_ratio(dos.occipital_class_spectra(shared, y, 256.0, SCALP, tuple(PLANT))["spectra"],
+                            104, 10)
+  assert abs(r["ratio"] - 1) < 1e-9
