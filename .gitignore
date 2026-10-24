@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.ipynb_checkpoints/
+.pytest_cache/
+
+# Environments
+.venv/
+env/
+venv/
+
+# Private EEG data (human subjects) -- never commit
+data/
+*.ebr
+*.mp4
+*.jpg
+*.jpeg
+
+# Local folder at the repo root; not used by the pipeline, contents not inspected (P00 plan Q3)
+SSVEPs_OO_mOO/
+
+# Generated arrays, models and results
+*.npy
+*.npz
+*.pt
+*.joblib
+/outputs/
+/reports/
+/baselines/
+
+# Literature (copyrighted)
+docs/literature/
+
+# Original project, read-only answer key (AGENTS.md rule 8)
+reference/
+
+# MAS scratch (state reports ARE committed; scratch is not)
+mas/state/scratch/
+
+# OS
+.DS_Store
+Thumbs.db

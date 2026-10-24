@@ -1,0 +1,209 @@
+phases:
+  P00:
+    slug: bootstrap
+    status: passed
+    owner: orchestrator
+    branch: phase/P00-bootstrap
+    commit: 754c418
+    opened: '2026-10-24'
+    passed: '2026-10-24'
+  P01:
+    slug: ebr-parser
+    status: pending
+    owner: orchestrator
+    branch: null
+    commit: null
+    opened: null
+    passed: null
+  P02:
+    slug: legacy-windowing
+    status: pending
+    owner: orchestrator
+    branch: null
+    commit: null
+    opened: null
+    passed: null
+  P03:
+    slug: exploration
+    status: pending
+    owner: orchestrator
+    branch: null
+    commit: null
+    opened: null
+    passed: null
+  P04:
+    slug: early-models-xai
+    status: pending
+    owner: orchestrator
+    branch: null
+    commit: null
+    opened: null
+    passed: null
+  P05:
+    slug: feature-benchmark
+    status: pending
+    owner: orchestrator
+    branch: null
+    commit: null
+    opened: null
+    passed: null
+  P06:
+    slug: feature-selection-cohort
+    status: pending
+    owner: orchestrator
+    branch: null
+    commit: null
+    opened: null
+    passed: null
+  P07:
+    slug: two-tier-quality
+    status: pending
+    owner: orchestrator
+    branch: null
+    commit: null
+    opened: null
+    passed: null
+  P08:
+    slug: eegnet
+    status: pending
+    owner: orchestrator
+    branch: null
+    commit: null
+    opened: null
+    passed: null
+  P09:
+    slug: compact-shallow-cnn
+    status: pending
+    owner: orchestrator
+    branch: null
+    commit: null
+    opened: null
+    passed: null
+  P10:
+    slug: augmentation-ab
+    status: pending
+    owner: orchestrator
+    branch: null
+    commit: null
+    opened: null
+    passed: null
+  P11:
+    slug: trial-leakage-fix
+    status: pending
+    owner: orchestrator
+    branch: null
+    commit: null
+    opened: null
+    passed: null
+  P12:
+    slug: coherence
+    status: pending
+    owner: orchestrator
+    branch: null
+    commit: null
+    opened: null
+    passed: null
+  P13:
+    slug: phase-pdc-permutations
+    status: pending
+    owner: orchestrator
+    branch: null
+    commit: null
+    opened: null
+    passed: null
+  P14:
+    slug: cross-frequency-confounds
+    status: pending
+    owner: orchestrator
+    branch: null
+    commit: null
+    opened: null
+    passed: null
+  P15:
+    slug: graph-gnn
+    status: pending
+    owner: orchestrator
+    branch: null
+    commit: null
+    opened: null
+    passed: null
+  P16:
+    slug: continuous-filtering
+    status: pending
+    owner: orchestrator
+    branch: null
+    commit: null
+    opened: null
+    passed: null
+  P17:
+    slug: rest-class-filterbank
+    status: pending
+    owner: orchestrator
+    branch: null
+    commit: null
+    opened: null
+    passed: null
+  P18:
+    slug: nbs
+    status: pending
+    owner: orchestrator
+    branch: null
+    commit: null
+    opened: null
+    passed: null
+  P19:
+    slug: raw-quality
+    status: pending
+    owner: orchestrator
+    branch: null
+    commit: null
+    opened: null
+    passed: null
+  P20:
+    slug: detection-online
+    status: pending
+    owner: orchestrator
+    branch: null
+    commit: null
+    opened: null
+    passed: null
+  P21:
+    slug: loso-colab
+    status: pending
+    owner: orchestrator
+    branch: null
+    commit: null
+    opened: null
+    passed: null
+  P22:
+    slug: loso-extensions
+    status: pending
+    owner: orchestrator
+    branch: null
+    commit: null
+    opened: null
+    passed: null
+  P23:
+    slug: gnn-loso
+    status: pending
+    owner: orchestrator
+    branch: null
+    commit: null
+    opened: null
+    passed: null
+  P24:
+    slug: documentation
+    status: pending
+    owner: orchestrator
+    branch: null
+    commit: null
+    opened: null
+    passed: null
+  P25:
+    slug: final-audit
+    status: pending
+    owner: orchestrator
+    branch: null
+    commit: null
+    opened: null
+    passed: null

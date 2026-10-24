@@ -1,0 +1,194 @@
+# Machine-readable phase graph. The Orchestrator copies it into
+# mas/state/phase_status.yaml (adding status/owner/commit/date per phase).
+# Full specification of every phase: mas/03_ROADMAP.md.
+version: 1
+defaults:
+  data_root_legacy: data/processed
+  data_root_built: data/processed_continuous
+  seed: 42
+  cv: StratifiedGroupKFold(n_splits=5, shuffle=True, random_state=seed), groups=trial_ids  # from P11
+  legacy_cv: StratifiedKFold(n_splits=5, shuffle=True, random_state=42)                    # P04-P10 only
+
+phases:
+  - id: P00
+    title: Bootstrap and data intake
+    era: A
+    depends_on: []
+    owners: [Orchestrator, Data Engineer, Infra]
+    outputs: [skeleton, reports/raw_inventory.csv]
+    references: [01_DATA_SPEC §4]
+  - id: P01
+    title: EBR parser and configuration v1
+    era: A
+    depends_on: [P00]
+    owners: [Data Engineer]
+    outputs: [src/io/ebr_parser.py, configs/pipeline_config.yaml (v1), src/preprocessing/signal/filters.py]
+  - id: P02
+    title: Legacy preprocessing and windowing
+    era: A
+    depends_on: [P01]
+    owners: [Signal Processing, Data Engineer]
+    outputs: [scripts/preprocessing/run_preprocessing.py, "data/processed/<S>/{X_time_windows,X_psd_features,y_labels}.npy", outputs/figures/spectra/average_psd_by_condition.png]
+    references: [R-1]
+  - id: P03
+    title: Exploration and signal verification
+    era: A
+    depends_on: [P02]
+    owners: [Signal Processing, Scientific Reviewer]
+    outputs: [scripts/exploration/diagnose_occipital_spectra.py, scripts/exploration/visualize_data.py]
+  - id: P04
+    title: Early hybrid models, fusion CNN, first XAI
+    era: A
+    depends_on: [P02]
+    owners: [Classical ML, Deep Learning, XAI]
+    outputs: [scripts/training/train_models.py, src/models/cnn/spatial_spectral_cnn.py, scripts/training/train_final_model.py, scripts/training/batch_run_subjects.py, scripts/xai/run_xai.py, scripts/xai/compare_subject_xai.py, "outputs/models/{S01,S04}_{shrinkage_lda.joblib,fusion_cnn.pt}"]
+    references: [R-2, R-8]
+  - id: P05
+    title: Feature extractors and feature-space/model benchmark
+    era: A
+    depends_on: [P02, P03]
+    owners: [Classical ML]
+    outputs: [src/features/ssvep/fbcca_extraction.py, src/features/ssvep/fbcsp_extraction.py, src/features/ssvep/psd_extraction.py, src/models/classical/sklearn_models.py, benchmark_cross_validation.py, benchmark_harmonic_fbcca.py, test_sklearn_models.py, evaluate_confusion_matrix.py]
+    references: [R-3]
+  - id: P06
+    title: Feature-selection ablation, legacy 5-subject cohort, report v1
+    era: A
+    depends_on: [P05]
+    owners: [Classical ML, Scribe]
+    outputs: [src/features/selection/feature_selection.py, benchmark_feature_selection.py, reports/five_subjects_benchmark.csv, docs/report/v1/]
+    references: [R-4, R-5]
+  - id: P07
+    title: Two-tier quality gate and 8-channel montage
+    era: A
+    depends_on: [P06]
+    owners: [Signal Processing, Classical ML]
+    outputs: [apply_artifact_quality_pipeline, benchmark_n_subjects.py, configs (PO7 restored)]
+    pitfalls: [PF-05, PF-06, PF-07, PF-08]
+  - id: P08
+    title: EEGNet on raw windows
+    era: A
+    depends_on: [P07]
+    owners: [Deep Learning]
+    outputs: [src/models/cnn/eegnet.py, benchmark_eegnet.py]
+    references: [R-8]
+  - id: P09
+    title: Compact-CNN and ShallowConvNet
+    era: A
+    depends_on: [P08]
+    owners: [Deep Learning]
+    outputs: [src/models/cnn/compact_cnn.py, src/models/cnn/shallow_conv_net.py, benchmark_compact_cnn.py, benchmark_shallow_convnet.py]
+    references: [R-8]
+  - id: P10
+    title: Data augmentation and the A/B protocol (leaky)
+    era: A
+    depends_on: [P09]
+    owners: [Deep Learning, Scientific Reviewer]
+    outputs: [src/preprocessing/dataset/augmentation.py, benchmark_nn_augmentation.py, "reports/legacy_leaky/augmentation_ab_<model>.csv"]
+    references: [R-9a]
+  - id: P11
+    title: Discover and fix trial leakage
+    era: B
+    depends_on: [P10]
+    owners: [Evaluation Lead, Classical ML, Deep Learning, Scientific Reviewer]
+    outputs: [src/preprocessing/dataset/cv_utils.py, scripts/diagnostics/demo_cv_leakage.py, reports/n_subjects_benchmark.csv, "reports/augmentation_ab_<model>.csv"]
+    references: [R-6, R-7, R-9b]
+    pitfalls: [PF-01, PF-02, PF-03]
+  - id: P12
+    title: Connectivity v1 - coherence, bias fix, matched baseline
+    era: B
+    depends_on: [P11]
+    owners: [Connectivity & Stats]
+    outputs: [src/features/connectivity/connectivity_extraction.py, src/visualization/connectivity_plots.py, scripts/connectivity/analysis/analyze_connectivity.py]
+    references: [R-11]
+    pitfalls: [PF-15, PF-16]
+  - id: P13
+    title: PLV/wPLI/PDC with trial-level permutation statistics
+    era: B
+    depends_on: [P12]
+    owners: [Connectivity & Stats, Scientific Reviewer]
+    outputs: [analyze_connectivity_cohort.py, reports/connectivity_cohort_summary.csv, "reports/connectivity_edges/<S>_<method>.npz"]
+    references: [R-12]
+    pitfalls: [PF-17, PF-18, PF-19, PF-20]
+  - id: P14
+    title: Cross-frequency comparison, reliability, power/alpha confounds
+    era: B
+    depends_on: [P13]
+    owners: [Connectivity & Stats, Scientific Reviewer]
+    outputs: [compare_connectivity_frequencies.py, test_connectivity_frequency_differences.py, check_power_alpha_confound.py, reports/connectivity_comparison/]
+    references: [R-13]
+    pitfalls: [PF-21, PF-22, PF-23, PF-24, PF-25, PF-26, PF-27]
+  - id: P15
+    title: Per-window graphs, connectivity gate, within-subject GNN
+    era: B
+    depends_on: [P14]
+    owners: [Connectivity & Stats, Deep Learning]
+    outputs: [connectivity_graph_features.py, graph_inputs.py, src/models/graph/connectivity_gnn.py, build_graph_dataset.py, benchmark_connectivity_gate.py, benchmark_gnn.py]
+    references: [R-14, R-15, R-8]
+  - id: P16
+    title: Baseline freeze, edge effects, continuous filtering, 256 Hz, shared quality
+    era: C
+    depends_on: [P15]
+    owners: [Signal Processing, Data Engineer, Evaluation Lead, Connectivity & Stats]
+    outputs: [scripts/freeze_baseline.py, src/preprocessing/windowing.py, src/preprocessing/window_quality.py, scripts/build_windows.py, src/io/subject_data.py, scripts/diagnostics/demo_edge_effects.py, reports/edge_effects_summary.csv, v1-vs-v2 table]
+    references: [R-16]
+    pitfalls: [PF-04, PF-14]
+  - id: P17
+    title: Sixth (rest) class and harmonic/intermediate filter bank
+    era: C
+    depends_on: [P16]
+    owners: [Signal Processing, Classical ML]
+    outputs: ["benchmark_n_subjects.py --bank --classes 6 --cv-repeats", "reports/n_subjects_benchmark_*_6class*.csv"]
+  - id: P18
+    title: Network-Based Statistic replaces FDR
+    era: C
+    depends_on: [P16]
+    owners: [Connectivity & Stats]
+    outputs: [src/stats/nbs.py, NBS columns and graph-size tables]
+  - id: P19
+    title: Quality check on the raw segmented signal
+    era: C
+    depends_on: [P16]
+    owners: [Signal Processing]
+    outputs: ["build_windows.py --quality-source {filtered,raw,both}", reject reason 3]
+  - id: P20
+    title: Detection - window sweep, CCNN, NN sweep, dynamic stopping, pseudo-online
+    era: C
+    depends_on: [P17, P18, P19]
+    owners: [Classical ML, Deep Learning, Online / Real-time]
+    outputs: [benchmark_window_sweep.py, src/models/cnn/ccnn.py, benchmark_nn_sweep.py, simulate_dynamic_stopping.py, pseudo_online.py]
+    pitfalls: [PF-31, PF-32, PF-38, PF-39]
+  - id: P21
+    title: Leave-one-subject-out generalization and Colab
+    era: C
+    depends_on: [P20]
+    owners: [Evaluation Lead, Classical ML, Deep Learning, Infra]
+    outputs: [benchmark_loso.py, notebooks/loso_colab.ipynb, reports/loso_w1/]
+    pitfalls: [PF-33, PF-34, PF-35, PF-37, PF-40]
+  - id: P22
+    title: LOSO extensions - within reference, explicit channels, resume guard, warm-up
+    era: C
+    depends_on: [P21]
+    owners: [Evaluation Lead, Classical ML]
+    outputs: ["benchmark_loso.py within_lda/--channels/check_fold", benchmark_loso_warmup.py]
+    pitfalls: [PF-36, PF-37]
+  - id: P23
+    title: GNN under LOSO (latest approach)
+    era: C
+    depends_on: [P22, P15]
+    owners: [Deep Learning, Connectivity & Stats, Infra]
+    outputs: [scripts/connectivity/graph_modeling/benchmark_gnn_loso.py, notebook section 10b, reports/loso_gnn/, reports/within_gnn/]
+  - id: P24
+    title: Documentation and deliverables
+    era: D
+    depends_on: [P23]
+    owners: [Scribe, Scientific Reviewer]
+    outputs: [README.md, RESEARCH_LOG.md, docs/report/, docs/infographic/, docs/progress_report/, Makefile all]
+  - id: P25
+    title: Final audit
+    era: D
+    depends_on: [P24]
+    owners: [Verifier, Scientific Reviewer, Orchestrator]
+    outputs: [mas/state/reports/P25.md, tag v1.0]
+
+# Every phase additionally requires: Runner logs, Verifier verdict, Reviewer verdict,
+# Scribe phase report (mas/templates/PHASE_REPORT.md).

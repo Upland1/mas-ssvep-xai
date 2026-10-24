@@ -1,0 +1,410 @@
+"""Inventory of the raw recordings (P00).
+
+Walks <raw-dir>/S*/ (subjects matched by ^S\\d+$, only *.ebr files), reads each
+EBR header and, through a memory map, only the MARK, TIMESTAMP and EEG channels.
+Writes one row per file to reports/raw_inventory.csv with the columns of
+mas/01_DATA_SPEC.md section 4 plus fs, channel list, event-code counts, run kind
+and the list of deviations from the spec.
+
+Checks (mas/01_DATA_SPEC.md sections 2-4):
+  all files        magic "ebr binary 1.0", fs == 256, the 11 channel names in
+                   order, trials == bands == 1, binary block size
+  calibration      (OO, mOO, C, mC) onsets 201, 202, 203, 200 = 40 each,
+                   101..105 = 8 each, no other code
+  online           (online_*) only codes 1001..1005
+  joined           (cb_mas_mcb) 80 stimulus onsets
+Any deviation is printed and the script exits 1 after writing the CSV.
+"""
+
+import argparse
+import csv
+import re
+import sys
+from collections import Counter
+from datetime import datetime, timezone
+from pathlib import Path
+
+import numpy as np
+
+
+def _find_root() -> Path:
+  """Repository root: upward search for configs/pipeline_config.yaml, else two levels up."""
+  here = Path(__file__).resolve()
+  for parent in here.parents:
+    if (parent / "configs" / "pipeline_config.yaml").is_file():
+      return parent
+  return here.parents[2]
+
+
+ROOT = _find_root()
+if str(ROOT) not in sys.path:
+  sys.path.insert(0, str(ROOT))
+
+# --- Specification (mas/01_DATA_SPEC.md) -------------------------------------
+
+EBR_MAGIC = "ebr binary 1.0"
+EXPECTED_FS = 256.0
+EXPECTED_CHANNELS = ("PO7", "PO3", "POz", "PO4", "PO8", "O1", "Oz", "O2",
+                     "TIMESTAMP", "FLASHINGTIME", "MARK")
+EEG_CHANNELS = EXPECTED_CHANNELS[:8]
+SUBJECT_PATTERN = re.compile(r"^S\d+$")
+
+CALIBRATION_STEMS = ("OO", "mOO", "C", "mC")
+JOINED_STEMS = ("cb_mas_mcb",)
+ONLINE_PREFIX = "online_"
+
+CALIBRATION_COUNTS = {201: 40, 202: 40, 203: 40, 200: 40,
+                      101: 8, 102: 8, 103: 8, 104: 8, 105: 8}
+STIM_CODES = (101, 102, 103, 104, 105)
+ONLINE_CODES = (1001, 1002, 1003, 1004, 1005)
+JOINED_STIM_EVENTS = 80
+
+# data_type string -> little-endian numpy dtype (section 2).
+EBR_DTYPES = {
+  "int8": "<i1", "char": "<i1",
+  "uint8": "<u1", "unsigned char": "<u1",
+  "int16": "<i2", "short": "<i2",
+  "uint16": "<u2", "unsigned short": "<u2",
+  "int32": "<i4", "int": "<i4",
+  "uint32": "<u4", "unsigned int": "<u4",
+  "int64": "<i8", "__int64": "<i8",
+  "uint64": "<u8", "unsigned __int64": "<u8",
+  "float": "<f4",
+  "double": "<f8",
+  "complex": "<c16", "class std::complex<double>": "<c16",
+}
+
+CSV_COLUMNS = ("subject", "file", "samples", "duration_s", "stim_events",
+               "session_start_utc", "p99_abs_eeg_uv",
+               "fs", "n_channels", "channels", "event_counts", "kind", "deviations")
+
+_MAX_HEADER_BYTES = 1 << 20
+
+
+# --- Minimal EBR reader (replaced by src/io/ebr_parser.py in P01) ------------
+
+def ebr_dtype(data_type: str) -> np.dtype:
+  """Numpy dtype for an EBR data_type string; ValueError if unsupported."""
+  key = data_type.strip().lower()
+  if key not in EBR_DTYPES:
+    raise ValueError(f"unsupported EBR data_type {data_type!r}")
+  return np.dtype(EBR_DTYPES[key])
+
+
+def parse_ebr_header(path: Path) -> dict:
+  """Parse the ASCII header of an EBR file.
+
+  Returns the spec keys (data_type, sampling_rate, number_of_trials, trials,
+  number_of_channels, channels, number_of_bands, bands, number_of_samples,
+  number_of_comments, comments, number_of_marks, marks) plus `magic` (the first
+  non-blank line, stripped) and `data_offset` (byte where the binary block starts).
+  Raises ValueError when `end_header` or a required key is missing.
+  """
+  fields: dict = {}
+  indexed: dict = {"band": {}, "channel": {}, "trial": {}, "comment": {}, "mark": {}}
+  magic = None
+  with open(path, "rb") as f:
+    while True:
+      raw = f.readline()
+      if not raw:
+        raise ValueError(f"{path}: no end_header line")
+      if f.tell() > _MAX_HEADER_BYTES:
+        raise ValueError(f"{path}: header exceeds {_MAX_HEADER_BYTES} bytes without end_header")
+      line = raw.decode("ascii", errors="replace").strip()
+      if not line:
+        continue
+      if magic is None:
+        magic = line
+        continue
+      if line == "end_header":
+        data_offset = f.tell()
+        break
+      parts = line.split(maxsplit=1)
+      key, value = parts[0], (parts[1] if len(parts) > 1 else "")
+      m = re.fullmatch(r"(band|channel|trial|comment|mark)_(\d+)", key)
+      if m:
+        indexed[m.group(1)][int(m.group(2))] = value
+      else:
+        fields[key] = value
+
+  for key in ("data_type", "sampling_rate", "samples", "channels"):
+    if key not in fields:
+      raise ValueError(f"{path}: header has no '{key}' line")
+
+  def _ordered(name: str) -> list:
+    return [indexed[name][k] for k in sorted(indexed[name])]
+
+  marks = []
+  for text in _ordered("mark"):
+    idx, _, label = text.partition(" ")
+    marks.append((int(idx), label))
+
+  return {
+    "magic": magic,
+    "data_type": fields["data_type"],
+    "sampling_rate": float(fields["sampling_rate"]),
+    "number_of_trials": int(fields.get("trials", 1)),
+    "trials": _ordered("trial"),
+    "number_of_channels": int(fields["channels"]),
+    "channels": _ordered("channel"),
+    "number_of_bands": int(fields.get("bands", 1)),
+    "bands": _ordered("band"),
+    "number_of_samples": int(fields["samples"]),
+    "number_of_comments": int(fields.get("comments", 0)),
+    "comments": _ordered("comment"),
+    "number_of_marks": int(fields.get("marks", 0)),
+    "marks": marks,
+    "data_offset": data_offset,
+  }
+
+
+def open_ebr_data(path: Path, header: dict) -> np.memmap:
+  """Memory-map the binary block as (nt, nc, nb, ns), C order, without reading it.
+
+  Raises ValueError if the file is shorter than the declared block.
+  """
+  dtype = ebr_dtype(header["data_type"])
+  shape = (header["number_of_trials"], header["number_of_channels"],
+           header["number_of_bands"], header["number_of_samples"])
+  needed = header["data_offset"] + int(np.prod(shape)) * dtype.itemsize
+  size = Path(path).stat().st_size
+  if size < needed:
+    raise ValueError(f"{path}: truncated, {size} bytes < {needed} declared by the header")
+  return np.memmap(path, dtype=dtype, mode="r", offset=header["data_offset"], shape=shape)
+
+
+def trailing_bytes(path: Path, header: dict) -> int:
+  """Bytes after the declared binary block (0 for a well-formed file)."""
+  dtype = ebr_dtype(header["data_type"])
+  n = (header["number_of_trials"] * header["number_of_channels"]
+       * header["number_of_bands"] * header["number_of_samples"])
+  return Path(path).stat().st_size - header["data_offset"] - n * dtype.itemsize
+
+
+# --- Events and per-file summary ---------------------------------------------
+
+def event_onset_counts(mark: np.ndarray) -> dict:
+  """Onsets per nonzero code: samples where MARK == code and differs from the previous sample.
+
+  Implements `(mark == code) & (diff(mark, prepend=0) != 0)` of 01_DATA_SPEC.md
+  section 3 for every code at once, so a multi-sample plateau counts once.
+  """
+  m = np.rint(np.asarray(mark, dtype=np.float64)).astype(np.int64)
+  onset = (m != 0) & (np.diff(m, prepend=0) != 0)
+  return {int(c): int(n) for c, n in sorted(Counter(m[onset].tolist()).items())}
+
+
+def classify_kind(stem: str) -> str:
+  """Run kind from the file stem: calibration, online, joined or unknown."""
+  if stem in CALIBRATION_STEMS:
+    return "calibration"
+  if stem.startswith(ONLINE_PREFIX):
+    return "online"
+  if stem in JOINED_STEMS:
+    return "joined"
+  return "unknown"
+
+
+def stim_event_count(counts: dict, kind: str) -> int:
+  """Stimulus onsets: 101-105 (calibration, joined), 1001-1005 (online), both (unknown)."""
+  if kind == "online":
+    codes = ONLINE_CODES
+  elif kind == "unknown":
+    codes = STIM_CODES + ONLINE_CODES
+  else:
+    codes = STIM_CODES
+  return sum(counts.get(c, 0) for c in codes)
+
+
+def protocol_deviations(counts: dict, kind: str) -> list:
+  """Deviations of the onset counts from the protocol of 01_DATA_SPEC.md sections 3-4."""
+  devs = []
+  if kind == "calibration":
+    for code, expected in CALIBRATION_COUNTS.items():
+      if counts.get(code, 0) != expected:
+        devs.append(f"code {code}: {counts.get(code, 0)} onsets, expected {expected}")
+    extra = sorted(set(counts) - set(CALIBRATION_COUNTS))
+    if extra:
+      devs.append(f"unexpected codes {extra} in a calibration run")
+  elif kind == "online":
+    extra = sorted(set(counts) - set(ONLINE_CODES))
+    if extra:
+      devs.append(f"unexpected codes {extra} in an online run (only 1001-1005 allowed)")
+  elif kind == "joined":
+    n = stim_event_count(counts, kind)
+    if n != JOINED_STIM_EVENTS:
+      devs.append(f"{n} stimulus onsets, expected {JOINED_STIM_EVENTS} in a joined run")
+  return devs
+
+
+def format_counts(counts: dict) -> str:
+  """`code:n;code:n` sorted by code."""
+  return ";".join(f"{c}:{n}" for c, n in sorted(counts.items()))
+
+
+def session_start_utc(timestamp_ms: float) -> str:
+  """First TIMESTAMP sample (ms since the Unix epoch) as `YYYY-MM-DD HH:MM` UTC."""
+  return datetime.fromtimestamp(float(timestamp_ms) / 1000.0, tz=timezone.utc).strftime("%Y-%m-%d %H:%M")
+
+
+def inventory_file(path: Path, subject: str) -> dict:
+  """One inventory row (CSV_COLUMNS) for one EBR file; problems go to `deviations`."""
+  path = Path(path)
+  stem = path.stem
+  kind = classify_kind(stem)
+  row = {k: "" for k in CSV_COLUMNS}
+  row.update(subject=subject, file=stem, kind=kind)
+  devs = []
+  try:
+    header = parse_ebr_header(path)
+    data = open_ebr_data(path, header)
+  except ValueError as exc:
+    row["deviations"] = f"unreadable: {exc}"
+    return row
+
+  fs = header["sampling_rate"]
+  ns = header["number_of_samples"]
+  names = header["channels"]
+  row.update(samples=ns, fs=fs, n_channels=header["number_of_channels"], channels=";".join(names))
+  if fs > 0:
+    row["duration_s"] = round(ns / fs, 1)
+
+  if (header["magic"] or "").lower() != EBR_MAGIC:
+    devs.append(f"magic {header['magic']!r}, expected {EBR_MAGIC!r}")
+  if fs != EXPECTED_FS:
+    devs.append(f"fs {fs:g}, expected {EXPECTED_FS:g}")
+  if tuple(names) != EXPECTED_CHANNELS:
+    devs.append(f"channels {names}, expected {list(EXPECTED_CHANNELS)}")
+  if len(names) != header["number_of_channels"]:
+    devs.append(f"header declares {header['number_of_channels']} channels but names {len(names)}")
+  if header["number_of_trials"] != 1 or header["number_of_bands"] != 1:
+    devs.append(f"trials={header['number_of_trials']}, bands={header['number_of_bands']}, expected 1 and 1")
+  extra = trailing_bytes(path, header)
+  if extra:
+    devs.append(f"{extra} bytes after the declared data block")
+  if ns <= 0:
+    devs.append("no samples")
+    row["deviations"] = " | ".join(devs)
+    return row
+
+  def _channel(name: str):
+    if name in names and names.index(name) < header["number_of_channels"]:
+      return np.asarray(data[0, names.index(name), 0, :], dtype=np.float64)
+    return None
+
+  mark = _channel("MARK")
+  if mark is None:
+    devs.append("no MARK channel")
+  else:
+    if not np.all(np.isfinite(mark)) or np.any(np.abs(mark - np.rint(mark)) > 1e-6):
+      devs.append("MARK has non-integer or non-finite values")
+    counts = event_onset_counts(np.nan_to_num(mark))
+    row["event_counts"] = format_counts(counts)
+    row["stim_events"] = stim_event_count(counts, kind)
+    devs.extend(protocol_deviations(counts, kind))
+
+  ts = _channel("TIMESTAMP")
+  if ts is None:
+    devs.append("no TIMESTAMP channel")
+  elif np.isfinite(ts[0]):
+    row["session_start_utc"] = session_start_utc(ts[0])
+  else:
+    devs.append("first TIMESTAMP sample is not finite")
+
+  eeg_idx = [names.index(c) for c in EEG_CHANNELS if c in names and names.index(c) < header["number_of_channels"]]
+  if eeg_idx:
+    eeg = np.asarray(data[0, eeg_idx, 0, :], dtype=np.float64)
+    row["p99_abs_eeg_uv"] = float(np.percentile(np.abs(eeg), 99))
+
+  row["deviations"] = " | ".join(devs)
+  return row
+
+
+# --- Discovery and CLI -------------------------------------------------------
+
+def discover_subjects(raw_dir: Path) -> list:
+  """Subject folders of raw_dir matching ^S\\d+$, in numeric order."""
+  found = [p.name for p in Path(raw_dir).iterdir() if p.is_dir() and SUBJECT_PATTERN.fullmatch(p.name)]
+  return sorted(found, key=lambda s: int(s[1:]))
+
+
+def run_inventory(raw_dir: Path, subjects=None) -> list:
+  """Inventory rows for every *.ebr file of the given (or discovered) subjects."""
+  raw_dir = Path(raw_dir)
+  rows = []
+  for subject in (subjects if subjects else discover_subjects(raw_dir)):
+    folder = raw_dir / subject
+    if not folder.is_dir():
+      print(f"[-] Skipping {subject}: folder not found in {raw_dir}")
+      continue
+    files = sorted(p for p in folder.iterdir() if p.is_file() and p.suffix.lower() == ".ebr")
+    if not files:
+      print(f"[-] Skipping {subject}: no .ebr files")
+      continue
+    for path in files:
+      row = inventory_file(path, subject)
+      if row["kind"] == "unknown":
+        print(f"[!] {subject}/{path.name}: unknown run kind, no protocol checks applied")
+      rows.append(row)
+  return rows
+
+
+def write_csv(rows: list, out: Path) -> None:
+  """Write the rows with CSV_COLUMNS as header, creating the parent folder."""
+  out = Path(out)
+  out.parent.mkdir(parents=True, exist_ok=True)
+  with open(out, "w", newline="") as f:
+    writer = csv.DictWriter(f, fieldnames=CSV_COLUMNS)
+    writer.writeheader()
+    writer.writerows(rows)
+
+
+def _fmt(value, spec: str) -> str:
+  """Format a console cell; an empty value prints as '-' padded to the same width."""
+  if value == "":
+    return format("-", re.match(r"[<>^]?\d*", spec).group())
+  return format(value, spec)
+
+
+def main(argv=None) -> int:
+  parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+  parser.add_argument("--raw-dir", type=Path, default=ROOT / "data" / "raw",
+                      help="folder holding the S*/ subject folders (default: <root>/data/raw)")
+  parser.add_argument("--out", type=Path, default=ROOT / "reports" / "raw_inventory.csv",
+                      help="output CSV (default: <root>/reports/raw_inventory.csv)")
+  parser.add_argument("--subjects", nargs="+", default=None,
+                      help="subject folders to include (default: all matching ^S\\d+$)")
+  args = parser.parse_args(argv)
+
+  if not args.raw_dir.is_dir():
+    print(f"[x] Raw folder not found: {args.raw_dir}")
+    return 1
+  rows = run_inventory(args.raw_dir, args.subjects)
+  if not rows:
+    print(f"[x] No .ebr files found under {args.raw_dir}")
+    return 1
+
+  print(f"{'subject':<8} {'file':<12} {'samples':>8} {'dur_s':>7} {'stim':>5} "
+        f"{'session_start_utc':<17} {'p99_uV':>8}  kind")
+  for r in rows:
+    print(f"{r['subject']:<8} {r['file']:<12} {_fmt(r['samples'], '>8')} {_fmt(r['duration_s'], '>7.1f')} "
+          f"{_fmt(r['stim_events'], '>5')} {r['session_start_utc'] or '-':<17} "
+          f"{_fmt(r['p99_abs_eeg_uv'], '>8.1f')}  {r['kind']}")
+
+  n_dev = 0
+  for r in rows:
+    if r["deviations"]:
+      items = r["deviations"].split(" | ")
+      n_dev += len(items)
+      for item in items:
+        print(f"[x] DEVIATION {r['subject']}/{r['file']}: {item}")
+
+  write_csv(rows, args.out)
+  n_subjects = len({r["subject"] for r in rows})
+  print(f"{len(rows)} files, {n_subjects} subjects, {n_dev} deviations")
+  print(f"Saved: {args.out}")
+  return 1 if n_dev else 0
+
+
+if __name__ == "__main__":
+  sys.exit(main())

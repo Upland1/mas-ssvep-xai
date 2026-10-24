@@ -1,0 +1,11 @@
+# Conda environment (Python 3.11; mas/02_REQUIREMENTS.md section 1).
+#   conda env create -f environment.yml && conda activate ssvep-eeg-xai
+# The venv route (Python 3.12) is: make venv
+name: ssvep-eeg-xai
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip
+  - pip:
+    - -r requirements.txt
