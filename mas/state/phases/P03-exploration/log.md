@@ -8,3 +8,4 @@
 | 3 Brief | orchestrator | 2026-10-24 | skipped (no new method) | — | — | none | |
 | 4 Plan | orchestrator | 2026-10-24 | 02_plan.md READY; STOP for approval | — | as above | none | Q1 fs 250 default + 256 comparison; Q2 mask thresholds |
 | 4 Plan approval | Sebastian | 2026-10-24 | Approved [x]; Q1, Q2 defaults kept | — | — | none | decisions.md rows |
+| 5 Build | signal-processing | 2026-10-24 | 03_changes READY; branch phase/P03-exploration 44e87e7…df39c06; suite `291 passed in 13.21s` | 1 | 03_ROADMAP P03, PF-04/06/09 | none | NEW src helper spectral_power.py + plot additions (outside work split); at fs 250 the bin nearest 24 Hz is bin 25 while a real 24 Hz response sits in bin 24 → target-bin power misses under the legacy axis (PF-04, documented) |
