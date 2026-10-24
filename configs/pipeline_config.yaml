@@ -1,0 +1,36 @@
+project:
+  name: "ssvep-eeg-xai"
+  target_conditions: [201, 202, 101, 102, 103, 104, 105]
+paths:
+  data_raw_dir: "data/raw"
+  data_processed_dir: "data/processed"
+  figures_dir: "outputs/figures"
+  reports_dir: "outputs/reports"
+  saved_models_dir: "outputs/saved_models"
+channels:
+  scalp: ["PO3", "POz", "PO4", "PO8", "O1", "Oz", "O2"]   # PO7 hard-excluded (legacy)
+  excluded: ["PO7"]
+  mark_channel: "MARK"
+  auxiliary: ["TIMESTAMP", "FLASHINGTIME"]
+preprocessing:
+  lowcut_hz: 1.0
+  highcut_hz: 60.0
+  filter_order: 4
+  sub_window_sec: 1.0
+  vpp_thresh_uv: 200.0
+  std_range: [0.5, 60.0]
+  baseline:
+    cross_condition: 201
+    cue_condition: 202
+    stimulus_duration_sec: 5.0
+    pre_stim_cross_sec: 2.0
+    cue_lookback_sec: 1.0
+features:
+  psd_range_hz: [5.0, 35.0]
+  plotting_range_hz: [1.0, 60.0]
+training:
+  cv_splits: 5
+  random_state: 42
+  batch_size: 16
+  learning_rate: 0.001
+  epochs: 100

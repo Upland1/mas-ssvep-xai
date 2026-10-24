@@ -9,12 +9,12 @@ phases:
     passed: '2026-10-24'
   P01:
     slug: ebr-parser
-    status: pending
+    status: passed
     owner: orchestrator
-    branch: null
-    commit: null
-    opened: null
-    passed: null
+    branch: phase/P01-ebr-parser
+    commit: cf1372b
+    opened: '2026-10-24'
+    passed: '2026-10-24'
   P02:
     slug: legacy-windowing
     status: pending

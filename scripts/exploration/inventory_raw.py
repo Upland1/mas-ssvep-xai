@@ -1,7 +1,8 @@
 """Inventory of the raw recordings (P00).
 
 Walks <raw-dir>/S*/ (subjects matched by ^S\\d+$, only *.ebr files), reads each
-EBR header and, through a memory map, only the MARK, TIMESTAMP and EEG channels.
+EBR file through src/io/ebr_parser.load_ebr_file (since P01) and uses only the
+MARK, TIMESTAMP and EEG channels.
 Writes one row per file to reports/raw_inventory.csv with the columns of
 mas/01_DATA_SPEC.md section 4 plus fs, channel list, event-code counts, run kind
 and the list of deviations from the spec.
@@ -25,6 +26,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
+import yaml
 
 
 def _find_root() -> Path:
@@ -39,6 +41,8 @@ def _find_root() -> Path:
 ROOT = _find_root()
 if str(ROOT) not in sys.path:
   sys.path.insert(0, str(ROOT))
+
+from src.io import ebr_parser  # noqa: E402  (needs ROOT on sys.path)
 
 # --- Specification (mas/01_DATA_SPEC.md) -------------------------------------
 
@@ -59,126 +63,42 @@ STIM_CODES = (101, 102, 103, 104, 105)
 ONLINE_CODES = (1001, 1002, 1003, 1004, 1005)
 JOINED_STIM_EVENTS = 80
 
-# data_type string -> little-endian numpy dtype (section 2).
-EBR_DTYPES = {
-  "int8": "<i1", "char": "<i1",
-  "uint8": "<u1", "unsigned char": "<u1",
-  "int16": "<i2", "short": "<i2",
-  "uint16": "<u2", "unsigned short": "<u2",
-  "int32": "<i4", "int": "<i4",
-  "uint32": "<u4", "unsigned int": "<u4",
-  "int64": "<i8", "__int64": "<i8",
-  "uint64": "<u8", "unsigned __int64": "<u8",
-  "float": "<f4",
-  "double": "<f8",
-  "complex": "<c16", "class std::complex<double>": "<c16",
-}
-
 CSV_COLUMNS = ("subject", "file", "samples", "duration_s", "stim_events",
                "session_start_utc", "p99_abs_eeg_uv",
                "fs", "n_channels", "channels", "event_counts", "kind", "deviations")
 
-_MAX_HEADER_BYTES = 1 << 20
-
-
-# --- Minimal EBR reader (replaced by src/io/ebr_parser.py in P01) ------------
+# --- EBR reading (src/io/ebr_parser.py since P01) ----------------------------
+# Thin wrappers keep the P00 public names; all reading goes through the parser.
 
 def ebr_dtype(data_type: str) -> np.dtype:
   """Numpy dtype for an EBR data_type string; ValueError if unsupported."""
-  key = data_type.strip().lower()
-  if key not in EBR_DTYPES:
-    raise ValueError(f"unsupported EBR data_type {data_type!r}")
-  return np.dtype(EBR_DTYPES[key])
+  return ebr_parser.ebr_dtype(data_type)
 
 
 def parse_ebr_header(path: Path) -> dict:
-  """Parse the ASCII header of an EBR file.
-
-  Returns the spec keys (data_type, sampling_rate, number_of_trials, trials,
-  number_of_channels, channels, number_of_bands, bands, number_of_samples,
-  number_of_comments, comments, number_of_marks, marks) plus `magic` (the first
-  non-blank line, stripped) and `data_offset` (byte where the binary block starts).
-  Raises ValueError when `end_header` or a required key is missing.
-  """
-  fields: dict = {}
-  indexed: dict = {"band": {}, "channel": {}, "trial": {}, "comment": {}, "mark": {}}
-  magic = None
-  with open(path, "rb") as f:
-    while True:
-      raw = f.readline()
-      if not raw:
-        raise ValueError(f"{path}: no end_header line")
-      if f.tell() > _MAX_HEADER_BYTES:
-        raise ValueError(f"{path}: header exceeds {_MAX_HEADER_BYTES} bytes without end_header")
-      line = raw.decode("ascii", errors="replace").strip()
-      if not line:
-        continue
-      if magic is None:
-        magic = line
-        continue
-      if line == "end_header":
-        data_offset = f.tell()
-        break
-      parts = line.split(maxsplit=1)
-      key, value = parts[0], (parts[1] if len(parts) > 1 else "")
-      m = re.fullmatch(r"(band|channel|trial|comment|mark)_(\d+)", key)
-      if m:
-        indexed[m.group(1)][int(m.group(2))] = value
-      else:
-        fields[key] = value
-
-  for key in ("data_type", "sampling_rate", "samples", "channels"):
-    if key not in fields:
-      raise ValueError(f"{path}: header has no '{key}' line")
-
-  def _ordered(name: str) -> list:
-    return [indexed[name][k] for k in sorted(indexed[name])]
-
-  marks = []
-  for text in _ordered("mark"):
-    idx, _, label = text.partition(" ")
-    marks.append((int(idx), label))
-
-  return {
-    "magic": magic,
-    "data_type": fields["data_type"],
-    "sampling_rate": float(fields["sampling_rate"]),
-    "number_of_trials": int(fields.get("trials", 1)),
-    "trials": _ordered("trial"),
-    "number_of_channels": int(fields["channels"]),
-    "channels": _ordered("channel"),
-    "number_of_bands": int(fields.get("bands", 1)),
-    "bands": _ordered("band"),
-    "number_of_samples": int(fields["samples"]),
-    "number_of_comments": int(fields.get("comments", 0)),
-    "comments": _ordered("comment"),
-    "number_of_marks": int(fields.get("marks", 0)),
-    "marks": marks,
-    "data_offset": data_offset,
-  }
+  """EBR header (spec keys plus `magic` and `data_offset`); see ebr_parser.read_ebr_header."""
+  return ebr_parser.read_ebr_header(path)
 
 
 def open_ebr_data(path: Path, header: dict) -> np.memmap:
-  """Memory-map the binary block as (nt, nc, nb, ns), C order, without reading it.
-
-  Raises ValueError if the file is shorter than the declared block.
-  """
-  dtype = ebr_dtype(header["data_type"])
-  shape = (header["number_of_trials"], header["number_of_channels"],
-           header["number_of_bands"], header["number_of_samples"])
-  needed = header["data_offset"] + int(np.prod(shape)) * dtype.itemsize
-  size = Path(path).stat().st_size
-  if size < needed:
-    raise ValueError(f"{path}: truncated, {size} bytes < {needed} declared by the header")
-  return np.memmap(path, dtype=dtype, mode="r", offset=header["data_offset"], shape=shape)
+  """Memory map of the block as (nt, nc, nb, ns) in the file dtype; see ebr_parser.open_ebr_block."""
+  return ebr_parser.open_ebr_block(path, header)
 
 
 def trailing_bytes(path: Path, header: dict) -> int:
   """Bytes after the declared binary block (0 for a well-formed file)."""
-  dtype = ebr_dtype(header["data_type"])
-  n = (header["number_of_trials"] * header["number_of_channels"]
-       * header["number_of_bands"] * header["number_of_samples"])
-  return Path(path).stat().st_size - header["data_offset"] - n * dtype.itemsize
+  return ebr_parser.trailing_bytes(path, header)
+
+
+def default_raw_dir() -> Path:
+  """ROOT / `paths.data_raw_dir` of configs/pipeline_config.yaml (data/raw if unset)."""
+  cfg_path = ROOT / "configs" / "pipeline_config.yaml"
+  rel = "data/raw"
+  if cfg_path.is_file():
+    with open(cfg_path) as f:
+      cfg = yaml.safe_load(f) or {}
+    rel = (cfg.get("paths") or {}).get("data_raw_dir") or rel
+  return ROOT / rel
 
 
 # --- Events and per-file summary ---------------------------------------------
@@ -247,8 +167,12 @@ def session_start_utc(timestamp_ms: float) -> str:
   return datetime.fromtimestamp(float(timestamp_ms) / 1000.0, tz=timezone.utc).strftime("%Y-%m-%d %H:%M")
 
 
-def inventory_file(path: Path, subject: str) -> dict:
-  """One inventory row (CSV_COLUMNS) for one EBR file; problems go to `deviations`."""
+def inventory_file(path: Path, subject: str, strict: bool = False) -> dict:
+  """One inventory row (CSV_COLUMNS) for one EBR file; problems go to `deviations`.
+
+  `strict=True` reads with `load_ebr_file(path, strict=True)`: a strict-mode
+  ValueError becomes the `unreadable: <message>` deviation.
+  """
   path = Path(path)
   stem = path.stem
   kind = classify_kind(stem)
@@ -257,7 +181,7 @@ def inventory_file(path: Path, subject: str) -> dict:
   devs = []
   try:
     header = parse_ebr_header(path)
-    data = open_ebr_data(path, header)
+    data = ebr_parser.load_ebr_file(path, strict=strict)["data"]
   except ValueError as exc:
     row["deviations"] = f"unreadable: {exc}"
     return row
@@ -328,7 +252,7 @@ def discover_subjects(raw_dir: Path) -> list:
   return sorted(found, key=lambda s: int(s[1:]))
 
 
-def run_inventory(raw_dir: Path, subjects=None) -> list:
+def run_inventory(raw_dir: Path, subjects=None, strict: bool = False) -> list:
   """Inventory rows for every *.ebr file of the given (or discovered) subjects."""
   raw_dir = Path(raw_dir)
   rows = []
@@ -342,7 +266,7 @@ def run_inventory(raw_dir: Path, subjects=None) -> list:
       print(f"[-] Skipping {subject}: no .ebr files")
       continue
     for path in files:
-      row = inventory_file(path, subject)
+      row = inventory_file(path, subject, strict=strict)
       if row["kind"] == "unknown":
         print(f"[!] {subject}/{path.name}: unknown run kind, no protocol checks applied")
       rows.append(row)
@@ -368,18 +292,22 @@ def _fmt(value, spec: str) -> str:
 
 def main(argv=None) -> int:
   parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-  parser.add_argument("--raw-dir", type=Path, default=ROOT / "data" / "raw",
-                      help="folder holding the S*/ subject folders (default: <root>/data/raw)")
+  parser.add_argument("--raw-dir", type=Path, default=default_raw_dir(),
+                      help="folder holding the S*/ subject folders (default: <root>/ + "
+                           "paths.data_raw_dir of configs/pipeline_config.yaml)")
   parser.add_argument("--out", type=Path, default=ROOT / "reports" / "raw_inventory.csv",
                       help="output CSV (default: <root>/reports/raw_inventory.csv)")
   parser.add_argument("--subjects", nargs="+", default=None,
                       help="subject folders to include (default: all matching ^S\\d+$)")
+  parser.add_argument("--strict", action="store_true",
+                      help="read with load_ebr_file(strict=True); a strict-mode error is an "
+                           "'unreadable' deviation (default: off, P00 behaviour)")
   args = parser.parse_args(argv)
 
   if not args.raw_dir.is_dir():
     print(f"[x] Raw folder not found: {args.raw_dir}")
     return 1
-  rows = run_inventory(args.raw_dir, args.subjects)
+  rows = run_inventory(args.raw_dir, args.subjects, strict=args.strict)
   if not rows:
     print(f"[x] No .ebr files found under {args.raw_dir}")
     return 1
