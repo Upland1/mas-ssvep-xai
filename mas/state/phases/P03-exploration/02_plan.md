@@ -87,6 +87,24 @@ and copied into `05_run.md`.) Expected runtime: < 1 min, CPU. Over
 | figures exist | every expected PNG present and non-empty, per subject | — |
 | the Reviewer confirms visible fundamental peaks for the strong responders and records what is seen for S01/S02 | reviewer opens the figures (results review); the verifier re-runs and tabulates the printed per-class maximum and target-bin power per subject | P02 observations (decisions.md) |
 
+## Amendment — pre-run audit Round 1 (2026-10-24)
+
+`07_review.md` required fix 3 adds a fourth run command (PSD consistency at the
+header fs). No change of scope or compute (< 1 min, CPU). The run commands become:
+
+```bash
+.venv/bin/python -m scripts.exploration.diagnose_occipital_spectra --all
+.venv/bin/python -m scripts.exploration.diagnose_occipital_spectra --all --fs 256 --out-suffix header
+.venv/bin/python -m scripts.exploration.visualize_data --all
+.venv/bin/python -m scripts.exploration.visualize_data --all --fs 256 --out-suffix header
+```
+
+Expected of the fourth: `max |computed - saved| = 0` for every subject. The
+results-review criterion (response bins, grades clear/visible/partial/absent,
+strong responders S03–S05 fixed in advance, legacy identity check) is the one
+pre-committed in `07_review.md`; nothing is re-run with other parameters to reach
+a grade.
+
 ## Sources
 
 1. `mas/02_REQUIREMENTS.md` §4, §5.4 (opened in this run).
