@@ -115,3 +115,73 @@ None.
 ## Questions
 
 ACK 02_plan.md signal-processing 2026-10-24
+
+## Round 2
+
+Trigger: `07_review.md` pre-run audit round 1 (commit b4bc757), required fix 1 [6].
+Commits: 1869c0a (`fix:`), 78ea210 (`test:`), this section (`docs:`). Code HEAD 78ea210.
+
+### Fixes
+
+1(a) Response bin. NEW `response_bin(f_hz, n_samples, header_fs)` =
+`floor(f_hz * n_samples / header_fs + 0.5)` in `src/features/ssvep/spectral_power.py`.
+`spectrum_peaks(..., header_fs=None, n_samples=None)` adds per harmonic `k_resp`,
+`f_resp` (label on the axis in use), `power_resp`; the existing `k`, `f_bin`, `power`
+are kept unchanged and are the **nearest-labelled** bin (docstring says so). Without
+`header_fs` the response bin equals the nearest-labelled bin.
+`occipital_class_spectra(..., header_fs=None)` passes it with the window length; `main`
+passes the derived header fs (samples / `sub_window_sec`). The nearest-labelled bin is
+printed only when it differs from the response bin, so at `--fs 256` one bin per
+harmonic is printed (also at fs 250 where both coincide: 20, 15, 10.91, 21.82 Hz).
+Synthetic check at fs 250 / header 256: response bins 24, 30, 17 vs nearest-labelled
+25, 31, 18 for 24, 2·15, 2·8.57 Hz (the three mismatches of the audit).
+
+1(b) Specificity. NEW `specificity_ratio(spectra, code, k)` in
+`diagnose_occipital_spectra.py`: own power at the 1f0 response bin / median over the
+other stimulus classes (codes of `spectra` with a stimulation frequency; 201/202
+excluded) at that bin. Returns `{k, own, others_median, n_others, ratio}`; stored in
+`res["specificity"][code]`, printed per class. Uses `res["spectra"]` only.
+
+1(c) `format_peaks`: a code without `STIM_FREQS_HZ` entry prints the maximum line only.
+
+Figures, default fs, axis and `visualize_data.py`: unchanged.
+
+### Exact console format (one line per class)
+
+Placeholders in `<>`; the bracketed part appears only when the nearest-labelled bin
+differs from the response bin; the 2f0 block only when 2f0 lies in 5–35 Hz.
+
+```
+  <S> <code>: n=<n>, target <f0:.2f> Hz; max in band at <f_max:.3f> Hz (bin <k_max>, P=<p_max:.4g>); band median P=<median:.4g>; 1f0 response bin <k_resp> (<f_resp:.3f> Hz) P=<P:.4g> (x<P/median:.2f> median)[, nearest-labelled bin <k> (<f_bin:.3f> Hz) P=<P:.4g> (x<ratio:.2f> median)][; 2f0 response bin ... (same pattern)]; specificity x<ratio:.2f> (1f0 response bin <k_resp> vs median of <n_others> other classes)
+  <S> <code without f0>: n=<n>, max in band at <f_max:.3f> Hz (bin <k_max>, P=<p_max:.4g>); band median P=<median:.4g>
+```
+
+Synthetic example (scratch tree, S03, default fs 250; not real data):
+
+```
+  S03 101: n=10, target 24.00 Hz; max in band at 23.438 Hz (bin 24, P=1.639e+06); band median P=264; 1f0 response bin 24 (23.438 Hz) P=1.639e+06 (x6206.09 median), nearest-labelled bin 25 (24.414 Hz) P=297.3 (x1.13 median); specificity x7022.46 (1f0 response bin 24 vs median of 4 other classes)
+  S03 103: n=10, target 15.00 Hz; max in band at 14.648 Hz (bin 15, P=1.624e+06); band median P=263.8; 1f0 response bin 15 (14.648 Hz) P=1.624e+06 (x6154.93 median); 2f0 response bin 30 (29.297 Hz) P=285.5 (x1.08 median), nearest-labelled bin 31 (30.273 Hz) P=331.5 (x1.26 median); specificity x6276.39 (1f0 response bin 15 vs median of 4 other classes)
+```
+
+`specificity n/a` is printed when no other stimulus class has windows.
+
+### Tests
+
+Added to `tests/test_p03_exploration_smoke.py`: `test_response_bin_vs_nearest_labelled`
+(24 Hz → (24, 25); 2·15 Hz → (30, 31), response power > 10³ × nearest-labelled power),
+`test_specificity_and_format` (planted per-class f0 → ratio > 100 with 4 others; 201
+line without target and no specificity; nearest-labelled shown at fs 250 and absent at
+fs 256; one identical noise-free 10 Hz rhythm in all classes → ratio 1 within 1e-9).
+The known-answer tests for fix 1 are the tester's (fix 2 of the audit).
+
+Suite: `.venv/bin/python -m pytest tests/` →
+
+```
+305 passed in 20.59s
+```
+
+### Sources (Round 2)
+
+6. HANDOFF — `mas/state/phases/P03-exploration/07_review.md`, pre-run audit Round 1, required fix 1.
+
+Status: READY (Round 2).
