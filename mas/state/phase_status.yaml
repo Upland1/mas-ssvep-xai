@@ -25,11 +25,11 @@ phases:
     passed: '2026-10-24'
   P03:
     slug: exploration
-    status: pending
+    status: in_progress
     owner: orchestrator
-    branch: null
+    branch: phase/P03-exploration
     commit: null
-    opened: null
+    opened: '2026-10-24'
     passed: null
   P04:
     slug: early-models-xai
