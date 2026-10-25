@@ -76,3 +76,23 @@ Result and scope
 - Four runs, 3 to 5 s each; the verifier re-ran them with exit 0. Mask `rejected 0` (kept 1592, consistency check); `max |computed - saved| = 0` at fs 256; legacy fs 250 relabels the axis only (25 of 25 rows).
 - Clear fundamentals: S03 5/5, S04 5/5, S05 5/5 (104 and 105 via the second harmonic); S01 only a weak 10.91 Hz response; S02 none.
 - The pre-run audit Round 1 failed on the nearest-labelled target bin at the legacy axis (wrong for 24, 2·15, 2·8.57 Hz); fixed with response bins and a specificity ratio.
+
+## P04 — Early hybrid models, fusion CNN and first explainability
+
+2026-10-24, branch `phase/P04-early-models-xai`, code at `552029a`. Report: `mas/state/reports/P04.md`.
+
+Added
+- `scripts/training/train_models.py` (`--subject`, `--all`): harmonic-PSD and FBCCA hybrid (37 features), six classifiers under the legacy CV, legacy no-reset smoothing, confusion matrices, per-subject CSV.
+- `scripts/training/train_final_model.py` (`--subject`, `--device`, `--epochs`, `--skip-cnn`): full-data Shrinkage-LDA and fusion-CNN exports, labelled as export and XAI only.
+- `scripts/training/batch_run_subjects.py` (`--subjects`, `--paradigm`, `--device`): per-subject LDA and fusion-CNN summary CSV.
+- `scripts/xai/run_xai.py`, `scripts/xai/compare_subject_xai.py`: LDA-weight heatmaps and the S01 versus S04 comparison.
+- `src/models/cnn/spatial_spectral_cnn.py`: `DualBranchFusionCNN` (10,005 parameters, convolutions without bias), tensor builder, CNN cross-validation, legacy smoothing.
+- `tests/test_p04_early_models_known_answer.py` (32 tests with mutant checks), `tests/test_p04_cnn_smoke.py`, `tests/test_p04_ml_smoke.py` (4); suite `349 passed`.
+
+Changed
+- `mas/state/team.yaml`: P04 legacy flags gain R3 (per-window FBCCA filtering).
+
+Result and scope
+- Seven runs on CPU at 140 epochs, all exit 0, 9.07 min in total.
+- Every accuracy is legacy leaky CV (R1, PF-01) with no-reset smoothing (R8, PF-02); not comparable with R-6. Trial-grouped CV and trial-reset smoothing come in P11; the FBCCA sampling rate and filtering come in P16.
+- Shrinkage-LDA 1.0 s: 50.00, 51.26, 83.00, 97.98, 95.50 % for S01–S05; fusion CNN 1.0 s: 51.50, 53.77, 89.00, 99.49, 100.00 %.
