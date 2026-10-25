@@ -84,3 +84,16 @@ No variant lands in both R-4 SFS ranges. Only "all 55 columns, n=20" (166 window
 | 3 | 158 | 39 | True | 0 | 0 3 5 6 9 14 16 17 20 23 27 36 41 43 45 |
 | 4 | 158 | 39 | True | 0 | 3 8 9 18 21 22 25 26 30 33 36 37 42 45 47 |
 | 5 | 158 | 39 | True | 0 | 2 9 11 12 21 24 26 30 32 35 36 42 43 44 45 |
+
+## Verdict restatement (after results review)
+
+Against the verbatim acceptance (ablation = R-4; cohort = R-5):
+- R-4: four of five rows within tolerance (Delta 0.00 pp), p exact on all rows, 197/3 on all rows, Full row equal to `reports/flagship_S03.csv`. The SFS row (89.85 / 95.94 vs 84.77 / 93.40) stays outside tolerance, as measured; my numbers and reasons 1-6 above are unchanged.
+- R-5: counts exact, all ten accuracies equal to P05, mean 83.33 / 87.57.
+- The reviewer accepted the SFS miss as D-1 (`07_review.md` results review part 1, commit 637dad6; `mas/state/decisions.md` P06 D-1 row: the original repository has no SFS, leak audit clean, diagnostics committed before any reference access, no diagnostic variant inside both ranges). The diagnostic run (section above) is consistent with that: audit shows 0 test rows in any SFS input.
+- Report v1 (P06.4): `docs/report/v1/report.md` and `docs/report/v1/methodology_infographic_v1.svg` exist and are tracked (`git ls-files`). Content is the reviewer's scope.
+
+With D-1 accepted, the only failing criterion is covered; I judge the P06 verification as passing.
+
+Verdict: PASS
+Accepted deviation: D-1 (R-4 SFS row; see 07_review.md and decisions.md).
