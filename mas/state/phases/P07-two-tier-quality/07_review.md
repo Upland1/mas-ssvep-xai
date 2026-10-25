@@ -224,23 +224,132 @@ unchanged. D0 now has a second baseline: the hashes re-checked in this round.
 
 ## Results review
 
-Verdict: APPROVE / REJECT
+Read: 05_run.md, 06_verify.md (Verdict PASS, run at fa5dade), the four logs in
+`reports/logs/P07/` (`run_preprocessing_vppmin5_20261025_133201.log`,
+`run_preprocessing_vppmin5_nodrop_20261025_133206.log`,
+`run_preprocessing_pinned_20261025_133207.log`, `benchmark_n_subjects_20261025_133213.log`)
+and `reports/n_subjects_benchmark.csv`. I re-read every number below from those files.
+
+### Acceptance criteria (verbatim, mas/03_ROADMAP.md P07)
+
+| Criterion | Met? | Evidence |
+|---|---|---|
+| "tests for both tiers" | yes | tier 1 (strict > 50 %, 50/51 of 100) and tier 2 (kept channels only) in `tests/test_p07_quality_signal.py`, `tests/test_p07_known_answer.py`; clean-checkout suite `503 passed, 20 warnings in 191.73s` (06_verify.md) |
+| "S03 still produces windows" | yes | pinned log: `gated 320: accepted 317, rejected 3`; `windows per condition: 201: 78, 202: 39, 101: 40, 102: 40, 103: 40, 104: 40, 105: 40` |
+| "channel report printed per subject" | yes | preprocessing logs runs 1 and 3 (`PO7: fail 100.0% (605/605) ... -> DROPPED`); benchmark log one block per subject S01–S05 (lines 19–20, 30–31, 41–42, 52–53, 63–64) |
+| "benchmark CSV produced for every subject (channels kept/dropped column filled)" | yes | CSV rows S01–S05 + Mean; `Channels Kept` 7 and `Channels Dropped` `none` in every subject row |
+| "Record numbers (no reference target for this intermediate state)" | yes | 05_run.md / 06_verify.md tables, copied verbatim from the logs |
+| Task P07.5 "show that letting the raw gate inherit the new default `vpp_min=5.0` rejects all 320 windows of S03" | count yes, cause **no** | see P2: the 320 rejections are caused by PO7 `vpp_high`, not by `vpp_min`; accepted deviation D-1 |
+
+### Pre-committed checks
+
+| Check | Result | Evidence |
+|---|---|---|
+| D0 legacy arrays untouched | PASS | 18 sha256 prefixes before = after = the Round 1 list (05_run.md, `mas/state/scratch/d0_before.txt`) |
+| P1 pinned run | PASS (strongest branch) | kept = the legacy seven (PO7 dropped, `fail 100.0% (605/605), mean Vpp 797.56 uV`), so the equality branch applies: `np.array_equal(y, ...)` True and `X_time` max abs difference `0.0` against `data/processed/S03` (06_verify.md). The P07 8-channel path with tier 1 rebuilds the P02 arrays bit for bit |
+| P2 PF-07 demo | count reproduced; **mechanism not demonstrated** | see below |
+| P3 channel reports | PASS | as above |
+| D1 CSV complete | PASS | matches R-6's channel columns (7 / none) for all five |
+| D2 counts vs R-6 | PASS, exact | CSV 200/0, 196/3, 197/3, 197/1, 200/0 = R-6 |
+| D3 accuracies vs R-5 (diagnostic) | PASS, equal | CSV 64.5/75.5, 66.33/71.94, 90.36/95.43, 98.98/98.48, 96.5/96.5, Mean 83.33/87.57 = R-5 to two decimals. Same counts and same accuracies under window-level CV means the rejected window sets are almost certainly identical to P06's, so the indices listing I required in D3 for the case of a difference is not triggered. No comparison with R-6 accuracies (leak-free, P11) |
+
+### P2 — PF-07, judged on the rejection reasons, not only the count
+
+What the logs show:
+- **No-drop run (8 channels, `vpp_min 5`):** `Gate: vpp [5, 200] uV` (the flag is forwarded)
+  and `gated 320: accepted 0, rejected 320 (vpp_low 0, vpp_high 320, std_low 0, std_high 317)`.
+  The 320 listed rejections tally as 3 × `['vpp_high'] channels ['PO7']`, 314 ×
+  `['vpp_high', 'std_high'] channels ['PO7']` and 3 × `['vpp_high', 'std_high'] channels ['PO7', 'PO8']`
+  (`grep "rejected: " ... | sort | uniq -c`; 3 + 314 + 3 = 320, checked with
+  `.venv/bin/python -c "print(314+3+3)"` → `320`). **Every** window fails on PO7 for being too
+  large; **no** window fails `vpp_min`.
+- **Tier-1-on run (`vpp_min 5`) vs pinned run (`vpp_min 0.5`):** both run on the same seven
+  channels with PO7 dropped, and both give `accepted 317, rejected 3 (vpp_low 0, vpp_high 3, ...)`,
+  identical down to the rejected windows (201 onset 1280 sub 0/1 and 202 onset 1792, PO8). The
+  ungated minimum Vpp on these seven channels is `20.547 uV`, four times `vpp_min = 5`.
+
+Judgement:
+- The count of PF-07 ("all 320") is reproduced.
+- PF-07's **mechanism** (an inherited `vpp_min = 5.0` rejecting low-amplitude windows) is
+  **not** demonstrated on S03, and S03's data cannot demonstrate it. On these channels no
+  window has Vpp < 5 µV, and lowering `vpp_min` to 0.5 would not rescue a single window of
+  the no-drop run, because each one already fails `vpp_max` on PO7.
+- What the logs show is a different mechanism: restoring PO7 (mean Vpp 797.56 µV, outside
+  200 µV in every window) into the raw gate rejects everything.
+- This is consistent with the original's history only if the original's P07 change restored
+  PO7 and changed `vpp_min` together, and the total rejection was attributed to the wrong
+  one. That is a hypothesis for Sebastian, not a finding.
+- My pre-committed P2 rule was too coarse:
+  - Its "reproduced" branch looked only at the count.
+  - Its FAIL branch ("5.0 rejects no more than 0.5 on the same channels") is literally
+    satisfied too (runs 1 and 3: 3 = 3). But that branch was meant to catch a flag that is
+    not forwarded, and the logged `Gate: vpp [5, 200]` and the unit tests rule that out.
+  - I resolve it on the evidence, not by picking the more convenient branch.
+- **Is a diagnostic run needed?** No. The run that would have been requested
+  (`--vpp-min 5.0` with PO7 excluded) already exists: tier 1 removed PO7 in run 1, leaving
+  exactly the legacy seven channels, and P1 shows those are the P02 arrays bit for bit.
+  Its result is 317/3, `vpp_low 0`, identical to `vpp_min 0.5`.
+- One table cell was not run: 8 channels, `--no-channel-drop`, `vpp_min 0.5`. Its outcome
+  (320 rejected) follows from the logged reasons, since every window fails `vpp_high`. The
+  report must label that cell "not run, implied by the reasons", or the scribe/orchestrator
+  may ask for the 1 s run. Neither is blocking.
+- The `vpp_min` mechanism itself stays proven only synthetically:
+  - `test_pf07_pinned_default_and_regression_flag` (Vpp 2 µV windows kept at 0.5, rejected at 5.0);
+  - `test_pf07_demo_rejects_low_amplitude_windows` (end to end, `--vpp-min 5.0` → "no window accepted").
+- The pin of 0.5 is harmless on real data, since runs 1 and 3 are identical. It remains
+  the correct defensive fix (R5).
 
 ### Deviations from references
 
 | Ref | Expected | Obtained (log) | Δ | Within tolerance? | Explanation | Accepted? |
 |---|---|---|---|---|---|---|
-| | | | | | | |
+| PF-07 / roadmap P07.5 | inherited `vpp_min=5.0` rejects all 320 S03 windows | no-drop run: 320/320 rejected, `vpp_low 0`, all on PO7 `vpp_high`; 7 channels: 3/320 at 5.0 and at 0.5, `vpp_low 0` | count 0; cause differs | count yes; mechanism no | S03 min Vpp 20.547 µV on the legacy seven; PO7 mean Vpp 797.56 µV fails `vpp_max` in every window | yes, as D-1 (conditions below) |
+| R-6 counts and channels | 200/0, 196/3, 197/3, 197/1, 200/0; 7 / none | identical | 0 | yes | same gate, same arrays | — |
+| R-5 accuracies (diagnostic) | per subject, mean 83.33/87.57 | identical | 0.00 pp | yes | same code path, CV, rows | — |
 
 ### Interpretation check
 
-<!-- Per-subject reading; inconclusive results stated as such; leakage in
-fitted objects, normalization, validation sets; statistics unit and
-multiple comparisons. -->
+- **Per subject:** tier 1 drops nothing on the legacy arrays (benchmark: every channel
+  ≤ 1.5 % fail) and only PO7 on S03's 8-channel recording. On the 7 legacy channels the
+  two-tier gate rejects the same windows as P05/P06's single-tier gate, so P07 changes no
+  classification number.
+- The benchmark is legacy (window-level CV, R1; i%5 smoothing, R8; fs 250). Its log says
+  "legacy leaky CV, not comparable with R-6", and the report must keep that label. The R-6
+  agreement holds for counts and channels only.
+- **Leakage:** the gate uses fixed limits and no labels, and tier 1 is a per-subject
+  decision on unlabelled windows (allowed, R2); CSP, scaler and LDA are fitted in-fold.
+  No statistics in P07.
+- **Non-blocking (P02 carry-forward):** the ungated `summarize_window_quality` is still not
+  printed for a subject that is skipped (no-drop log: "No ungated summary line printed"),
+  which is exactly the all-rejected case the diagnostic exists for. Here
+  `format_quality_stats` supplied the reasons, so nothing was lost. Recommend printing the
+  summary before the skip at the next touch of `run_preprocessing.py` (data-signal).
 
 ### Decisions for decisions.md
 
-<!-- Accepted deviations, one line each; the orchestrator copies them. -->
+- **P07 accepted deviation D-1 (PF-07 mechanism).**
+  - The PF-07 count is reproduced: `--vpp-min 5.0 --no-channel-drop` rejects 320/320 S03 windows.
+  - The cause is PO7 (`vpp_high` in all 320 windows, mean Vpp 797.56 µV), not the inherited
+    `vpp_min`: `vpp_low 0` in every real-data run, and the minimum Vpp on the legacy seven
+    channels is 20.547 µV.
+  - With PO7 dropped, `vpp_min` 5.0 and 0.5 give the same 317/3.
+  - The `vpp_min` mechanism is proven only by synthetic tests; the 0.5 pin stays as a
+    defensive R5 fix.
+  - Conditions:
+    - (a) The report must not say that S03's real-data rejection was caused by `vpp_min`.
+      It quotes the reason tally and states the PO7 cause.
+    - (b) The before/after table shows the 7-channel 5.0 vs 0.5 pair (317/3 = 317/3) and
+      the 8-channel 5.0 cell. The 8-channel 0.5 cell is labelled "not run; implied by
+      `vpp_high` in every window".
+    - (c) Open question for Sebastian (not a blocker): did the original's P07 commit
+      restore PO7 and change `vpp_min` together, so that PF-07's attribution may be wrong?
+- **P07:** on the legacy 7-channel arrays, the P07 two-tier gate (vpp 5–120, std 1–35, fail > 50 %)
+  reproduces R-6's counts and channel columns exactly and R-5's accuracies exactly. The 8-channel
+  P07 path with tier 1 on rebuilds S03's P02 arrays bit for bit (tier 1 drops PO7, 100 % fail).
+- **Carry-forward (data-signal, next touch of `run_preprocessing.py`):** print the ungated
+  summary also for a skipped subject.
+
+Verdict: APPROVE
 
 ## Sources spot-check
 
