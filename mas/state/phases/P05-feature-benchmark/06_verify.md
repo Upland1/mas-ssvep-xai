@@ -188,3 +188,16 @@ All ten R-5 values (1.0 s and 2.0 s, five subjects) are reproduced exactly. Data
 - `git status --porcelain` empty before and after the runs; deliverables are git-ignored. No tracked data or generated files (`git ls-files` filter for raw recordings, `.npy`, `.csv`, `.png`, `data/`, `reports/`, `outputs/`: no hits).
 - `mas/state/scratch/reference_access.log` has 14 lines before and after my runs (Round 1 report: 5). Lines 6-14, dated 2026-10-24T23:48:50 to 23:49:50, are all by `ml-engineer`: git queries on the answer-key repository (branch listing, tree listing, history of the confusion-matrix script, and `show` of the original confusion-matrix script, FBCCA and FBCSP extractors, quality check, cross-validation benchmark and harmonic benchmark at commit 69873ea). They match the "Round 2 — implementation" consultation table of the ml-engineer handoff (logged consultations). Trigger: implementation, tests and a FAIL verdict existed beforehand; the reviewer noted the first access preceded the diagnostics commit by 30 s (sequencing CONCERN, not a FAIL). No access by the verifier in this round.
 - Sources opened: `mas/state/decisions.md` P05 rows, `07_review.md` Round 2, `reports/classification_report_evaluate_confusion_matrix_S03_smoothed_mod5.txt`, the logs and CSVs cited.
+
+---
+
+## Verdict restatement (after results review)
+
+Verdict: PASS (with one accepted deviation, D-1)
+
+Basis, against the acceptance criteria as written above:
+
+- My FAIL (Round 1 and Round 2) rested on one item only: the R-3 qualitative statement "perfect precision on 24 Hz". Round 2 value: class-101 precision 0.9750 (39 of 40) in `reports/classification_report_evaluate_confusion_matrix_S03_smoothed_mod5.txt`, recall 1.0000.
+- The scientific reviewer (`07_review.md`, results review, commit dce6242) accepted this as deviation D-1 with a signed explanation, recorded in `mas/state/decisions.md` (2026-10-25 P05 row). `mas/04_REFERENCE_RESULTS.md` tolerance rules allow a deviation that the reviewer explains and signs.
+- My own judgement: the deviation is one window of 40 predictions, it is qualitative (no numeric tolerance exists for it), nothing was tuned, and every count and accuracy of R-3 and R-5 is exact. Round 2 checks 1, 2, 3, 5 and 6, the 104<->105 dominance, the hybrid-vs-single-domain and argmax criteria, QDA presence, privacy/git and R11 all passed as reported. With D-1 accepted, no acceptance criterion remains unmet, so the P05 verification is PASS.
+- The Round 1 and Round 2 text above is unchanged and records the FAIL verdicts as issued at the time.
