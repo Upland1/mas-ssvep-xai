@@ -7,3 +7,4 @@
 | 2 Assignment | orchestrator | 2026-10-25 | 00_assignment.md READY | — | 03_ROADMAP P06, R-4, R-5 | none | |
 | 3 Brief | orchestrator | 2026-10-25 | skipped | — | — | none | |
 | 4 Plan | orchestrator | 2026-10-25 | 02_plan.md READY (auto) | — | as above | none | SFS 15+5 from R-4 p=20; report v1 after the run |
+| 5 Build (ml-engineer) | ml-engineer | 2026-10-25 | 03_changes_ml-engineer.md READY; a8ff6f2…918c152; full suite passes | 1 | 03_ROADMAP P06, R-4, R-5 | none | SFS = Pipeline(scaler, sLDA) inner cv=5; Mean row averages rounded values (R-5 means 83.33/87.57 reproduce from rounded values, shown command); six-space header now names FBCCA channels |
