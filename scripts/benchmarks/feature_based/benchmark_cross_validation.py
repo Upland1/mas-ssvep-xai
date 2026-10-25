@@ -123,7 +123,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
   except (FileNotFoundError, ValueError) as exc:
     print(f"[-] Skipping {args.subject}: {exc}")
     return 1
-  header = legacy_header_lines(args.fs, blocks["thresholds"], args.seed, CV_LABEL, SMOOTH_LABEL)
+  header = legacy_header_lines(args.fs, blocks["thresholds"], args.seed, CV_LABEL, SMOOTH_LABEL,
+                         blocks["fbcca_channels"])
   print(f"Data source: legacy windows, {_rel(processed)}/{args.subject}/ (P02, OO session), stimulus windows only")
   print("\n".join(header))
   print(f"\n[+] {args.subject}: {blocks['n_stimulus']} stimulus windows, {blocks['n_clean']} clean, "

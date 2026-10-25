@@ -42,9 +42,11 @@ def prepare_subject(processed_dir: Path, subject: str, scalp: Sequence[str],
   return blocks
 
 
-def legacy_header_lines(fs: float, thresholds: dict, seed: int, cv_label: str, smooth_label: str) -> list:
+def legacy_header_lines(fs: float, thresholds: dict, seed: int, cv_label: str, smooth_label: str,
+                        fbcca_channels: Optional[Sequence[str]] = None) -> list:
+  """Protocol lines of a legacy benchmark; `fbcca_channels` (names, `blocks["fbcca_channels"]`) adds a line naming the FBCCA input."""
   th = thresholds
-  return [
+  lines = [
     f"cv={cv_label}; seed={seed}",
     f"smoothing: {smooth_label}",
     f"features: legacy fs={fs:g} Hz (PF-04), per-window sub-band filtering (R3/PF-14); scaler and CSP fitted "
@@ -52,6 +54,9 @@ def legacy_header_lines(fs: float, thresholds: dict, seed: int, cv_label: str, s
     f"window mask (R5 per-script gate, {MASK_LABEL}, one mask for every block, PF-10): vpp "
     f"[{th['vpp_min']:g}, {th['vpp_max']:g}] uV, std [{th['std_min']:g}, {th['std_max']:g}] uV",
   ]
+  if fbcca_channels is not None:
+    lines.append(f"FBCCA channels ({len(fbcca_channels)}): {', '.join(fbcca_channels)}")
+  return lines
 
 
 def save_classification_report(y: np.ndarray, pred: np.ndarray, path: Path, title: str) -> str:
