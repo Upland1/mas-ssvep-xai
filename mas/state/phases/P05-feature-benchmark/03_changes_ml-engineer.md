@@ -143,3 +143,41 @@ Conclusion: the only flagship-relevant deviation is the smoothing rule (a); the 
 ### Sources (Round 2)
 9. Original repository (answer key) @ 69873ea and main 5d6d1c2, files and lines in the table (opened in this run, R11 after-attempt).
 10. `mas/state/phases/P05-feature-benchmark/06_verify.md` facts as relayed by the coordinator (not re-derived here).
+
+## Round 2 — implementation
+
+Status: READY. Branch `phase/P05-feature-benchmark`; commits `d9da35f` (fix), `45fe8fc` (test); this section is committed after them. Implements exactly the last three P05 rows of `mas/state/decisions.md`; nothing else tuned. No real-data run; the scripts were smoke-run on the synthetic tree by the test suite. Reference not re-consulted in this round.
+
+Full suite (`.venv/bin/python -m pytest tests/ -o addopts="" -q`): `416 passed, 10 warnings in 96.27s (0:01:36)`.
+
+### Changes
+
+1. Reported "2.0 s smoothed" = legacy i%5 trial smoothing (R8 legacy, PF-02): `legacy_eval.accuracies` now uses `smooth_reported = smooth_probabilities_mod5` (reset at `i % 5 == 0` of the clean array); `SMOOTH_LABEL = "legacy i%5 trial smoothing (R8 legacy, PF-02): ..."`, new `DIAG_SMOOTH_LABEL` for the no-reset rule. Affects every 2.0 s value in `feature_space_benchmark_<S>.csv` (incl. the FBCCA argmax row), `sklearn_suite_<S>.csv`, `flagship_<S>.csv`, the harmonic+FBCCA report, the console headers and the `.meta.txt` sidecar (header lines carry `SMOOTH_LABEL`). In `evaluate_confusion_matrix.py` the printed DIAGNOSTIC line is now the no-reset accuracy; both `_smoothed_{mod5,noreset}.txt` files are still written, titled `REPORTED (legacy i%5 trial smoothing, R8 legacy, PF-02)` and `DIAGNOSTIC (P04 no-reset rule, not the reported number)`. `smooth_probabilities_legacy` (no-reset) is unchanged and still the P04 scripts' rule (re-exported from `train_models.py`).
+2. Window mask = original extractor limits, passed explicitly: `P05_MASK_THRESHOLDS = {vpp_min 0.5, vpp_max 120, std_min 0.1, std_max 35}`, `MASK_LABEL = "original extractor limits"`, printed in the header line and `.meta.txt`, and in the flagship report title.
+3. `benchmark_harmonic_fbcca`: FBCCA on PO8, O1, Oz, O2 only, selected by name. New optional argument `fbcca_channels` on `build_feature_blocks` / `prepare_subject` (None = all channels, unchanged for the other three scripts and the flagship). The mask is still computed once on all channels and shared by the harmonic PSD and FBCCA (PF-10 not reproduced). Blocks dict gains `fbcca_channels`; console and report title name the channels.
+
+### Files
+
+| Path | NEW / MODIFIED | Change |
+|---|---|---|
+| `src/features/ssvep/window_mask.py` | MODIFIED | limits 0.5-120 / 0.1-35, `MASK_LABEL` |
+| `src/features/ssvep/fbcca_extraction.py` | MODIFIED | docstrings only (limits wording) |
+| `src/preprocessing/dataset/smoothing.py` | MODIFIED | docstrings: i%5 = reported P05-P10 rule, no-reset = P04 rule / diagnostic |
+| `src/models/classical/legacy_eval.py` | MODIFIED | `accuracies` uses i%5; `SMOOTH_LABEL`, `DIAG_SMOOTH_LABEL`, `smooth_reported` |
+| `src/models/classical/feature_spaces.py` | MODIFIED | `fbcca_channels` (by name) |
+| `src/models/classical/benchmark_runner.py` | MODIFIED | `fbcca_channels` pass-through; mask label in header |
+| `scripts/benchmarks/feature_based/benchmark_cross_validation.py` | MODIFIED | argmax row smoothed with i%5; docstring labels |
+| `scripts/benchmarks/feature_based/benchmark_harmonic_fbcca.py` | MODIFIED | visual-cluster FBCCA; labels |
+| `scripts/evaluation/evaluate_confusion_matrix.py` | MODIFIED | reported i%5, diagnostic no-reset; file titles; labels |
+| `scripts/evaluation/test_sklearn_models.py` | MODIFIED | docstring labels |
+| `tests/test_p05_feature_benchmark.py` | MODIFIED | one assertion block changed, three tests added (below) |
+
+### Test edits
+
+- `test_flagship_and_harmonic_scripts`: the loop asserted `"DIAGNOSTIC" in` both `_smoothed_*` files; now the noreset file must start with `DIAGNOSTIC` and the mod5 file with `REPORTED (legacy i%5`; added: the harmonic+FBCCA report contains `FBCCA on PO8, O1, Oz, O2`.
+- Added `test_mask_limits_are_the_original_extractor_limits` (a window with a channel of std ~0.7 uV is kept by 0.5/0.1 limits and rejected by the superseded 5/1 limits), `test_reported_smoothing_is_legacy_i_mod_5` (hand example: 2.0 s accuracy 10/10 under i%5, 9/10 under no-reset), `test_fbcca_channels_by_name_and_same_mask` (FBCCA equals the extractor on the four named channels, also under a reversed name list; mask and PSD unchanged).
+- No other test changed. `test_p05_known_answer.py` (synthetic-tester) and all P04 tests pass unchanged; its PF-10 test passes explicit strict thresholds and a loose default under which the planted window passes either limit set.
+
+### Expected effect on the verifier's numbers (not run here)
+
+The 2.0 s flagship values should become the former j%5 diagnostic values (S03 95.43 %, R-5 2.0 s values), 1.0 s unchanged unless the new mask limits change which windows are rejected; the S03 197/3 count is to be re-checked. Harmonic PSD + FBCCA in `benchmark_harmonic_fbcca` will differ from the "Harmonic PSD + FBCCA" row of `feature_space_benchmark_<S>.csv`, which keeps all-channel FBCCA (decisions.md names only the harmonic script).
