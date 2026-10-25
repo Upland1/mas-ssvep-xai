@@ -46,6 +46,7 @@ ROOT = _find_root()
 if str(ROOT) not in sys.path:
   sys.path.insert(0, str(ROOT))
 
+from src.io.channels import legacy_scalp  # noqa: E402
 from src.features.ssvep.spectral_power import (  # noqa: E402  (needs ROOT on sys.path)
   LEGACY_FS_HZ, fft_power, fs_label, mean_spectrum, select_channels_by_name, spectrum_peaks)
 from src.visualization.signal_plots import STIM_FREQS_HZ  # noqa: E402
@@ -287,7 +288,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
   if not subjects:
     print(f"[x] No subject folders matching ^S\\d+$ in {processed_dir}")
     return 1
-  scalp = list(cfg["channels"]["scalp"])
+  scalp = legacy_scalp(cfg["channels"]["scalp"])  # legacy 7-channel arrays (config v2 has PO7)
   conds = stimulus_conditions(cfg)
   freq_range = tuple(float(v) for v in cfg["features"]["psd_range_hz"])
   sub_sec = float(cfg["preprocessing"]["sub_window_sec"])

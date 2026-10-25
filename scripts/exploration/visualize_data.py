@@ -50,6 +50,7 @@ if str(ROOT) not in sys.path:
 from scripts.exploration.diagnose_occipital_spectra import (  # noqa: E402
   DATA_SOURCE, DEFAULT_CONFIG, DEFAULT_SUBJECT, figure_path, header_fs, load_config,
   load_legacy_windows, resolve_subjects, stimulus_conditions)
+from src.io.channels import legacy_scalp  # noqa: E402
 from src.features.ssvep.fbcca_extraction import TARGET_FREQS, extract_fbcca_features  # noqa: E402
 from src.features.ssvep.fbcsp_extraction import extract_fbcsp_features  # noqa: E402
 from src.features.ssvep.spectral_power import (  # noqa: E402
@@ -285,7 +286,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
   if not subjects:
     print(f"[x] No subject folders matching ^S\\d+$ in {processed_dir}")
     return 1
-  scalp = list(cfg["channels"]["scalp"])
+  scalp = legacy_scalp(cfg["channels"]["scalp"])  # legacy 7-channel arrays (config v2 has PO7)
   conds = stimulus_conditions(cfg)
   freq_range = tuple(float(v) for v in cfg["features"]["psd_range_hz"])
   sub_sec = float(cfg["preprocessing"]["sub_window_sec"])

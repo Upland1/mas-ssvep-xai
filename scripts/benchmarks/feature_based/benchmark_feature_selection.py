@@ -52,6 +52,7 @@ from sklearn.model_selection import StratifiedKFold  # noqa: E402
 from sklearn.pipeline import Pipeline  # noqa: E402
 from sklearn.preprocessing import StandardScaler  # noqa: E402
 
+from src.io.channels import legacy_scalp  # noqa: E402
 from src.features.selection.feature_selection import (  # noqa: E402
   select_k_best_fbcsp_features, select_sfs_fbcsp_features, subband_pruned_columns, with_fbcca)
 from src.features.ssvep.fbcsp_extraction import DEFAULT_SUBBANDS  # noqa: E402
@@ -248,7 +249,7 @@ def run_sfs_diagnostics(blocks: dict, subject: str, sfs_k: int = 15, m: int = 1,
 def main(argv: Optional[Sequence[str]] = None) -> int:
   args = build_parser().parse_args(argv)
   cfg = load_config(args.config)
-  scalp = list(cfg["channels"]["scalp"])
+  scalp = legacy_scalp(cfg["channels"]["scalp"])  # legacy 7-channel arrays (config v2 has PO7)
   processed = args.processed_dir or ROOT / cfg["paths"]["data_processed_dir"]
   reports = Path(args.reports_dir or ROOT / "reports")
   t0 = time.time()

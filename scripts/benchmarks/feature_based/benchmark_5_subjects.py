@@ -38,6 +38,7 @@ ROOT = _find_root()
 if str(ROOT) not in sys.path:
   sys.path.insert(0, str(ROOT))
 
+from src.io.channels import legacy_scalp  # noqa: E402
 from src.features.ssvep.spectral_power import LEGACY_FS_HZ  # noqa: E402
 from src.models.classical.benchmark_runner import (  # noqa: E402
   legacy_header_lines, load_config, prepare_subject)
@@ -92,7 +93,7 @@ def with_mean_row(rows: list) -> pd.DataFrame:
 def main(argv: Optional[Sequence[str]] = None) -> int:
   args = build_parser().parse_args(argv)
   cfg = load_config(args.config)
-  scalp = list(cfg["channels"]["scalp"])
+  scalp = legacy_scalp(cfg["channels"]["scalp"])  # legacy 7-channel arrays (config v2 has PO7)
   processed = Path(args.processed_dir or ROOT / cfg["paths"]["data_processed_dir"])
   reports = Path(args.reports_dir or ROOT / "reports")
   subjects = args.subjects or discover_subjects(processed)

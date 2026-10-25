@@ -440,12 +440,14 @@ def test_channel_count_mismatch_fails_loudly(tmp_path, capsys):
     vd.explore_subject({"X_time": X, "y": y}, FS_LEGACY, eight, STIM, (5.0, 35.0), LEGACY)
 
   _write_subject(tmp_path / "proc" / "S01", X, y)
-  cfg = str(_config(tmp_path, eight))
+  # config v2 lists PO7 and the scripts reduce it to the 7 legacy names (legacy_scalp), so a
+  # real mismatch needs 6 names
+  cfg = str(_config(tmp_path, SCALP[:-1]))
   for mod in (dos, vd):
     rc = mod.main(["--subject", "S01", "--config", cfg, "--processed-dir", str(tmp_path / "proc"),
                    "--figures-dir", str(tmp_path / "figs")])
     out = capsys.readouterr().out
-    assert rc == 1 and "[-] Skipping S01: 8 channel names" in out
+    assert rc == 1 and "[-] Skipping S01: 6 channel names" in out
   assert not (tmp_path / "figs").exists() or not any((tmp_path / "figs").rglob("*.png"))
 
 
