@@ -18,6 +18,7 @@ from typing import Sequence
 import numpy as np
 
 from src.features.ssvep.spectral_power import select_channels_by_name
+from src.io.channels import FULL_MONTAGE, LEGACY_EXCLUDED
 
 KEEP_CHANNEL_NAMES = ("POz", "O1", "Oz", "O2")        # P04: positions (1, 4, 5, 6) of the 7-channel layout
 KEEP_CHANNELS = (1, 4, 5, 6)
@@ -28,7 +29,13 @@ VISUAL_CLUSTER = ("PO8", "O1", "Oz", "O2")            # P05: 01_DATA_SPEC sectio
 
 def check_keep_channels(scalp_names: Sequence[str], keep_channels: Sequence[int] = KEEP_CHANNELS,
                         expected: Sequence[str] = KEEP_CHANNEL_NAMES) -> None:
-  """Assert that the positional `keep_channels` are `expected` by name (PF-06)."""
+  """Assert that the positional `keep_channels` are `expected` by name (PF-06).
+
+  `keep_channels` index the legacy 7-channel arrays; the 8-channel config v2 list is
+  reduced to them by dropping PO7 first (legacy, `src.io.channels.LEGACY_EXCLUDED`).
+  """
+  if len(scalp_names) == len(FULL_MONTAGE):
+    scalp_names = [c for c in scalp_names if c not in LEGACY_EXCLUDED]
   got = tuple(scalp_names[i] for i in keep_channels)
   if got != tuple(expected):
     raise ValueError(f"keep_channels {tuple(keep_channels)} select {got}, expected {tuple(expected)}")

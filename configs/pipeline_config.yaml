@@ -1,3 +1,4 @@
+# config v2 (P07): all 8 scalp channels; the quality gate decides which are kept (PF-05).
 project:
   name: "ssvep-eeg-xai"
   target_conditions: [201, 202, 101, 102, 103, 104, 105]
@@ -8,8 +9,8 @@ paths:
   reports_dir: "outputs/reports"
   saved_models_dir: "outputs/saved_models"
 channels:
-  scalp: ["PO3", "POz", "PO4", "PO8", "O1", "Oz", "O2"]   # PO7 hard-excluded (legacy)
-  excluded: ["PO7"]
+  scalp: ["PO7", "PO3", "POz", "PO4", "PO8", "O1", "Oz", "O2"]
+  excluded: []
   mark_channel: "MARK"
   auxiliary: ["TIMESTAMP", "FLASHINGTIME"]
 preprocessing:

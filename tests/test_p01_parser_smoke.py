@@ -87,8 +87,9 @@ def test_helpers(tmp_path):
 
 
 def test_extract_scalp_signal_with_config_v1(tmp_path):
-  cfg = yaml.safe_load(open(ROOT / "configs" / "pipeline_config.yaml"))
-  scalp = cfg["channels"]["scalp"]
+  # the legacy 7-channel list (config v1); config v2 restores PO7 (P07, PF-05)
+  scalp = [c for c in yaml.safe_load(open(ROOT / "configs" / "pipeline_config.yaml"))
+           ["channels"]["scalp"] if c != "PO7"]
   block = _coded_block(1, 11, 1, 30)
   rec = ep.load_ebr_file(_write(tmp_path / "f.ebr", block, CHANNELS))
   x, names = ep.extract_scalp_signal(rec, scalp)

@@ -384,7 +384,7 @@ def test_resolve_recording_path(tmp_path):
 
 def _v1_scalp():
   cfg = yaml.safe_load((ROOT / "configs" / "pipeline_config.yaml").read_text())
-  return cfg["channels"]["scalp"]
+  return [c for c in cfg["channels"]["scalp"] if c != "PO7"]  # legacy v1 list (config v2 has PO7)
 
 
 @pytest.mark.parametrize("shuffle", [False, True])

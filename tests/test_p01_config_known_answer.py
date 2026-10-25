@@ -15,7 +15,8 @@ ROOT = Path(__file__).resolve().parents[1]
 CONFIG = ROOT / "configs" / "pipeline_config.yaml"
 REQ = ROOT / "mas" / "02_REQUIREMENTS.md"
 
-# [REQ §3] v1, typed by hand.
+# [REQ §3] v1, typed by hand; from P07 the file is v1 with the P07 override (8 scalp channels,
+# excluded []): V1 below is the v1 block, V2 the expected committed file.
 V1 = {
   "project": {"name": "ssvep-eeg-xai", "target_conditions": [201, 202, 101, 102, 103, 104, 105]},
   "paths": {"data_raw_dir": "data/raw", "data_processed_dir": "data/processed",
@@ -32,6 +33,10 @@ V1 = {
   "training": {"cv_splits": 5, "random_state": 42, "batch_size": 16, "learning_rate": 0.001,
                "epochs": 100},
 }
+
+
+V2 = {**V1, "channels": {**V1["channels"], "excluded": [],
+                         "scalp": ["PO7", "PO3", "POz", "PO4", "PO8", "O1", "Oz", "O2"]}}
 
 
 def _spec_v1_text():
@@ -61,12 +66,12 @@ def test_hand_typed_matches_spec_block():
   assert yaml.safe_load(_spec_v1_text()) == V1
 
 
-@pytest.mark.parametrize("key", sorted(_flatten(V1)))
+@pytest.mark.parametrize("key", sorted(_flatten(V2)))
 def test_config_v1_key_by_key(key):
   """Known answer [REQ §3]: each leaf of v1 has the spec value and YAML type
   (int vs float preserved, e.g. lowcut_hz 1.0 float, cv_splits 5 int). Exact."""
   got = _flatten(_loaded())
-  exp = _flatten(V1)[key]
+  exp = _flatten(V2)[key]
   assert key in got
   assert got[key] == exp
   assert type(got[key]) is type(exp)
@@ -76,24 +81,25 @@ def test_config_v1_key_by_key(key):
 
 def test_config_v1_no_extra_keys():
   """Known answer [REQ §3]: no key beyond v1 (P07/P16 keys absent)."""
-  assert set(_flatten(_loaded())) == set(_flatten(V1))
-  assert _loaded() == V1
+  assert set(_flatten(_loaded())) == set(_flatten(V2))
+  assert _loaded() == V2
 
 
-def test_config_v1_text_equals_spec_block():
-  """Known answer [REQ §3] 'v1 copied verbatim': file text equals the spec block,
-  ignoring only trailing whitespace per line and blank lines at the end."""
+def test_config_v2_text_equals_spec_block_with_p07_override():
+  """Known answer [REQ §3] 'P07: scalp = all 8 channels in montage order, excluded: []':
+  the file text equals the v1 block with exactly the two channel lines replaced (plus the
+  version comment line)."""
   norm = lambda s: [l.rstrip() for l in s.strip("\n").splitlines()]
-  assert norm(CONFIG.read_text(encoding="utf-8")) == norm(_spec_v1_text())
+  got = norm(CONFIG.read_text(encoding="utf-8"))
+  assert got[0].startswith("# config v2 (P07)")
+  exp = norm(_spec_v1_text())
+  i = next(k for k, l in enumerate(exp) if l.strip().startswith("scalp:"))
+  exp[i] = '  scalp: ["PO7", "PO3", "POz", "PO4", "PO8", "O1", "Oz", "O2"]'
+  exp[i + 1] = "  excluded: []"
+  assert got[1:] == exp
 
 
-def test_config_v1_po7_legacy_label():
-  """PF-05 legacy label: the scalp line carries '# PO7 hard-excluded (legacy)';
-  scalp (7 names) + excluded == the 8-channel montage of [spec §2]."""
-  text = CONFIG.read_text(encoding="utf-8")
-  scalp_line = [l for l in text.splitlines() if l.strip().startswith("scalp:")]
-  assert len(scalp_line) == 1 and "# PO7 hard-excluded (legacy)" in scalp_line[0]
+def test_config_v2_po7_restored_pf05():
+  """PF-05: the montage legend and the pipeline agree: 8 scalp channels incl. PO7, none excluded."""
   ch = _loaded()["channels"]
-  assert "PO7" not in ch["scalp"] and len(ch["scalp"]) == 7
-  assert sorted(ch["scalp"] + ch["excluded"]) == sorted(
-    ["PO7", "PO3", "POz", "PO4", "PO8", "O1", "Oz", "O2"])
+  assert ch["scalp"][0] == "PO7" and len(ch["scalp"]) == 8 and ch["excluded"] == []
