@@ -88,3 +88,14 @@ None.
 ## Questions
 
 ACK 02_plan.md ml-engineer 2026-10-25
+
+## Round 1 fixes
+
+Required fix 2 of `07_review.md` (P04 positional `keep_channels` vs a subject's real names).
+
+- NEW `check_subject_keep_channels(processed_dir, subject)` in `src/features/ssvep/harmonic_psd.py`: names from `subject_channel_names` (`channels.json`, else channel count); raises ValueError unless positions (1, 4, 5, 6) select POz, O1, Oz, O2 in that subject's arrays. On the legacy 7-channel arrays behaviour is identical to before. The config-level `check_keep_channels` is kept.
+- Callers: `train_models.py` (per-subject loop prints `[-] Skipping <S>: ...`), `batch_run_subjects.py` (same, before `evaluate_subject`), `train_final_model.py` and `run_xai.py` (print `[x] ...`, exit 1).
+- Test `test_p04_positional_keep_channels_checked_against_subject_names` (tests/test_p07_ml_engineer.py): a 7-channel folder with `channels.json` = PO7, PO3, POz, PO4, O1, Oz, O2 (PO8 dropped) passes the old config-only check but raises in the new one (would have picked PO3/O1/Oz/O2); the three scripts skip/refuse it, the legacy folder passes. It fails on the previous code (function absent; S02 would be trained).
+- `test_no_script_keeps_the_interim_legacy_scalp_lines` now excludes `scripts/preprocessing/` (the producer, data-signal's file, legitimately uses `legacy_scalp`).
+- Suite: `.venv/bin/python -m pytest tests -q`: no failure, 486 tests collected, 3m49s wall (real 3m49.057s). The `N passed` line is not printed in this configuration; the progress output ended with no F/E.
+- Commits: see git log (fix: P04 positional channels against subject names).

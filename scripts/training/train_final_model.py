@@ -40,7 +40,7 @@ from sklearn.preprocessing import StandardScaler  # noqa: E402
 
 from scripts.training.train_models import (  # noqa: E402
   CLASS_CODES, DEFAULT_CONFIG, FIT_LABEL, KEEP_CHANNEL_NAMES, STIM_FREQS_HZ, arrays_exist, build_hybrid,
-  check_keep_channels, harmonic_bin_indices, load_config, load_stimulus_windows)
+  check_keep_channels, check_subject_keep_channels, harmonic_bin_indices, load_config, load_stimulus_windows)
 
 from src.models.cnn.spatial_spectral_cnn import (  # noqa: E402
   ARCHITECTURE, EPOCHS, SEED, apply_scalers, count_parameters, fit_scalers, label_maps,
@@ -125,6 +125,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
   models_dir = (args.out_dir or ROOT / "outputs") / "models"
   if not arrays_exist(processed, args.subject):
     print(f"[x] {args.subject}: arrays missing in {processed}/{args.subject} (run scripts.preprocessing.run_preprocessing)")
+    return 1
+  try:
+    check_subject_keep_channels(processed, args.subject)
+  except ValueError as exc:
+    print(f"[x] {exc}")
     return 1
   X_psd, X_time, y, hybrid = load_subject_inputs(processed, args.subject)
   print(f"Data source: {DATA_SOURCE}; fit: {FIT_LABEL}")

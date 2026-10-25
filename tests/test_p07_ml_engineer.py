@@ -176,10 +176,10 @@ def test_prepare_subject_reads_8_channel_arrays_and_reports_the_drop(tmp_path):
 
 
 def test_no_script_keeps_the_interim_legacy_scalp_lines():
-  """PF-05 known answer: no consumer script still reduces the config list with `legacy_scalp` (the interim lines
+  """PF-05 known answer: no consumer script (the preprocessing script is the producer and may use it) still reduces the config list with `legacy_scalp` (the interim lines
   of the data-signal builder are replaced by `resolve_channel_names` / `channels.json` lookups)."""
   hits = [str(p.relative_to(ROOT)) for p in (ROOT / "scripts").rglob("*.py")
-          if re.search(r"legacy_scalp\(", p.read_text())]
+          if "preprocessing" not in p.parts and re.search(r"legacy_scalp\(", p.read_text())]
   assert hits == []
 
 
@@ -262,3 +262,28 @@ def test_n_subjects_subjects_flag_skip_and_exit_codes(tree, capsys):
   assert bns.main(["--data-root", str(tree / "nowhere"), "--reports-dir", str(tree / "rs")]) == 1
   (tree / "empty").mkdir(exist_ok=True)
   assert bns.main(["--data-root", str(tree / "empty"), "--reports-dir", str(tree / "rs")]) == 1
+
+
+# --- P04 positional channels vs a dropped channel (audit round 1) -----------------------------
+
+def test_p04_positional_keep_channels_checked_against_subject_names(tmp_path, capsys):
+  """PF-06 known answer: positions (1, 4, 5, 6) are POz/O1/Oz/O2 only on the legacy 7-channel arrays. A 7-channel folder
+  whose channels.json says PO8 was dropped from the 8-channel montage (PO7, PO3, POz, PO4, O1, Oz, O2) would silently
+  select PO3/O1/Oz/O2. The config-only check (the old code path) passes, the per-subject check raises, and
+  `train_models`, `train_final_model` and `run_xai` skip/refuse that subject with the reason; the legacy folder passes."""
+  from scripts.training import train_final_model as tfm, train_models as tm
+  from scripts.xai import run_xai
+  from src.features.ssvep.harmonic_psd import check_keep_channels, check_subject_keep_channels
+  write_subject(tmp_path, "S01", n_trials=2, seed=31)
+  write_subject(tmp_path, "S02", n_trials=2, seed=32)
+  (tmp_path / "S02" / "channels.json").write_text(json.dumps(
+    {"kept": ["PO7", "PO3", "POz", "PO4", "O1", "Oz", "O2"], "dropped": ["PO8"]}))
+  check_keep_channels(list(FULL_MONTAGE))                       # old behaviour: never looks at the subject
+  assert check_subject_keep_channels(tmp_path, "S01") == SCALP
+  with pytest.raises(ValueError, match="PO3"):
+    check_subject_keep_channels(tmp_path, "S02")
+  assert tm.main(["--all", "--processed-dir", str(tmp_path), "--out-dir", str(tmp_path / "out"), "--no-figures"]) in (0, 1)
+  assert "[-] Skipping S02" in capsys.readouterr().out
+  assert not (tmp_path / "out" / "reports" / "S02_model_evaluation.csv").exists()
+  assert tfm.main(["--subject", "S02", "--processed-dir", str(tmp_path), "--out-dir", str(tmp_path / "out"), "--skip-cnn"]) == 1
+  assert run_xai.main(["--subject", "S02", "--processed-dir", str(tmp_path), "--out-dir", str(tmp_path / "out")]) == 1

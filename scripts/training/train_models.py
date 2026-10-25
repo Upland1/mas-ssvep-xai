@@ -59,7 +59,7 @@ from sklearn.preprocessing import StandardScaler  # noqa: E402
 from sklearn.svm import SVC  # noqa: E402
 
 from src.features.ssvep.harmonic_psd import (  # noqa: E402,F401  (moved to src in P05; re-exported)
-  HARMONIC_TARGETS_HZ, KEEP_CHANNEL_NAMES, KEEP_CHANNELS, check_keep_channels,
+  HARMONIC_TARGETS_HZ, KEEP_CHANNEL_NAMES, KEEP_CHANNELS, check_keep_channels, check_subject_keep_channels,
   extract_harmonic_features, harmonic_bin_indices)
 from src.features.ssvep.spectral_power import LEGACY_FS_HZ  # noqa: E402
 from src.preprocessing.dataset.legacy_windows import (  # noqa: E402,F401  (moved to src in P05)
@@ -315,6 +315,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
   for s in subjects:
     if not arrays_exist(processed, s):
       print(f"[-] Skipping {s}: arrays missing in {_rel(processed)}/{s}")
+      continue
+    try:
+      check_subject_keep_channels(processed, s)
+    except ValueError as exc:
+      print(f"[-] Skipping {s}: {exc}")
       continue
     X_psd, X_time, y = load_stimulus_windows(processed, s)
     if len(y) < N_FOLDS * len(CLASS_CODES):
