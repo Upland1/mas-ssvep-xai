@@ -21,6 +21,12 @@ the observed ranges include what the gate rejects. A subject that is skipped has
 its old arrays under <processed-dir> removed (PF-09), never left behind. Only
 <processed-dir> and <figures-dir> are written to.
 
+`--legacy-p02` reproduces the P02 arrays exactly (the inputs of R-1/R-5/R-6): PO7 excluded
+by name (7 channels), tier 1 off, no channels.json, X_time (n, 7, 256), X_psd (n, 217).
+`make preprocess` uses it. Without it, the script refuses (exit 1) to write into or delete
+from a folder holding 7-channel arrays without channels.json (those are legacy arrays),
+unless `--overwrite-legacy-arrays` is given.
+
 Saves <processed-dir>/<S>/{X_psd_features,X_time_windows,y_labels}.npy
 (conditions in the order 201, 202, 101..105, time order within; PSD 5-35 Hz,
 channel-major) and <figures-dir>/spectra/<S>/{average_psd_by_condition,
@@ -61,6 +67,7 @@ if str(ROOT) not in sys.path:
 from src.features.ssvep.psd_extraction import (  # noqa: E402  (needs ROOT on sys.path)
   prepare_feature_matrix, process_condition_windows_with_baseline)
 from src.io import ebr_parser  # noqa: E402
+from src.io.channels import legacy_scalp  # noqa: E402
 from src.preprocessing.signal.filters import apply_iir_bandpass  # noqa: E402
 from src.preprocessing.signal.quality_check import (  # noqa: E402
   compute_channel_quality_stats, format_quality_stats,
@@ -81,6 +88,7 @@ LEGACY_VPP_MIN_UV = 0.5
 CHANNEL_NOISE_LIMITS = {"vpp_min": 5.0, "vpp_max": 200.0, "std_min": 0.5, "std_max": 60.0}
 CHANNEL_FAIL_FRACTION = 0.5
 CHANNEL_WINDOW_SEC = 1.0
+LEGACY_N_CHANNELS = 7
 ARRAY_FILES = ("X_psd_features", "X_time_windows", "y_labels")
 CHANNELS_FILE = "channels.json"
 PSD_FIGURE = "average_psd_by_condition.png"
@@ -316,6 +324,11 @@ def save_channels(out_dir: Path, kept: Sequence[str], dropped: Sequence[str], fs
   return p
 
 
+def remove_channels_file(out_dir: Path) -> None:
+  """Delete `channels.json` of `out_dir` if present."""
+  (Path(out_dir) / CHANNELS_FILE).unlink(missing_ok=True)
+
+
 def remove_stale_outputs(out_dir: Path) -> list:
   """Delete the array files and channels.json of `out_dir` left by an earlier run (PF-09).
 
@@ -383,6 +396,12 @@ def build_parser() -> argparse.ArgumentParser:
                  help="default: <root>/ + paths.data_processed_dir")
   p.add_argument("--figures-dir", type=Path, default=None, help="default: <root>/ + paths.figures_dir")
   p.add_argument("--session", default=DEFAULT_SESSION, help="recording file stem (default: OO)")
+  p.add_argument("--legacy-p02", action="store_true",
+                 help="reproduce the legacy P02 arrays: PO7 excluded by name (7 channels), tier 1 off, "
+                      "no channels.json (what `make preprocess` runs)")
+  p.add_argument("--overwrite-legacy-arrays", action="store_true",
+                 help="allow writing into / deleting from a folder that holds 7-channel legacy arrays "
+                      "without channels.json")
   p.add_argument("--no-figures", action="store_true", help="skip the figures")
   g = p.add_argument_group("overrides of configs/pipeline_config.yaml")
   g.add_argument("--lowcut", type=float, default=None, help="preprocessing.lowcut_hz")
@@ -420,6 +439,17 @@ def _rel(path: Path) -> str:
     return str(path)
 
 
+def holds_legacy_arrays(folder: Path) -> bool:
+  """True if `folder` has 7-channel `X_time_windows.npy` and no `channels.json` (legacy P02 arrays)."""
+  x = Path(folder) / "X_time_windows.npy"
+  if not x.is_file() or (Path(folder) / CHANNELS_FILE).is_file():
+    return False
+  try:
+    return np.load(x, mmap_mode="r").shape[1] == LEGACY_N_CHANNELS
+  except (OSError, ValueError, IndexError):
+    return False
+
+
 def _drop_stale(processed_dir: Path, subject: str) -> None:
   """Remove old outputs of a skipped subject (and the root copy if it is the root subject), printing them."""
   dirs = [Path(processed_dir) / subject] + ([Path(processed_dir)] if subject == ROOT_SUBJECT else [])
@@ -437,6 +467,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     return 1
   params = resolve_params(cfg, args)
   params["session"] = args.session
+  if args.legacy_p02:  # legacy: P02 behaviour, PO7 excluded by name, no tier 1
+    params["scalp"] = legacy_scalp(params["scalp"])
+    params["channel_drop"] = False
   paths = cfg["paths"]
   raw_dir = args.raw_dir or ROOT / paths["data_raw_dir"]
   processed_dir = args.processed_dir or ROOT / paths["data_processed_dir"]
@@ -458,6 +491,19 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
   if params["vpp_min"] != LEGACY_VPP_MIN_UV:
     print(f"[!] legacy regression demo (PF-07): raw gate vpp_min {params['vpp_min']:g} uV instead "
           f"of the pinned {LEGACY_VPP_MIN_UV:g}; expect most windows rejected")
+  if args.legacy_p02:
+    print("[legacy] --legacy-p02: P02 arrays, PO7 excluded by name (7 channels), tier 1 off, "
+          "no channels.json")
+  if not args.legacy_p02 and not args.overwrite_legacy_arrays:
+    targets = [Path(processed_dir) / s for s in subjects]
+    if ROOT_SUBJECT in subjects:
+      targets.append(Path(processed_dir))
+    held = [t for t in targets if holds_legacy_arrays(t)]
+    if held:
+      print(f"[x] Refusing to write into or delete from legacy 7-channel arrays: "
+            f"{', '.join(_rel(t) for t in held)}. Use --legacy-p02 to reproduce them, another "
+            f"--processed-dir, or --overwrite-legacy-arrays.")
+      return 1
   print(f"Data source: legacy windows from {args.session}.ebr -> {_rel(processed_dir)}/<S>/")
   print(f"Filter: Butterworth band-pass {params['lowcut']:g}-{params['highcut']:g} Hz, order "
         f"{params['order']}, filtfilt on the continuous signal; channels {params['scalp']}")
@@ -510,11 +556,17 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
           f"X_time {X_time.shape}, X_psd {X_psd.shape}")
 
     saved = save_arrays(Path(processed_dir) / subject, X_psd, X_time, y)
-    saved.append(save_channels(Path(processed_dir) / subject, kept, out["channels_dropped"], fs))
+    if args.legacy_p02:  # an older 8-channel run must not leave its channels.json beside 7-channel arrays
+      remove_channels_file(Path(processed_dir) / subject)
+      if subject == ROOT_SUBJECT:
+        remove_channels_file(Path(processed_dir))
+    if not args.legacy_p02:
+      saved.append(save_channels(Path(processed_dir) / subject, kept, out["channels_dropped"], fs))
     print(f"  Saved: {', '.join(_rel(p) for p in saved)}")
     if subject == ROOT_SUBJECT:  # PF-09: same in-memory arrays as the per-subject folder
       saved = save_arrays(Path(processed_dir), X_psd, X_time, y)
-      saved.append(save_channels(Path(processed_dir), kept, out["channels_dropped"], fs))
+      if not args.legacy_p02:
+        saved.append(save_channels(Path(processed_dir), kept, out["channels_dropped"], fs))
       print(f"  Saved ({ROOT_SUBJECT} root copy): {', '.join(_rel(p) for p in saved)}")
     if not args.no_figures:
       figs = save_figures(out["records"], figures_dir, subject, params)
