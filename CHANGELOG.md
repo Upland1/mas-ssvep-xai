@@ -118,3 +118,23 @@ Result and scope
 - S03 flagship: 197 / 3; 1.0 s 90.36 %; 2.0 s 95.43 % (`i % 5`, reported); no-reset 95.94 % (diagnostic only).
 - S01–S05 flagship, 1.0 s / 2.0 s: 64.50 / 75.50, 66.33 / 71.94, 90.36 / 95.43, 98.98 / 98.48, 96.50 / 96.50.
 - Legacy (window-level CV, `i % 5` after rejections, fs 250, per-window filtering); not comparable with R-6. The 24 Hz precision is 0.9750 (deviation D-1, accepted).
+
+## P06 — Feature-selection ablation, legacy 5-subject cohort, report v1
+
+2026-10-25, branch `phase/P06-feature-selection-cohort`, code and reported run at `7575405`, diagnostic run at `7de11ce`. Report: `mas/state/reports/P06.md`.
+
+Added
+- `src/features/selection/feature_selection.py`: `select_k_best_fbcsp_features` (ANOVA or mutual information, in-fold), `select_sfs_fbcsp_features` (forward SFS), `with_fbcca`, `band_columns`, `subband_pruned_columns`.
+- `scripts/benchmarks/feature_based/benchmark_feature_selection.py` (five rows; `--sfs-diagnostics` off by default) and `benchmark_5_subjects.py` (cohort, `reports/five_subjects_benchmark.csv`).
+- `tests/test_p06_feature_selection.py` and `tests/test_p06_known_answer.py`; suite `455 passed`.
+- `docs/report/v1/report.md` (historical technical report v1) and `docs/report/v1/methodology_infographic_v1.svg`.
+
+Changed
+- `src/models/classical/benchmark_runner.py`: `legacy_header_lines(..., fbcca_channels=None)` names the FBCCA channels.
+- `scripts/benchmarks/feature_based/benchmark_cross_validation.py`: passes the FBCCA channels to the header.
+- `tests/test_no_leakage.py`: the diagnostic splitter is registered as legacy.
+
+Result and scope
+- S03 ablation, 1.0 s / 2.0 s smoothed: full 90.36 / 95.43; pruning (p 45) 87.31 / 94.92; ANOVA (p 25) 86.29 / 94.42; mutual information (p 25) 87.82 / 93.40; SFS (p 20) 89.85 / 95.94.
+- Four R-4 rows and all R-5 values exact. The SFS row is not reproduced (the original has no SFS); accepted as D-1, reported as ours.
+- Cohort S01–S05 at R-5 exactly; mean 83.33 / 87.57. Legacy and leaky; not comparable with R-6.

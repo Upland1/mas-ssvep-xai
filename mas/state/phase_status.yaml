@@ -49,12 +49,12 @@ phases:
     passed: '2026-10-25'
   P06:
     slug: feature-selection-cohort
-    status: pending
+    status: passed
     owner: orchestrator
-    branch: null
-    commit: null
-    opened: null
-    passed: null
+    branch: phase/P06-feature-selection-cohort
+    commit: 31cc1ec
+    opened: '2026-10-25'
+    passed: '2026-10-25'
   P07:
     slug: two-tier-quality
     status: pending
