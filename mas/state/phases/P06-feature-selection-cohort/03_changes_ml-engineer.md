@@ -101,3 +101,37 @@ It re-runs the five reported rows (identical to the earlier run; compare with th
 
 ### Reference consultations (R11)
 None in Round 1.
+
+## Round 1 — R11 consultation
+
+Trigger: the verifier's diagnostic run (06_verify.md "Diagnostic run", log `reports/logs/P06/benchmark_feature_selection_diag_20261025_043543.log`) is clean on the leak audit and no SFS variant falls inside both R-4 ranges; the pre-committed procedure then allows R11. No code was changed in this step.
+
+Consultations (all read-only `git -C <reference clone> ...` calls, logged in `mas/state/scratch/reference_access.log`, 2026-10-25T04:4x). "Ref" below is the reference clone at the original's commits.
+
+| # | Command (on Ref) | What for | Result |
+|---|---|---|---|
+| 1 | `log --oneline` (53 commits on main, 60 with `--all`) and `show --stat 277ddab` | find the P06-stage commit | 277ddab "finalize methodology report, 5-subject benchmark and infographic" adds `scripts/benchmarks/benchmark_5_subjects.py`, `scripts/benchmarks/benchmark_feature_selection.py`, `src/features/feature_selection.py` (plus file moves); branch `origin/feature/feature-selection-and-eegnet` ends at the same 277ddab |
+| 2 | `show 277ddab:src/features/feature_selection.py` | ANOVA/MI selector | l.8-54: only `f_classif` (NaN to 0) and `mutual_info_classif(random_state)`, ranking by `np.argsort(scores)[::-1][:k]`, sorted indices; no SFS function. Docstring l.22: input is the "in-fold scaled" FBCSP matrix (N_train, 50) |
+| 3 | `show 277ddab:scripts/benchmarks/benchmark_feature_selection.py` | the ablation script | (a)-(c) below |
+| 4 | `show 277ddab:scripts/benchmarks/benchmark_5_subjects.py` | cohort script | (c) below |
+| 5 | `log --all -S SequentialFeatureSelector`; `-i -S "forward selection"`; `-i -S forward`/`Sequential`/`sfs`; `show 277ddab:README.md` and `show HEAD:README.md` (grep); `show HEAD:scripts/benchmarks/feature_based/benchmark_feature_selection.py` and `show HEAD:src/features/selection/feature_selection.py` (grep) | find any SFS anywhere in the history | `SequentialFeatureSelector` and "forward selection": no commit on any branch. "forward"/"Sequential"/"sfs" hits are only neural-network commits (a266bb8, bd50298, 0466fad, 1b98fb7, dd139b2, cdeb0d5, e40eeec: `forward()` / `nn.Sequential`) or image/doc commits. README at HEAD l.221-222 lists the module as "ANOVA F-score or mutual-information ranking, fitted strictly in-fold" only |
+| 6 | `show 7cad759 --stat` (documentation branch) | the report | contains `documentation/SSVEP_Technical_Report.docx` (binary). NOT inspected: the guard blocks piping the object into an interpreter and the binary cannot be grepped |
+
+### (a) Sequential forward selection
+**The original code at 277ddab, and at every later commit on every branch, contains no sequential forward selection.** `benchmark_feature_selection.py` at 277ddab has exactly four methods (l.59-64: "1. Full Baseline (p=55)", "2. ANOVA F-Score (p=k+5)", "3. Mutual Info (p=k+5)", "4. Subband Pruning (p=45)"). So library/class, estimator, candidate columns, n_features, inner CV, scoring, scaling and in-fold vs full-data cannot be read from the reference. R-4's SFS row (p=20, 84.77 / 93.40) came from something not in the repository (an unrecorded or deleted run, or only the .docx report, not inspected). I did not guess a definition.
+
+### (b) ANOVA / MI / pruning (script 277ddab)
+- Folds: `StratifiedKFold(5, shuffle=True, random_state=42)` over clean windows (l.55, 67-69), as ours.
+- Selection in-fold on the training rows (l.101-116), applied to the **scaled** FBCSP block (`StandardScaler` fitted on the training FBCSP, l.88-91; a second scaler for the 5 FBCCA columns, l.93-95). Ours selects on the unscaled FBCSP block: ANOVA is scale invariant, MI nearly so. Our ANOVA/MI rows are in range (06_verify), so no change is indicated.
+- ANOVA/MI keep `--k-features` FBCSP columns (script default 15, l.28-31; R-4's p=25 implies the run used 20) + the 5 FBCCA columns; MI `random_state=42`.
+- Pruning: `list(range(40))` + FBCCA (l.118-122), i.e. columns 40-49 dropped, as ours.
+- Final model: `LinearDiscriminantAnalysis(solver="lsqr", shrinkage="auto")` on the scaled matrix (l.131-137), equivalent to ours (per-column scaling is the same fitted per block or jointly).
+
+### (c) Other differences from our ablation path
+- Sub-bands: `butter_bandpass_filter(windows, low, high, fs=250.0, order=4)` per window on train and test (l.74-80), the legacy per-window filtering that P05 already reproduces (R-3 exact).
+- Window gate: `extract_fbcca_features(windows, y_stim, fs=250.0)` returns the mask (l.50-51), the same mask selects the FBCSP windows (`windows[valid_mask == 1]`); counts equal R-3/R-5 in our P05.
+- Smoothing: `if i % 5 == 0: avg_p = probs[i] else mean(probs[i-1:i+1])` on the clean array (l.145-151), the reported i%5 rule we use.
+- Cohort script (277ddab l.46-101): same flagship (m=1, per-window filtering, scaler + Shrinkage-LDA lsqr, StratifiedKFold 5/42, i%5), output columns `Subject, Clean Windows, Rejected, 1.0s Acc (%), 2.0s Smoothed (%)` (l.103-109), no Mean row. Ours matches R-5.
+
+### What changed in my code
+Nothing. Conclusion: the SFS row of R-4 cannot be reproduced from reference code because the reference has no SFS; the plan's SFS definition (scikit-learn SFS, Shrinkage-LDA, 15 FBCSP + 5 FBCCA, in-fold) is a reading of R-4's p=20 and the roadmap text, and our 177/189 with a clean leak audit stays a legitimate, correctly in-fold result. Whether the original SFS ran in-fold or on all windows cannot be decided from the reference. Suggested disposition: accepted deviation for the SFS row with this evidence, or Sebastian supplies the original SFS run or the report's description (the .docx was not inspected).
