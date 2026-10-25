@@ -15,7 +15,7 @@ from scripts.evaluation import evaluate_confusion_matrix as ecm
 from src.features.ssvep import fbcca_extraction as fb
 from src.features.ssvep.harmonic_psd import VISUAL_CLUSTER
 from src.features.ssvep.psd_extraction import extract_continuous_psd_features
-from src.features.ssvep.window_mask import P05_MASK_THRESHOLDS, resolve_window_mask
+from src.features.ssvep.window_mask import NO_CHANNEL_DROP, P05_MASK_THRESHOLDS, resolve_window_mask
 from src.models.classical import feature_spaces as fsp
 from src.models.classical import legacy_eval as le
 from tests.p05_synth import SCALP, make_windows, write_subject
@@ -151,20 +151,23 @@ def _check_tiny_window_kept(mask_fn):
   assert m[0] == 1 and m.sum() == len(X)
 
 
-def test_window_with_vpp2_std0p5_is_kept_by_default_gate_and_rejected_by_old_limits():
-  """Known answer: a window with Vpp 2 uV / std 0.5 uV on every channel is kept by the default (0.5/0.1) gate and
-  by every extractor and block builder; under the superseded 5/1 limits it is rejected, so the check fails on that
-  mutant. Boundary cases: Vpp 0.4 (< 0.5) or std 0.05 (< 0.1) is rejected; Vpp 130 (> 120) is rejected."""
+def test_window_with_vpp2_std0p5_is_kept_by_p05_limits_and_rejected_by_the_p07_gate():
+  """Known answer: a window with Vpp 2 uV / std 0.5 uV on every channel is kept by the legacy P05 limits (0.5/0.1,
+  tier 1 off) in every extractor and block builder, and rejected by the default P07 gate (5/1); the check fails on a
+  mutant that applies the P07 limits as the legacy gate. Boundary cases under the P05 limits: Vpp 0.4 (< 0.5), std
+  0.05 (< 0.1) and Vpp 130 (> 120) are rejected."""
   X, y = _mask_batch()
+  legacy = dict(thresholds=P05_MASK_THRESHOLDS, channel_fail_fraction=NO_CHANNEL_DROP)
   _check_tiny_window_kept(lambda A: resolve_window_mask(A))
   with pytest.raises(AssertionError):
     _check_tiny_window_kept(lambda A: resolve_window_mask(A, thresholds=OLD_LIMITS))
-  P, yc, m = extract_continuous_psd_features(X, y)
+  P, yc, m, _ = extract_continuous_psd_features(X, y, **legacy)
   assert m[0] == 1 and len(P) == len(X)
-  F, _, mf = fb.extract_fbcca_features(X, y)
+  F, _, mf, _ = fb.extract_fbcca_features(X, y, **legacy)
   assert mf[0] == 1 and len(F) == len(X)
-  b = fsp.build_feature_blocks(X, y, SCALP)
+  b = fsp.build_feature_blocks(X, y, SCALP, **legacy)
   assert b["mask"][0] == 1 and all(len(b[k]) == len(X) for k in ("y", "psd", "harmonic", "fbcca", "subbands"))
+  assert fsp.build_feature_blocks(X, y, SCALP)["mask"][0] == 0                       # P07 default
   assert fsp.build_feature_blocks(X, y, SCALP, thresholds=OLD_LIMITS)["mask"][0] == 0
   for amp, why in ((0.2, "vpp 0.4"), (0.025, "std ~0.05"), (65.0, "vpp 130")):
     Z = X.copy()
@@ -192,7 +195,8 @@ def test_fbcca_block_uses_named_cluster_channels_in_cluster_order():
   X, y = make_windows(n_trials=2, seed=41)
   for names in (SCALP, NAMES, list(reversed(SCALP))):
     b = fsp.build_feature_blocks(X, y, names, fbcca_channels=VISUAL_CLUSTER)
-    ref, _, _ = fb.extract_fbcca_features(X[:, _cluster_idx(names)], y, valid_mask=b["mask"])
+    ref, _, _, _ = fb.extract_fbcca_features(X[:, _cluster_idx(names)], y, list(VISUAL_CLUSTER),
+                                             precomputed=dict(b["channel_report"], channels_kept=list(VISUAL_CLUSTER)))
     assert b["fbcca_channels"] == list(VISUAL_CLUSTER)
     assert np.allclose(b["fbcca"], ref, atol=1e-9)
   full = fsp.build_feature_blocks(X, y, NAMES)
@@ -214,7 +218,7 @@ def test_mask_stays_shared_when_only_a_non_cluster_channel_is_bad():
   keys = ("y", "psd", "harmonic", "fbcca", "subbands")
   assert b["mask"][bad] == 0 and b["mask"].sum() == len(X) - 1
   assert all(len(b[k]) == len(X) - 1 for k in keys)
-  mutant, _, _ = fb.extract_fbcca_features(X[:, _cluster_idx(SCALP)], y)          # own gate on 4 channels
+  mutant, _, _, _ = fb.extract_fbcca_features(X[:, _cluster_idx(SCALP)], y, list(VISUAL_CLUSTER))   # own gate on 4 channels
   assert len(mutant) == len(X) and len(mutant) != len(b["psd"])
 
 

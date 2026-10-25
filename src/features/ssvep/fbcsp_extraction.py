@@ -26,7 +26,7 @@ from scipy.linalg import eigh
 from scipy.signal import butter, filtfilt
 
 from src.features.ssvep.spectral_power import LEGACY_FS_HZ
-from src.features.ssvep.window_mask import resolve_window_mask
+from src.features.ssvep.window_mask import CHANNEL_FAIL_FRACTION, channel_report, quality_gate
 
 DEFAULT_SUBBANDS = [(7, 12), (13, 17), (18, 26), (27, 36), (38, 52)]
 CSP_REG = 1e-6
@@ -117,12 +117,16 @@ class FBCSPTransformer:
     return self.fit(subband_windows, y).transform(subband_windows)
 
 
-def extract_fbcsp_features(windows: np.ndarray, y: np.ndarray, fs: float = LEGACY_FS_HZ,
+def extract_fbcsp_features(windows: np.ndarray, y: np.ndarray,
+                           channel_names: Optional[Sequence[str]] = None, fs: float = LEGACY_FS_HZ,
                            subbands: Sequence[tuple] = tuple(DEFAULT_SUBBANDS), m: int = 1,
-                           valid_mask: Optional[np.ndarray] = None,
-                           thresholds: Optional[dict] = None) -> tuple:
-  """FBCSP features of the accepted windows: `(X (n_clean, 5 * 2m * B), y_clean, valid_mask)`.
+                           precomputed: Optional[dict] = None, thresholds: Optional[dict] = None,
+                           channel_fail_fraction: float = CHANNEL_FAIL_FRACTION,
+                           verbose: bool = False) -> tuple:
+  """FBCSP features of the accepted windows: `(X (n_clean, 5 * 2m * B), y_clean, valid_mask, channel_report)`.
 
+  The two-tier gate (`window_mask.quality_gate`) runs first, or `precomputed` (an earlier
+  `channel_report`) is reused (PF-10); the CSP uses the surviving channels only.
   VISUALIZATION ONLY (R2 exception, PF-11): the CSP filters are fitted on every accepted window
   and label given, so the features of a window depend on its own label. Benchmarks must use
   `FBCSPTransformer` fitted on the training fold. legacy (R3/PF-14, PF-04): per-window
@@ -132,7 +136,6 @@ def extract_fbcsp_features(windows: np.ndarray, y: np.ndarray, fs: float = LEGAC
   y = np.asarray(y)
   if w.ndim != 3 or len(w) != len(y):
     raise ValueError(f"windows {w.shape} and y {y.shape} do not match")
-  mask = resolve_window_mask(w, valid_mask, thresholds)
-  keep = mask == 1
-  sw = filter_subbands(w[keep], fs, subbands)
-  return FBCSPTransformer(m).fit_transform(sw, y[keep]), y[keep], mask
+  q = quality_gate(w, y, channel_names, thresholds, channel_fail_fraction, precomputed, verbose)
+  sw = filter_subbands(q["windows_clean"], fs, subbands)
+  return FBCSPTransformer(m).fit_transform(sw, q["y_clean"]), q["y_clean"], q["valid_mask"], channel_report(q)

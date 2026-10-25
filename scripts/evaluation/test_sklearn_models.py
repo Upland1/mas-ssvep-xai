@@ -1,7 +1,7 @@
 """The 10-model sklearn suite on PSD, FBCCA and FBCSP features of one subject (P05.5, legacy Era A).
 
 Data source: legacy folders <processed-dir>/<S>/ (P02, OO session, 7 channels), stimulus
-windows only; one window mask for every feature block (R5 per-script gate, PF-10). Feature
+windows only; one quality decision for every feature block (two-tier gate from P07, R5 per-script gate, PF-10). Feature
 spaces: continuous PSD (210), FBCCA (5), FBCSP in-fold (50 for m = 1). Models: the whole
 suite including QDA (reg_param 0.5); a model that fails (QDA rank failure on high-dimensional
 spaces, PF-12) is caught and reported as `[-] ... failed`, not fatal. Each model is a
@@ -9,7 +9,7 @@ Pipeline(StandardScaler, model); the CSP is fitted on the training fold only (R2
 
 Legacy (labelled): R1/PF-01 StratifiedKFold(5, shuffle, 42) over windows (leaky); legacy i%5
 trial smoothing of the out-of-fold scores (R8 legacy, PF-02); R3/PF-14 and PF-04 per-window
-filtering, fs 250. Window mask: original extractor limits (vpp 0.5-120 uV, std 0.1-35 uV).
+filtering, fs 250. Quality gate: two-tier, vpp 5-120 uV, std 1-35 uV, channel dropped if it fails in > 50 % of the windows.
 
 Output: <reports-dir>/sklearn_suite_<S>.csv (columns of feature_space_benchmark_<S>.csv; failed
 models have no row) and the failures printed.
@@ -37,8 +37,8 @@ ROOT = _find_root()
 if str(ROOT) not in sys.path:
   sys.path.insert(0, str(ROOT))
 
-from src.io.channels import legacy_scalp  # noqa: E402
 from src.features.ssvep.spectral_power import LEGACY_FS_HZ  # noqa: E402
+from src.models.classical.benchmark_runner import channel_summary  # noqa: E402
 from src.models.classical.benchmark_runner import (  # noqa: E402
   DEFAULT_SUBJECT, legacy_header_lines, load_config, prepare_subject)
 from src.models.classical.feature_spaces import benchmark_spaces  # noqa: E402
@@ -74,18 +74,18 @@ def _rel(path: Path) -> str:
 def main(argv: Optional[Sequence[str]] = None) -> int:
   args = build_parser().parse_args(argv)
   cfg = load_config(args.config)
-  scalp = legacy_scalp(cfg["channels"]["scalp"])  # legacy 7-channel arrays (config v2 has PO7)
   processed = args.processed_dir or ROOT / cfg["paths"]["data_processed_dir"]
   reports = Path(args.reports_dir or ROOT / "reports")
   t0 = time.time()
   try:
-    b = prepare_subject(processed, args.subject, scalp, args.fs)
+    b = prepare_subject(processed, args.subject, None, args.fs)
   except (FileNotFoundError, ValueError) as exc:
     print(f"[-] Skipping {args.subject}: {exc}")
     return 1
   header = legacy_header_lines(args.fs, b["thresholds"], args.seed, CV_LABEL, SMOOTH_LABEL)
   print(f"Data source: legacy windows, {_rel(processed)}/{args.subject}/ (P02, OO session), stimulus windows only")
   print("\n".join(header))
+  print(f"  {channel_summary(b)}")
   print(f"\n[+] {args.subject}: {b['n_stimulus']} stimulus windows, {b['n_clean']} clean, {b['n_rejected']} rejected")
   models = get_sklearn_model_suite(args.seed)
   y = b["y"]

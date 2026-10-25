@@ -4,9 +4,10 @@ Data source: legacy folders <processed-dir>/<S>/ (P02, OO session, 7 channels), 
 windows only. Features: 32 harmonic-PSD bins (PO8, O1, Oz, O2 selected by name x 8 bins nearest
 8.57, 10.91, 15, 17.14, 20, 21.82, 24, 30 Hz on the fs-250 periodogram grid) + 5 FBCCA scores = 37;
 FBCCA gets the same visual cluster PO8, O1, Oz, O2 only, selected by name (as the original;
-decisions.md P05). The harmonic PSD is computed on the windows kept by the one window mask that
-also gates FBCCA (R5 per-script gate, original extractor limits vpp 0.5-120 uV, std 0.1-35 uV,
-computed on all channels; PF-10: the original's unmasked harmonic PSD is not reproduced). Model: Pipeline(StandardScaler, Shrinkage-LDA lsqr auto) fitted per
+decisions.md P05). The harmonic PSD is computed on the windows kept by the one quality decision that
+also gates FBCCA (R5 per-script two-tier gate from P07: vpp 5-120 uV, std 1-35 uV, channel dropped if
+it fails in > 50 % of the windows; a cluster channel that is dropped leaves the cluster; PF-10: the
+original's unmasked harmonic PSD is not reproduced). Model: Pipeline(StandardScaler, Shrinkage-LDA lsqr auto) fitted per
 training fold (R2).
 
 Legacy (labelled): R1/PF-01 StratifiedKFold(5, shuffle, 42) over windows (leaky); legacy i%5
@@ -38,9 +39,9 @@ ROOT = _find_root()
 if str(ROOT) not in sys.path:
   sys.path.insert(0, str(ROOT))
 
-from src.io.channels import legacy_scalp  # noqa: E402
 from src.features.ssvep.harmonic_psd import VISUAL_CLUSTER  # noqa: E402
 from src.features.ssvep.spectral_power import LEGACY_FS_HZ  # noqa: E402
+from src.models.classical.benchmark_runner import channel_summary  # noqa: E402
 from src.models.classical.benchmark_runner import (  # noqa: E402
   DEFAULT_SUBJECT, figure_paths, legacy_header_lines, load_config, plot_confusion, prepare_subject,
   save_classification_report)
@@ -77,13 +78,12 @@ def _rel(path: Path) -> str:
 def main(argv: Optional[Sequence[str]] = None) -> int:
   args = build_parser().parse_args(argv)
   cfg = load_config(args.config)
-  scalp = legacy_scalp(cfg["channels"]["scalp"])  # legacy 7-channel arrays (config v2 has PO7)
   processed = args.processed_dir or ROOT / cfg["paths"]["data_processed_dir"]
   reports = args.reports_dir or ROOT / "reports"
   figures = args.figures_dir or ROOT / cfg["paths"]["figures_dir"]
   t0 = time.time()
   try:
-    b = prepare_subject(processed, args.subject, scalp, args.fs, fbcca_channels=VISUAL_CLUSTER)
+    b = prepare_subject(processed, args.subject, None, args.fs, fbcca_channels=VISUAL_CLUSTER)
   except (FileNotFoundError, ValueError) as exc:
     print(f"[-] Skipping {args.subject}: {exc}")
     return 1
@@ -92,6 +92,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
   print("\n".join(header))
   space = [s for s in benchmark_spaces(b) if s.name == SPACE][0]
   y = b["y"]
+  print(f"  {channel_summary(b)}")
   print(f"\n[+] {args.subject}: {b['n_stimulus']} stimulus windows, {b['n_clean']} clean, {b['n_rejected']} rejected; "
         f"{SPACE} p={space_width(space)} (harmonic PSD {b['harmonic'].shape[1]} + FBCCA {b['fbcca'].shape[1]} "
         f"on {', '.join(b['fbcca_channels'])})")

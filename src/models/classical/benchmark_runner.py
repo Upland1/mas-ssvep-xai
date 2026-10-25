@@ -1,5 +1,6 @@
 """Shared plumbing of the P05 benchmark scripts: config, subject data, labels, reports, figures."""
 
+import re
 from pathlib import Path
 from typing import Optional, Sequence
 
@@ -9,7 +10,8 @@ from sklearn.metrics import classification_report, confusion_matrix
 
 from src.features.ssvep.fbcca_extraction import TARGET_FREQS
 from src.features.ssvep.spectral_power import LEGACY_FS_HZ
-from src.features.ssvep.window_mask import MASK_LABEL
+from src.features.ssvep.window_mask import CHANNEL_FAIL_FRACTION, MASK_LABEL
+from src.io.channels import subject_channel_names
 from src.models.classical.feature_spaces import build_feature_blocks
 from src.preprocessing.dataset.legacy_windows import CLASS_CODES, arrays_exist, load_stimulus_windows
 
@@ -17,33 +19,54 @@ DEFAULT_SUBJECT = "S03"   # acceptance subject of P05 (R-3)
 CLASS_NAMES = [f"{c} ({f:g} Hz)" for c, f in zip(CLASS_CODES, (24.0, 20.0, 15.0, 10.91, 8.57))]
 
 
+SUBJECT_PATTERN = re.compile(r"^S\d+$")
+
+
+def discover_subjects(processed_dir: Path) -> list:
+  """Folders of `processed_dir` matching ^S\\d+$ that hold the three arrays, numeric order."""
+  found = [p.name for p in Path(processed_dir).iterdir()
+           if p.is_dir() and SUBJECT_PATTERN.fullmatch(p.name) and arrays_exist(processed_dir, p.name)]
+  return sorted(found, key=lambda s: int(s[1:]))
+
+
 def load_config(path: Path) -> dict:
   with open(path) as f:
     return yaml.safe_load(f) or {}
 
 
-def prepare_subject(processed_dir: Path, subject: str, scalp: Sequence[str],
+def prepare_subject(processed_dir: Path, subject: str, scalp: Optional[Sequence[str]] = None,
                     fs: float = LEGACY_FS_HZ, thresholds: Optional[dict] = None,
-                    fbcca_channels: Optional[Sequence[str]] = None) -> dict:
-  """Stimulus windows of a legacy subject folder, gated once, with every feature block.
+                    fbcca_channels: Optional[Sequence[str]] = None,
+                    channel_fail_fraction: float = CHANNEL_FAIL_FRACTION,
+                    verbose: bool = False) -> dict:
+  """Stimulus windows of a legacy subject folder, gated once (two-tier, P07), with every feature block.
 
-  Returns the dict of `build_feature_blocks` plus `n_stimulus`, `n_clean`, `n_rejected`.
+  Channel names: `subject_channel_names` (channels.json, else `scalp`, else by count). Returns the dict of
+  `build_feature_blocks` plus `channel_names` (input), `n_stimulus`, `n_clean`, `n_rejected`.
   Raises FileNotFoundError when the arrays are missing.
   """
   if not arrays_exist(processed_dir, subject):
     raise FileNotFoundError(f"arrays missing in {Path(processed_dir) / subject}")
   _, X_time, y = load_stimulus_windows(processed_dir, subject)
-  if X_time.shape[1] != len(scalp):
-    raise ValueError(f"{subject}: {X_time.shape[1]} channels in the arrays, {len(scalp)} names in the config")
-  blocks = build_feature_blocks(X_time, y, scalp, fs, thresholds, fbcca_channels)
+  names = subject_channel_names(processed_dir, subject, X_time.shape[1], scalp)
+  blocks = build_feature_blocks(X_time, y, names, fs, thresholds, fbcca_channels,
+                                channel_fail_fraction, verbose)
+  blocks["channel_names"] = names
   blocks["n_stimulus"] = int(len(y))
   blocks["n_clean"] = int(len(blocks["y"]))
   blocks["n_rejected"] = blocks["n_stimulus"] - blocks["n_clean"]
   return blocks
 
 
+def channel_summary(blocks: dict) -> str:
+  """One line: channels kept / dropped of a prepared subject (R9)."""
+  return (f"channels kept {len(blocks['channels_kept'])} [{', '.join(blocks['channels_kept'])}]; "
+          f"dropped {len(blocks['channels_dropped'])} [{', '.join(blocks['channels_dropped']) or 'none'}]")
+
+
 def legacy_header_lines(fs: float, thresholds: dict, seed: int, cv_label: str, smooth_label: str,
-                        fbcca_channels: Optional[Sequence[str]] = None) -> list:
+                        fbcca_channels: Optional[Sequence[str]] = None,
+                        channel_fail_fraction: float = CHANNEL_FAIL_FRACTION) -> list:
   """Protocol lines of a legacy benchmark; `fbcca_channels` (names, `blocks["fbcca_channels"]`) adds a line naming the FBCCA input."""
   th = thresholds
   lines = [
@@ -51,8 +74,9 @@ def legacy_header_lines(fs: float, thresholds: dict, seed: int, cv_label: str, s
     f"smoothing: {smooth_label}",
     f"features: legacy fs={fs:g} Hz (PF-04), per-window sub-band filtering (R3/PF-14); scaler and CSP fitted "
     f"inside each training fold (R2/PF-11)",
-    f"window mask (R5 per-script gate, {MASK_LABEL}, one mask for every block, PF-10): vpp "
-    f"[{th['vpp_min']:g}, {th['vpp_max']:g}] uV, std [{th['std_min']:g}, {th['std_max']:g}] uV",
+    f"quality gate (R5 per-script, {MASK_LABEL}, one decision for every block, PF-10): vpp "
+    f"[{th['vpp_min']:g}, {th['vpp_max']:g}] uV, std [{th['std_min']:g}, {th['std_max']:g}] uV, "
+    f"channel dropped if it fails in > {channel_fail_fraction:.0%} of the windows",
   ]
   if fbcca_channels is not None:
     lines.append(f"FBCCA channels ({len(fbcca_channels)}): {', '.join(fbcca_channels)}")
@@ -108,5 +132,5 @@ def figure_paths(fig_dir: Path, stem: str, subject: str, default_subject: str = 
   return paths
 
 
-__all__ = ["DEFAULT_SUBJECT", "TARGET_FREQS", "load_config", "prepare_subject", "legacy_header_lines",
+__all__ = ["DEFAULT_SUBJECT", "TARGET_FREQS", "load_config", "prepare_subject", "subject_channel_names", "channel_summary", "discover_subjects", "legacy_header_lines",
            "save_classification_report", "plot_confusion", "figure_paths", "CLASS_NAMES"]

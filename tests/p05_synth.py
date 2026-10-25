@@ -5,9 +5,16 @@ from pathlib import Path
 import numpy as np
 from scipy.signal import periodogram
 
+from src.io.channels import resolve_channel_names
+
 FS = 250.0
 TARGETS = (24.0, 20.0, 15.0, 10.9091, 8.5714)
 SCALP = ["PO3", "POz", "PO4", "PO8", "O1", "Oz", "O2"]
+
+
+def keep_all(n: int, names=SCALP) -> dict:
+  """Decision that keeps all `n` windows and the channels `names` (`precomputed=` of the extractors, PF-10)."""
+  return {"valid_mask": np.ones(n, int), "channels_kept": list(names)}
 
 
 def make_windows(n_trials: int = 8, snr: float = 1.0, seed: int = 0, n_ch: int = 7, T: int = 256) -> tuple:
@@ -25,13 +32,20 @@ def make_windows(n_trials: int = 8, snr: float = 1.0, seed: int = 0, n_ch: int =
   return np.stack(X), np.array(y)
 
 
-def write_subject(root: Path, subject: str = "S03", **kw) -> Path:
-  """Legacy folder `<root>/<subject>/{X_psd_features,X_time_windows,y_labels}.npy` with 201 rows too."""
+def write_subject(root: Path, subject: str = "S03", bad_channels=(), **kw) -> Path:
+  """Legacy folder `<root>/<subject>/{X_psd_features,X_time_windows,y_labels}.npy` with 201 rows too.
+
+  `bad_channels` (names, resolved with `resolve_channel_names(n_ch)`) get a large square wave (Vpp 400 uV) in every
+  window, so the tier-1 gate drops them (P07)."""
   X, y = make_windows(**kw)
   rng = np.random.default_rng(99)
   rest = rng.normal(0, 6.0, (20, X.shape[1], X.shape[2]))
   Xall = np.concatenate([rest, X])
   yall = np.concatenate([np.full(20, 201), y])
+  if bad_channels:
+    names = resolve_channel_names(Xall.shape[1])
+    for c in bad_channels:
+      Xall[:, names.index(c)] += 200.0 * np.sign(np.sin(2 * np.pi * 7 * np.arange(Xall.shape[2]) / FS))
   f, p = periodogram(Xall, fs=256.0, axis=-1)
   sel = (f >= 5) & (f <= 35)
   d = Path(root) / subject

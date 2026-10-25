@@ -8,10 +8,9 @@ references at h*f (h = 1..H), and the score is `sum_b w_b r_b^2`, `w_b = b^-1.25
 Legacy labels:
 - R3 / PF-14: the sub-bands are filtered on each 1 s window (edge effects); fixed from P16.
 - PF-04: `fs` defaults to `LEGACY_FS_HZ = 250` although the recordings are 256 Hz.
-- R5: the window mask is the per-script gate of `window_mask` (original extractor limits, explicit).
+- R5: the quality decision is the per-script two-tier gate of `window_mask` (P07, limits explicit).
 
-P05 returns `(X, y_clean, valid_mask)`; P07 adds the channel tier (`channel_report`) and P16
-adds `subband_windows=` / `quality=`.
+P07 returns `(X, y_clean, valid_mask, channel_report)`; P16 adds `subband_windows=` / `quality=`.
 """
 
 import warnings
@@ -22,7 +21,7 @@ from scipy.signal import cheby1, filtfilt
 from sklearn.cross_decomposition import CCA
 
 from src.features.ssvep.spectral_power import LEGACY_FS_HZ
-from src.features.ssvep.window_mask import resolve_window_mask
+from src.features.ssvep.window_mask import CHANNEL_FAIL_FRACTION, channel_report, quality_gate
 
 TARGET_FREQS = [24.0, 20.0, 15.0, 10.9091, 8.5714]
 SUBBAND_LOW_HZ = (6.0, 14.0, 22.0)
@@ -76,26 +75,29 @@ def fbcca_window_scores(window: np.ndarray, filters: list, refs: Sequence[np.nda
   return scores
 
 
-def extract_fbcca_features(windows: np.ndarray, y: np.ndarray, fs: float = LEGACY_FS_HZ,
+def extract_fbcca_features(windows: np.ndarray, y: np.ndarray,
+                           channel_names: Optional[Sequence[str]] = None, fs: float = LEGACY_FS_HZ,
                            target_freqs: Sequence[float] = TARGET_FREQS, n_harmonics: int = 3,
-                           valid_mask: Optional[np.ndarray] = None,
-                           thresholds: Optional[dict] = None) -> tuple:
-  """FBCCA scores of the accepted windows: `(X (n_clean, n_targets), y_clean, valid_mask (n,))`.
+                           precomputed: Optional[dict] = None, thresholds: Optional[dict] = None,
+                           channel_fail_fraction: float = CHANNEL_FAIL_FRACTION,
+                           verbose: bool = False) -> tuple:
+  """FBCCA scores of the accepted windows: `(X (n_clean, n_targets), y_clean, valid_mask (n,), channel_report)`.
 
-  `windows (n, C, T)` (all C channels enter the CCA), `y (n,)`. `valid_mask` (1 = keep) is used
-  as given when passed (one mask for every feature block, PF-10); otherwise the per-script gate
-  of `window_mask` runs with `thresholds` (default: the original extractor limits, passed explicitly).
+  `windows (n, C, T)`, `y (n,)`, `channel_names` (C names; None -> `resolve_channel_names(C)`, PF-06).
+  The two-tier gate (`window_mask.quality_gate`, limits explicit) drops noisy channels and rejects
+  windows; the CCA uses the surviving channels only (`channel_report["channels_kept"]`). `precomputed`
+  (an earlier `channel_report`) reuses one decision for every feature block (PF-10).
   legacy (R3/PF-14, PF-04): per-window filtering and `fs = 250` by default.
   """
   w = np.asarray(windows, dtype=np.float64)
   y = np.asarray(y)
   if w.ndim != 3 or len(w) != len(y):
     raise ValueError(f"windows {w.shape} and y {y.shape} do not match")
-  mask = resolve_window_mask(w, valid_mask, thresholds)
-  keep = mask == 1
+  q = quality_gate(w, y, channel_names, thresholds, channel_fail_fraction, precomputed, verbose)
+  wc = q["windows_clean"]
   filters = get_chebyshev_subbands(fs)
   refs = [generate_reference_signals(f, fs, w.shape[-1], n_harmonics) for f in target_freqs]
-  X = np.zeros((int(keep.sum()), len(target_freqs)))
-  for i, win in enumerate(w[keep]):
+  X = np.zeros((len(wc), len(target_freqs)))
+  for i, win in enumerate(wc):
     X[i] = fbcca_window_scores(win, filters, refs)
-  return X, y[keep], mask
+  return X, q["y_clean"], q["valid_mask"], channel_report(q)
