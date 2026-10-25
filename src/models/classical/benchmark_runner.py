@@ -9,6 +9,7 @@ from sklearn.metrics import classification_report, confusion_matrix
 
 from src.features.ssvep.fbcca_extraction import TARGET_FREQS
 from src.features.ssvep.spectral_power import LEGACY_FS_HZ
+from src.features.ssvep.window_mask import MASK_LABEL
 from src.models.classical.feature_spaces import build_feature_blocks
 from src.preprocessing.dataset.legacy_windows import CLASS_CODES, arrays_exist, load_stimulus_windows
 
@@ -22,7 +23,8 @@ def load_config(path: Path) -> dict:
 
 
 def prepare_subject(processed_dir: Path, subject: str, scalp: Sequence[str],
-                    fs: float = LEGACY_FS_HZ, thresholds: Optional[dict] = None) -> dict:
+                    fs: float = LEGACY_FS_HZ, thresholds: Optional[dict] = None,
+                    fbcca_channels: Optional[Sequence[str]] = None) -> dict:
   """Stimulus windows of a legacy subject folder, gated once, with every feature block.
 
   Returns the dict of `build_feature_blocks` plus `n_stimulus`, `n_clean`, `n_rejected`.
@@ -33,7 +35,7 @@ def prepare_subject(processed_dir: Path, subject: str, scalp: Sequence[str],
   _, X_time, y = load_stimulus_windows(processed_dir, subject)
   if X_time.shape[1] != len(scalp):
     raise ValueError(f"{subject}: {X_time.shape[1]} channels in the arrays, {len(scalp)} names in the config")
-  blocks = build_feature_blocks(X_time, y, scalp, fs, thresholds)
+  blocks = build_feature_blocks(X_time, y, scalp, fs, thresholds, fbcca_channels)
   blocks["n_stimulus"] = int(len(y))
   blocks["n_clean"] = int(len(blocks["y"]))
   blocks["n_rejected"] = blocks["n_stimulus"] - blocks["n_clean"]
@@ -47,8 +49,8 @@ def legacy_header_lines(fs: float, thresholds: dict, seed: int, cv_label: str, s
     f"smoothing: {smooth_label}",
     f"features: legacy fs={fs:g} Hz (PF-04), per-window sub-band filtering (R3/PF-14); scaler and CSP fitted "
     f"inside each training fold (R2/PF-11)",
-    f"window mask (R5 per-script gate, one mask for every block, PF-10): vpp [{th['vpp_min']:g}, "
-    f"{th['vpp_max']:g}] uV, std [{th['std_min']:g}, {th['std_max']:g}] uV",
+    f"window mask (R5 per-script gate, {MASK_LABEL}, one mask for every block, PF-10): vpp "
+    f"[{th['vpp_min']:g}, {th['vpp_max']:g}] uV, std [{th['std_min']:g}, {th['std_max']:g}] uV",
   ]
 
 

@@ -1,7 +1,8 @@
 """One window quality mask for the P05 extractors and benchmarks (R5 per-script gate, PF-10).
 
-The extractors apply the shared `validate_eeg_windows` limits, every threshold passed
-explicitly (vpp 5-120 uV, std 1-35 uV; decisions.md P05), to the stimulus windows. The mask
+The extractors apply `validate_eeg_windows` with the original extractor limits, every threshold
+passed explicitly (vpp 0.5-120 uV, std 0.1-35 uV; decisions.md P05, R11 round 2; the shared
+`vpp_min` 5.0 arrives only in P07, PF-07), to the stimulus windows. The mask
 is computed once per script and handed to every extractor (`valid_mask=`) so that all
 feature blocks keep exactly the same rows (PF-10, no double gating).
 """
@@ -12,8 +13,9 @@ import numpy as np
 
 from src.preprocessing.signal.quality_check import validate_eeg_windows
 
-# legacy (R5): per-script gate with the shared defaults written out, never inherited.
-P05_MASK_THRESHOLDS = {"vpp_min": 5.0, "vpp_max": 120.0, "std_min": 1.0, "std_max": 35.0}
+# legacy (R5): per-script gate with the original extractor limits written out, never inherited.
+P05_MASK_THRESHOLDS = {"vpp_min": 0.5, "vpp_max": 120.0, "std_min": 0.1, "std_max": 35.0}
+MASK_LABEL = "original extractor limits"
 
 
 def resolve_window_mask(windows: np.ndarray, valid_mask: Optional[np.ndarray] = None,

@@ -2,8 +2,9 @@
 
 legacy (R1, PF-01): `StratifiedKFold(5, shuffle, seed 42)` over windows; windows of one trial
 land in train and test, so accuracies are leaky and are not comparable with the leak-free
-R-6. legacy (R8, PF-02): "2.0 s smoothed" is the no-reset 2-window average over the
-out-of-fold scores in array order. Fixed in P11 (trial-grouped CV, trial-aware smoothing).
+R-6. legacy (R8, PF-02): "2.0 s smoothed" is the legacy i%5 trial smoothing of the out-of-fold
+scores in clean-array order (reset at `i % 5 == 0`, the original's "2.0s Trial Smoothed"); the
+P04 no-reset average is a labelled DIAGNOSTIC only. Fixed in P11 (trial-grouped CV, true trial ids).
 
 R2 / PF-11: `fold_matrices` builds the feature matrices of one fold with the CSP filters
 fitted on the training rows only; the scaler is the first step of every model Pipeline.
@@ -21,12 +22,14 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
 from src.features.ssvep.fbcsp_extraction import FBCSPTransformer
-from src.preprocessing.dataset.smoothing import smooth_probabilities_legacy
+from src.preprocessing.dataset.smoothing import smooth_probabilities_mod5
 
 N_FOLDS = 5
 SEED = 42
 CV_LABEL = "StratifiedKFold(5, shuffle, 42) over windows (legacy R1/PF-01, leaky)"
-SMOOTH_LABEL = "legacy no-reset 2-window average (R8/PF-02)"
+SMOOTH_LABEL = "legacy i%5 trial smoothing (R8 legacy, PF-02): 2-window average, reset at i % 5 == 0 of the clean array"
+DIAG_SMOOTH_LABEL = "no-reset 2-window average (P04 rule), DIAGNOSTIC only"
+smooth_reported = smooth_probabilities_mod5   # the reported "2.0 s smoothed" rule of P05-P10
 
 
 def legacy_cv(seed: int = SEED) -> StratifiedKFold:
@@ -112,9 +115,10 @@ def oof_space(space: FeatureSpace, subbands: Optional[np.ndarray], y: np.ndarray
 
 
 def accuracies(y: np.ndarray, pred: np.ndarray, scores: np.ndarray) -> tuple:
-  """`(1.0 s accuracy, 2.0 s legacy-smoothed accuracy)` in [0, 1]; classes = sorted labels of `y`."""
+  """`(1.0 s accuracy, 2.0 s smoothed accuracy)` in [0, 1], smoothing = legacy i%5 trial smoothing
+  (R8 legacy, PF-02); classes = sorted labels of `y`."""
   classes = np.unique(y)
-  sm = classes[np.argmax(smooth_probabilities_legacy(scores), axis=1)]
+  sm = classes[np.argmax(smooth_reported(scores), axis=1)]
   return float(accuracy_score(y, pred)), float(accuracy_score(y, sm))
 
 
@@ -122,7 +126,7 @@ def fbcca_argmax_baseline(fbcca: np.ndarray, y: np.ndarray, target_codes: Sequen
   """Zero-training baseline: predicted class = argmax of the FBCCA scores, on every clean window.
 
   Returns `(pred, scores)`; `scores` are the FBCCA scores divided by their row sum, so the legacy
-  2-window average can be applied (no fitting, hence no folds).
+  2.0 s smoothing can be applied (no fitting, hence no folds).
   """
   s = np.asarray(fbcca, dtype=float)
   pred = np.asarray(target_codes)[np.argmax(s, axis=1)]

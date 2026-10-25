@@ -7,9 +7,9 @@ suite including QDA (reg_param 0.5); a model that fails (QDA rank failure on hig
 spaces, PF-12) is caught and reported as `[-] ... failed`, not fatal. Each model is a
 Pipeline(StandardScaler, model); the CSP is fitted on the training fold only (R2/PF-11).
 
-Legacy (labelled): R1/PF-01 StratifiedKFold(5, shuffle, 42) over windows (leaky); R8/PF-02
-no-reset 2-window smoothing of the out-of-fold scores; R3/PF-14 and PF-04 per-window
-filtering, fs 250.
+Legacy (labelled): R1/PF-01 StratifiedKFold(5, shuffle, 42) over windows (leaky); legacy i%5
+trial smoothing of the out-of-fold scores (R8 legacy, PF-02); R3/PF-14 and PF-04 per-window
+filtering, fs 250. Window mask: original extractor limits (vpp 0.5-120 uV, std 0.1-35 uV).
 
 Output: <reports-dir>/sklearn_suite_<S>.csv (columns of feature_space_benchmark_<S>.csv; failed
 models have no row) and the failures printed.

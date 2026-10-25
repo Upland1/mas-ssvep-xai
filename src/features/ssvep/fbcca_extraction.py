@@ -8,7 +8,7 @@ references at h*f (h = 1..H), and the score is `sum_b w_b r_b^2`, `w_b = b^-1.25
 Legacy labels:
 - R3 / PF-14: the sub-bands are filtered on each 1 s window (edge effects); fixed from P16.
 - PF-04: `fs` defaults to `LEGACY_FS_HZ = 250` although the recordings are 256 Hz.
-- R5: the window mask is the per-script gate of `window_mask` (shared limits, explicit).
+- R5: the window mask is the per-script gate of `window_mask` (original extractor limits, explicit).
 
 P05 returns `(X, y_clean, valid_mask)`; P07 adds the channel tier (`channel_report`) and P16
 adds `subband_windows=` / `quality=`.
@@ -84,7 +84,7 @@ def extract_fbcca_features(windows: np.ndarray, y: np.ndarray, fs: float = LEGAC
 
   `windows (n, C, T)` (all C channels enter the CCA), `y (n,)`. `valid_mask` (1 = keep) is used
   as given when passed (one mask for every feature block, PF-10); otherwise the per-script gate
-  of `window_mask` runs with `thresholds` (default: the shared limits, passed explicitly).
+  of `window_mask` runs with `thresholds` (default: the original extractor limits, passed explicitly).
   legacy (R3/PF-14, PF-04): per-window filtering and `fs = 250` by default.
   """
   w = np.asarray(windows, dtype=np.float64)

@@ -1,8 +1,8 @@
 """Feature-space x model benchmark on one subject (P05.5, legacy Era A).
 
 Data source: legacy folders <processed-dir>/<S>/ (P02, OO session, 7 channels, 256-sample
-windows), stimulus windows only (101-105). One window mask (shared limits written out: vpp
-5-120 uV, std 1-35 uV; R5 per-script gate) feeds every feature block (PF-10).
+windows), stimulus windows only (101-105). One window mask (original extractor limits written
+out: vpp 0.5-120 uV, std 0.1-35 uV; R5 per-script gate) feeds every feature block (PF-10).
 
 Six feature spaces (p printed at fs 250): continuous PSD 5-35 Hz (210), harmonic PSD on
 PO8, O1, Oz, O2 (32 = 4 channels x 8 bins), FBCCA (5), harmonic PSD + FBCCA (37), FBCSP
@@ -13,7 +13,8 @@ only (R2/PF-11).
 
 Legacy behaviours (labelled, fixed in later phases):
 - R1 / PF-01: StratifiedKFold(5, shuffle, 42) over windows (leaky; not comparable with R-6).
-- R8 / PF-02: "2.0 s smoothed" = 2-window average of the out-of-fold scores, no trial reset.
+- R8 / PF-02: "2.0 s smoothed" = legacy i%5 trial smoothing of the out-of-fold scores (2-window
+  average, reset at i % 5 == 0 of the clean array).
 - R3 / PF-14 and PF-04: per-window sub-band filtering, fs 250 on 256 Hz data.
 
 Output: <reports-dir>/feature_space_benchmark_<S>.csv (Subject, Feature space, p, Model,
@@ -48,10 +49,9 @@ from src.models.classical.benchmark_runner import (  # noqa: E402
   DEFAULT_SUBJECT, legacy_header_lines, load_config, prepare_subject)
 from src.models.classical.feature_spaces import benchmark_spaces  # noqa: E402
 from src.models.classical.legacy_eval import (  # noqa: E402
-  CV_LABEL, SEED, SMOOTH_LABEL, accuracies, fbcca_argmax_baseline, oof_space, space_width)
+  CV_LABEL, SEED, SMOOTH_LABEL, accuracies, fbcca_argmax_baseline, oof_space, smooth_reported, space_width)
 from src.models.classical.sklearn_models import QDA_NAME, get_sklearn_model_suite  # noqa: E402
 from src.preprocessing.dataset.legacy_windows import CLASS_CODES  # noqa: E402
-from src.preprocessing.dataset.smoothing import smooth_probabilities_legacy  # noqa: E402
 
 DEFAULT_CONFIG = ROOT / "configs" / "pipeline_config.yaml"
 COLUMNS = ["Subject", "Feature space", "p", "Model", "1.0s Acc (%)", "2.0s Smoothed (%)",
@@ -101,7 +101,7 @@ def run_benchmark(blocks: dict, subject: str, m: int = 1, seed: int = SEED, verb
       print(f"  ({space.name}: {time.time() - t0:.1f} s)")
   pred, sc = fbcca_argmax_baseline(blocks["fbcca"], y, CLASS_CODES)
   classes = sorted(set(int(v) for v in y))
-  sm = np.asarray(classes)[np.argmax(smooth_probabilities_legacy(sc), axis=1)]
+  sm = np.asarray(classes)[np.argmax(smooth_reported(sc), axis=1)]
   a1, a2 = float(np.mean(pred == y)), float(np.mean(sm == y))
   rows.append({**common, "Feature space": ARGMAX_SPACE, "p": blocks["fbcca"].shape[1], "Model": "argmax",
                "1.0s Acc (%)": round(100 * a1, 2), "2.0s Smoothed (%)": round(100 * a2, 2)})

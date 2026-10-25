@@ -3,18 +3,20 @@
 Data source: legacy folders <processed-dir>/<S>/ (P02, OO session, 7 channels), stimulus
 windows only. Features: FBCSP with m CSP components per side (default m = 1: 5 bands x 5
 classes x 2 = 50) fitted on the training rows of each fold (R2/PF-11) + 5 FBCCA scores = 55;
-one window mask (shared limits written out: vpp 5-120 uV, std 1-35 uV; R5 per-script gate)
+one window mask (original extractor limits written out: vpp 0.5-120 uV, std 0.1-35 uV; R5 gate)
 feeds both blocks (PF-10). Model: Pipeline(StandardScaler, LDA(lsqr, shrinkage auto)).
 
-Reported: out-of-fold 1.0 s accuracy, and "2.0 s smoothed" = 2-window average of the
-out-of-fold probabilities in array order (legacy R8/PF-02, no trial reset). The trial-aware
-`j % 5` smoothing is printed as a labelled DIAGNOSTIC only (it is not the reported number).
+Reported: out-of-fold 1.0 s accuracy, and "2.0 s smoothed" = legacy i%5 trial smoothing (R8
+legacy, PF-02): 2-window average of the out-of-fold probabilities, reset at i % 5 == 0 of the
+clean array (the original's "2.0s Trial Smoothed"). The P04 no-reset average is printed as a
+labelled DIAGNOSTIC only (it is not the reported number).
 
 Legacy (labelled): R1/PF-01 StratifiedKFold(5, shuffle, 42) over windows (leaky; the leak-free
 reference is R-6, not this); R3/PF-14 and PF-04 per-window filtering, fs 250.
 
-DIAGNOSTIC outputs (Round 2, labelled; reported definitions unchanged): confusion counts and classification report
-of the 2.0 s smoothed predictions under the no-reset and j%5 rules, *_smoothed_{noreset,mod5}.txt.
+Smoothed-prediction outputs (labelled): confusion counts and classification report of the 2.0 s
+smoothed predictions under the reported i%5 rule (*_smoothed_mod5.txt) and the DIAGNOSTIC
+no-reset rule (*_smoothed_noreset.txt).
 
 Output: <reports-dir>/flagship_<S>.csv (Subject, Clean Windows, Rejected, m, 1.0s Acc (%),
 2.0s Smoothed (%); one row per m, rewritten on rerun), the classification report
@@ -59,6 +61,7 @@ from sklearn.metrics import confusion_matrix  # noqa: E402
 from src.models.classical.benchmark_runner import CLASS_NAMES  # noqa: E402
 from src.preprocessing.dataset.smoothing import (  # noqa: E402
   smooth_probabilities_legacy, smooth_probabilities_mod5)
+from src.features.ssvep.window_mask import MASK_LABEL  # noqa: E402
 
 DEFAULT_CONFIG = ROOT / "configs" / "pipeline_config.yaml"
 MODEL = "Shrinkage-LDA lsqr"
@@ -88,8 +91,8 @@ def _rel(path: Path) -> str:
 
 
 def smoothed_diagnostics(y: np.ndarray, scores: np.ndarray, reports: Path, subject: str, tag: str) -> dict:
-  """DIAGNOSTIC (R-3 investigation, not the reported numbers): confusion counts and classification report of the
-  2.0 s smoothed predictions under both rules; written to
+  """Confusion counts and classification report of the 2.0 s smoothed predictions under both rules
+  (mod5 = legacy i%5 trial smoothing, the reported rule; noreset = DIAGNOSTIC); written to
   <reports>/classification_report_evaluate_confusion_matrix_<S><tag>_smoothed_{noreset,mod5}.txt and printed.
   Returns {rule: accuracy}."""
   classes = np.array(CLASS_CODES)
@@ -98,12 +101,13 @@ def smoothed_diagnostics(y: np.ndarray, scores: np.ndarray, reports: Path, subje
     pred = classes[np.argmax(fn(scores), axis=1)]
     cm = confusion_matrix(y, pred, labels=list(classes))
     accs[rule] = float(np.mean(pred == y))
-    title = (f"DIAGNOSTIC {subject} 2.0 s smoothed predictions, rule {rule} "
-             f"({'legacy no-reset R8/PF-02, the reported definition' if rule == 'noreset' else 'trial-aware j%5 approximation'}); "
+    kind = ("DIAGNOSTIC (P04 no-reset rule, not the reported number)" if rule == "noreset"
+            else "REPORTED (legacy i%5 trial smoothing, R8 legacy, PF-02)")
+    title = (f"{kind} {subject} 2.0 s smoothed predictions, rule {rule}; "
              f"accuracy {100 * accs[rule]:.2f}%\nconfusion counts (rows true, columns predicted, order {list(classes)}):\n"
              + "\n".join(" ".join(f"{v:4d}" for v in row) for row in cm))
     rep = save_classification_report(y, pred, reports / f"classification_report_evaluate_confusion_matrix_{subject}{tag}_smoothed_{rule}.txt", title)
-    print(f"  DIAGNOSTIC smoothed {rule}: accuracy {100 * accs[rule]:.2f}%\n" + title.split("\n", 1)[1] + "\n" + rep)
+    print(f"  {kind.split(' ', 1)[0]} smoothed {rule}: accuracy {100 * accs[rule]:.2f}%\n" + title.split("\n", 1)[1] + "\n" + rep)
   return accs
 
 
@@ -147,14 +151,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
   r = res[MODEL]
   a1, a2 = accuracies(y, r["pred"], r["scores"])
   classes = np.unique(y)
-  diag = float(np.mean(classes[np.argmax(smooth_probabilities_mod5(r["scores"]), axis=1)] == y))
-  print(f"  {MODEL}: 1.0 s {100 * a1:.2f}%  2.0 s smoothed {100 * a2:.2f}% (legacy no-reset)")
-  print(f"  DIAGNOSTIC only (not the reported number): trial-aware j%5 smoothing {100 * diag:.2f}%")
+  diag = float(np.mean(classes[np.argmax(smooth_probabilities_legacy(r["scores"]), axis=1)] == y))
+  print(f"  {MODEL}: 1.0 s {100 * a1:.2f}%  2.0 s smoothed {100 * a2:.2f}% (legacy i%5 trial smoothing)")
+  print(f"  DIAGNOSTIC only (not the reported number): no-reset smoothing {100 * diag:.2f}%")
   tag = "" if args.m == 1 else f"_m{args.m}"
   smoothed_diagnostics(y, r["scores"], reports, args.subject, tag)
   txt = reports / f"classification_report_evaluate_confusion_matrix_{args.subject}{tag}.txt"
   title = (f"{args.subject} {SPACE} m={args.m} -> {MODEL}; {CV_LABEL}; out-of-fold 1.0 s accuracy "
-           f"{100 * a1:.2f}%, 2.0 s smoothed {100 * a2:.2f}%; clean windows {b['n_clean']}, rejected {b['n_rejected']}")
+           f"{100 * a1:.2f}%, 2.0 s smoothed {100 * a2:.2f}% ({SMOOTH_LABEL}); clean windows {b['n_clean']}, "
+           f"rejected {b['n_rejected']} ({MASK_LABEL})")
   print(save_classification_report(y, r["pred"], txt, title))
   print(f"Saved: {_rel(txt)}")
   csv = reports / f"flagship_{args.subject}.csv"
