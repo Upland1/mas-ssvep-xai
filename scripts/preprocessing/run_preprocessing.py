@@ -1,4 +1,4 @@
-"""Legacy preprocessing and windowing (P02, mas/01_DATA_SPEC.md section 5.1).
+"""Legacy preprocessing and windowing (P02, mas/01_DATA_SPEC.md section 5.1; P07 tier-1 channel drop).
 
 For each subject: read <raw-dir>/<S>/<session>.ebr (default OO.ebr) with
 src/io/ebr_parser.load_ebr_file, take the config scalp channels (by name) and
@@ -7,6 +7,19 @@ MARK, take fs from the header, band-pass the continuous scalp signal once
 windows with the legacy limits (vpp <= 200 uV, std 0.5-60 uV, vpp_min 0.5 uV):
 202 = the 1.0 s before each onset, 101-105 = the 5.0 s after each onset
 (5 sub-windows), 201 = the 2.0 s after each onset (2 sub-windows).
+
+P07 (config v2: all 8 scalp channels): before the windows are cut, channels that
+are chronically noisy are detected on the non-overlapping 1 s windows of the
+filtered recording (vpp 5-200 uV, std 0.5-60 uV, dropped when failing in strictly
+more than 50 % of them) and removed for the whole subject; the kept and dropped
+channel names are printed and saved to <processed-dir>/<S>/channels.json.
+`--no-channel-drop` keeps every channel. The raw window gate keeps `vpp_min=0.5`
+pinned (PF-07); `--vpp-min 5.0` reproduces the PF-07 regression (labelled "legacy
+regression demo": the raw gate inheriting the shared 5.0 default rejects windows).
+`summarize_window_quality` is printed on the UNGATED windows of each subject, so
+the observed ranges include what the gate rejects. A subject that is skipped has
+its old arrays under <processed-dir> removed (PF-09), never left behind. Only
+<processed-dir> and <figures-dir> are written to.
 
 Saves <processed-dir>/<S>/{X_psd_features,X_time_windows,y_labels}.npy
 (conditions in the order 201, 202, 101..105, time order within; PSD 5-35 Hz,
@@ -22,6 +35,7 @@ overrides its config key. A subject that cannot be processed is skipped with
 """
 
 import argparse
+import json
 import re
 import sys
 from pathlib import Path
@@ -49,7 +63,9 @@ from src.features.ssvep.psd_extraction import (  # noqa: E402  (needs ROOT on sy
 from src.io import ebr_parser  # noqa: E402
 from src.preprocessing.signal.filters import apply_iir_bandpass  # noqa: E402
 from src.preprocessing.signal.quality_check import (  # noqa: E402
-  format_quality_stats, merge_quality_stats, new_quality_stats, summarize_window_quality)
+  compute_channel_quality_stats, format_quality_stats,
+  identify_noisy_channels, merge_quality_stats, new_quality_stats, segment_and_validate_eeg,
+  summarize_window_quality)
 
 SUBJECT_PATTERN = re.compile(r"^S\d+$")
 DEFAULT_CONFIG = ROOT / "configs" / "pipeline_config.yaml"
@@ -60,7 +76,13 @@ ROOT_SUBJECT = "S03"
 # legacy: lower Vpp limit of the P02 raw gate (roadmap P02.3). Config v1 has no key for it;
 # passed explicitly so the shared default vpp_min=5.0 never reaches the legacy gate (PF-07).
 LEGACY_VPP_MIN_UV = 0.5
+# P07 tier 1: chronic-noise limits on non-overlapping 1 s windows of the filtered recording
+# (roadmap P07.4; wider than the window gate: a channel is dropped only if it is noisy throughout).
+CHANNEL_NOISE_LIMITS = {"vpp_min": 5.0, "vpp_max": 200.0, "std_min": 0.5, "std_max": 60.0}
+CHANNEL_FAIL_FRACTION = 0.5
+CHANNEL_WINDOW_SEC = 1.0
 ARRAY_FILES = ("X_psd_features", "X_time_windows", "y_labels")
+CHANNELS_FILE = "channels.json"
 PSD_FIGURE = "average_psd_by_condition.png"
 STIM_FIGURE = "stimulus_vs_baseline_psd.png"
 
@@ -115,6 +137,11 @@ def resolve_params(cfg: dict, args: argparse.Namespace) -> dict:
     "sub_window_sec": float(pick(args.sub_window_sec, pre["sub_window_sec"])),
     "vpp_thresh": float(pick(args.vpp_max, pre["vpp_thresh_uv"])),
     "vpp_min": float(args.vpp_min),
+    "channel_drop": not args.no_channel_drop,
+    "channel_limits": {
+      "vpp_min": float(args.chan_vpp_min), "vpp_max": float(args.chan_vpp_max),
+      "std_min": float(args.chan_std_min), "std_max": float(args.chan_std_max)},
+    "channel_fail_fraction": float(args.chan_fail_fraction),
     "std_range": (float(pick(args.std_min, std_lo)), float(pick(args.std_max, std_hi))),
     "stim_duration_sec": float(pick(args.stim_duration_sec, base["stimulus_duration_sec"])),
     "cross_duration_sec": float(pick(args.cross_duration_sec, base["pre_stim_cross_sec"])),
@@ -156,15 +183,66 @@ def window_starts(records: dict, conditions: Sequence[int]) -> np.ndarray:
                     dtype=np.int64)
 
 
-def preprocess_recording(x: np.ndarray, mark: np.ndarray, fs: float, params: dict) -> dict:
-  """Filter the continuous signal once, cut and gate the condition windows, build the arrays.
+def detect_noisy_channels(x_filtered: np.ndarray, fs: float, channel_names: Sequence[str],
+                          limits: dict, fail_fraction: float,
+                          window_sec: float = CHANNEL_WINDOW_SEC) -> dict:
+  """Tier-1 chronic-noise detection on non-overlapping `window_sec` windows of the filtered recording.
 
-  Returns a dict: `x_filtered (C, T)`, `records` ({code: [record]}), `X_psd (n, C*F)`,
-  `X_time (n, C, n_sub)`, `y (n,)`, `starts (n,)` (absolute start samples, same row
-  order), `quality_stats`. Raises RuntimeError if a shape or label violates
-  mas/01_DATA_SPEC.md section 5.1.
+  Returns `{"stats": compute_channel_quality_stats(...), "dropped": [names failing in strictly
+  more than `fail_fraction` of the windows], "kept": [names], "n_windows": int}`; the limits
+  are passed explicitly (R5). The whole recording is used (inter-trial periods included).
   """
+  windows, _ = segment_and_validate_eeg(x_filtered, fs, window_sec, **limits)
+  dropped = identify_noisy_channels(windows, channel_names, limits, fail_fraction)
+  return {"stats": compute_channel_quality_stats(windows, channel_names, limits),
+          "dropped": dropped, "kept": [c for c in channel_names if c not in dropped],
+          "n_windows": int(windows.shape[0])}
+
+
+def ungated_windows(x_filtered: np.ndarray, mark: np.ndarray, fs: float, params: dict) -> np.ndarray:
+  """Every sub-window of every condition segment with no quality gate: `(n, C, n_sub)`.
+
+  Same segments and sub-windows as the gated path (limits opened to +-inf), for
+  `summarize_window_quality`, whose observed ranges must include the rejected windows.
+  """
+  inf = float("inf")
+  recs = process_condition_windows_with_baseline(
+    x_filtered, mark, fs, target_conditions=params["stim_conditions"],
+    cue_condition=params["cue_condition"], cross_condition=params["cross_condition"],
+    sub_window_sec=params["sub_window_sec"], vpp_thresh=inf, std_range=(-inf, inf),
+    stim_duration_sec=params["stim_duration_sec"], cue_lookback_sec=params["cue_lookback_sec"],
+    vpp_min=-inf, cross_duration_sec=params["cross_duration_sec"])
+  w = [r["time_data"] for c in params["feature_conditions"] for r in recs.get(c, [])]
+  n = int(params["sub_window_sec"] * fs)
+  return np.stack(w) if w else np.empty((0, x_filtered.shape[0], n))
+
+
+def preprocess_recording(x: np.ndarray, mark: np.ndarray, fs: float, params: dict) -> dict:
+  """Filter the continuous signal once, drop chronically noisy channels (tier 1), cut and
+  gate the condition windows (tier 2), build the arrays.
+
+  `params["scalp"]` names the rows of `x`. Returns a dict: `x_filtered (C', T)` (kept
+  channels), `channels_kept`, `channels_dropped`, `channel_report` (None if
+  `params["channel_drop"]` is false), `records` ({code: [record]}), `X_psd (n, C'*F)`,
+  `X_time (n, C', n_sub)`, `y (n,)`, `starts (n,)` (absolute start samples, same row
+  order), `quality_stats`, `ungated` (`(m, C', n_sub)` windows before the gate). Raises
+  RuntimeError if a shape or label violates mas/01_DATA_SPEC.md section 5.1, ValueError
+  if every channel is dropped.
+  """
+  names = list(params["scalp"])
+  if len(names) != x.shape[0]:
+    raise ValueError(f"{len(names)} channel names for {x.shape[0]} channels")
   x_f = apply_iir_bandpass(x, fs, params["lowcut"], params["highcut"], params["order"])  # R3
+  report = None
+  if params.get("channel_drop", False):
+    report = detect_noisy_channels(x_f, fs, names, params["channel_limits"],
+                                   params["channel_fail_fraction"])
+    if not report["kept"]:
+      raise ValueError("every channel is chronically noisy")
+    if report["dropped"]:  # by name (PF-06)
+      x_f = x_f[[names.index(c) for c in report["kept"]]]
+      names = list(report["kept"])
+  ungated = ungated_windows(x_f, mark, fs, params)
   qs = new_quality_stats()
   records = process_condition_windows_with_baseline(
     x_f, mark, fs, target_conditions=params["stim_conditions"],
@@ -176,10 +254,12 @@ def preprocess_recording(x: np.ndarray, mark: np.ndarray, fs: float, params: dic
   X_psd, X_time, y = prepare_feature_matrix(records, target_conditions=params["feature_conditions"],
                                             freq_range=params["psd_range"])
   starts = window_starts(records, params["feature_conditions"])
-  check_arrays(X_psd, X_time, y, starts, n_channels=x.shape[0],
+  check_arrays(X_psd, X_time, y, starts, n_channels=len(names),
                n_samples=int(params["sub_window_sec"] * fs),
                conditions=params["feature_conditions"])
-  return {"x_filtered": x_f, "records": records, "X_psd": X_psd, "X_time": X_time, "y": y,
+  dropped = [c for c in params["scalp"] if c not in names]
+  return {"x_filtered": x_f, "channels_kept": names, "channels_dropped": dropped,
+          "channel_report": report, "ungated": ungated, "records": records, "X_psd": X_psd, "X_time": X_time, "y": y,
           "starts": starts, "quality_stats": qs}
 
 
@@ -227,6 +307,40 @@ def save_arrays(out_dir: Path, X_psd: np.ndarray, X_time: np.ndarray, y: np.ndar
     np.save(p, arr)
     paths.append(p)
   return paths
+
+
+def save_channels(out_dir: Path, kept: Sequence[str], dropped: Sequence[str], fs: float) -> Path:
+  """Write `channels.json` (`kept`, `dropped`, `fs`) next to the arrays; channels are named, not positions."""
+  p = Path(out_dir) / CHANNELS_FILE
+  p.write_text(json.dumps({"kept": list(kept), "dropped": list(dropped), "fs": float(fs)}) + "\n")
+  return p
+
+
+def remove_stale_outputs(out_dir: Path) -> list:
+  """Delete the array files and channels.json of `out_dir` left by an earlier run (PF-09).
+
+  Called for a subject that is skipped, so old arrays are never mistaken for this run's.
+  Returns the removed paths.
+  """
+  removed = []
+  for name in [f"{a}.npy" for a in ARRAY_FILES] + [CHANNELS_FILE]:
+    p = Path(out_dir) / name
+    if p.is_file():
+      p.unlink()
+      removed.append(p)
+  return removed
+
+
+def format_channel_report(report: dict, subject: str) -> str:
+  """Lines of the tier-1 channel report: per channel fail fraction and means, kept and dropped."""
+  lines = [f"  channel report ({subject}, {report['n_windows']} non-overlapping "
+           f"{CHANNEL_WINDOW_SEC:g} s windows):"]
+  for n, s in report["stats"].items():
+    lines.append(f"    {n}: fail {s['fail_fraction']:.1%} ({s['n_failed']}/{report['n_windows']}), "
+                 f"mean Vpp {s['mean_vpp']:.2f} uV, mean std {s['mean_std']:.2f} uV"
+                 f"{'  -> DROPPED' if n in report['dropped'] else ''}")
+  lines.append(f"  channels kept {report['kept']}; dropped {report['dropped'] or 'none'}")
+  return "\n".join(lines)
 
 
 def condition_counts(y: np.ndarray, conditions: Sequence[int]) -> dict:
@@ -285,8 +399,17 @@ def build_parser() -> argparse.ArgumentParser:
   g.add_argument("--cue-lookback-sec", type=float, default=None,
                  help="preprocessing.baseline.cue_lookback_sec")
   p.add_argument("--vpp-min", type=float, default=LEGACY_VPP_MIN_UV,
-                 help=f"legacy lower Vpp limit in uV, not in config v1 (default: {LEGACY_VPP_MIN_UV}, "
-                      "PF-07)")
+                 help=f"lower Vpp limit of the raw window gate in uV (default: {LEGACY_VPP_MIN_UV}, "
+                      "pinned, PF-07). 5.0 reproduces the PF-07 regression (legacy regression demo)")
+  c = p.add_argument_group("tier-1 chronic-noise channel drop (P07)")
+  c.add_argument("--no-channel-drop", action="store_true",
+                 help="keep every channel (no tier-1 drop)")
+  c.add_argument("--chan-vpp-min", type=float, default=CHANNEL_NOISE_LIMITS["vpp_min"])
+  c.add_argument("--chan-vpp-max", type=float, default=CHANNEL_NOISE_LIMITS["vpp_max"])
+  c.add_argument("--chan-std-min", type=float, default=CHANNEL_NOISE_LIMITS["std_min"])
+  c.add_argument("--chan-std-max", type=float, default=CHANNEL_NOISE_LIMITS["std_max"])
+  c.add_argument("--chan-fail-fraction", type=float, default=CHANNEL_FAIL_FRACTION,
+                 help="drop a channel failing in strictly more than this fraction of 1 s windows")
   return p
 
 
@@ -295,6 +418,14 @@ def _rel(path: Path) -> str:
     return str(Path(path).resolve().relative_to(ROOT))
   except ValueError:
     return str(path)
+
+
+def _drop_stale(processed_dir: Path, subject: str) -> None:
+  """Remove old outputs of a skipped subject (and the root copy if it is the root subject), printing them."""
+  dirs = [Path(processed_dir) / subject] + ([Path(processed_dir)] if subject == ROOT_SUBJECT else [])
+  for d in dirs:
+    for p in remove_stale_outputs(d):
+      print(f"[!] removed stale output of skipped {subject}: {_rel(p)}")
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
@@ -324,9 +455,19 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     print(f"[x] No subject folders matching ^S\\d+$ in {raw_dir}")
     return 1
 
+  if params["vpp_min"] != LEGACY_VPP_MIN_UV:
+    print(f"[!] legacy regression demo (PF-07): raw gate vpp_min {params['vpp_min']:g} uV instead "
+          f"of the pinned {LEGACY_VPP_MIN_UV:g}; expect most windows rejected")
   print(f"Data source: legacy windows from {args.session}.ebr -> {_rel(processed_dir)}/<S>/")
   print(f"Filter: Butterworth band-pass {params['lowcut']:g}-{params['highcut']:g} Hz, order "
         f"{params['order']}, filtfilt on the continuous signal; channels {params['scalp']}")
+  if params["channel_drop"]:
+    lim = params["channel_limits"]
+    print(f"Tier 1: chronic-noise channel drop on non-overlapping {CHANNEL_WINDOW_SEC:g} s windows: vpp "
+          f"[{lim['vpp_min']:g}, {lim['vpp_max']:g}] uV, std [{lim['std_min']:g}, {lim['std_max']:g}] "
+          f"uV, drop if fail fraction > {params['channel_fail_fraction']:g}")
+  else:
+    print("Tier 1: channel drop disabled (--no-channel-drop)")
   print(f"Gate: vpp [{params['vpp_min']:g}, {params['vpp_thresh']:g}] uV, std "
         f"[{params['std_range'][0]:g}, {params['std_range'][1]:g}] uV; sub-window "
         f"{params['sub_window_sec']:g} s; 202 lookback {params['cue_lookback_sec']:g} s, "
@@ -341,20 +482,26 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
       out = preprocess_recording(x, mark, fs, params)
     except (FileNotFoundError, ValueError) as exc:
       print(f"[-] Skipping {subject}: {exc}")
+      _drop_stale(processed_dir, subject)
       skipped.append(subject)
       continue
     X_psd, X_time, y, qs = out["X_psd"], out["X_time"], out["y"], out["quality_stats"]
+    kept = out["channels_kept"]
     if len(y) == 0:
-      print(f"[-] Skipping {subject}: no window accepted\n{format_quality_stats(qs, params['scalp'])}")
+      print(f"[-] Skipping {subject}: no window accepted\n{format_quality_stats(qs, kept)}")
+      _drop_stale(processed_dir, subject)
       skipped.append(subject)
       continue
 
     print(f"\n[+] {subject}/{path.name}: fs {fs:g} Hz (header), {x.shape[0]} channels, "
           f"{x.shape[1]} samples ({x.shape[1] / fs:.1f} s)")
-    print(format_quality_stats(qs, params["scalp"]))
-    summarize_window_quality(X_time, vpp_min=params["vpp_min"], vpp_max=params["vpp_thresh"],
+    if out["channel_report"] is not None:
+      print(format_channel_report(out["channel_report"], subject))
+    print(format_quality_stats(qs, kept))
+    # ungated windows (before the gate): the observed ranges include the rejected ones (P02 carry-forward)
+    summarize_window_quality(out["ungated"], vpp_min=params["vpp_min"], vpp_max=params["vpp_thresh"],
                              std_min=params["std_range"][0], std_max=params["std_range"][1],
-                             label=f"{subject} accepted windows")
+                             label=f"{subject} ungated windows, gate raw")
     counts = condition_counts(y, params["feature_conditions"])
     n_stim = sum(counts[c] for c in params["stim_conditions"])
     print("  windows per condition: " + ", ".join(f"{c}: {n}" for c, n in counts.items()))
@@ -363,9 +510,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
           f"X_time {X_time.shape}, X_psd {X_psd.shape}")
 
     saved = save_arrays(Path(processed_dir) / subject, X_psd, X_time, y)
+    saved.append(save_channels(Path(processed_dir) / subject, kept, out["channels_dropped"], fs))
     print(f"  Saved: {', '.join(_rel(p) for p in saved)}")
     if subject == ROOT_SUBJECT:  # PF-09: same in-memory arrays as the per-subject folder
       saved = save_arrays(Path(processed_dir), X_psd, X_time, y)
+      saved.append(save_channels(Path(processed_dir), kept, out["channels_dropped"], fs))
       print(f"  Saved ({ROOT_SUBJECT} root copy): {', '.join(_rel(p) for p in saved)}")
     if not args.no_figures:
       figs = save_figures(out["records"], figures_dir, subject, params)

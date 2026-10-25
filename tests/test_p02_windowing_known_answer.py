@@ -25,7 +25,7 @@ ORDER = (201, 202, 101, 102, 103, 104, 105)
 TARGETS = (101, 102, 103, 104, 105)
 FILE_CHANNELS = ["PO7", "PO3", "POz", "PO4", "PO8", "O1", "Oz", "O2", "TIMESTAMP",
                  "FLASHINGTIME", "MARK"]
-SCALP = ["PO3", "POz", "PO4", "PO8", "O1", "Oz", "O2"]  # config v1, PO7 excluded
+SCALP = ["PO7", "PO3", "POz", "PO4", "PO8", "O1", "Oz", "O2"]  # config v2 (P07), PO7 restored
 WIDE = dict(vpp_thresh=1e12, std_range=(0.0, 1e12), vpp_min=0.0)  # gate off (layout tests)
 
 
@@ -505,7 +505,7 @@ def test_script_windows_equal_slices_of_continuous_filtered_recording(tmp_path, 
   starts = sum((exp[c] for c in ORDER), [])
   assert y.tolist() == sum(([c] * len(exp[c]) for c in ORDER), [])
   expected = np.stack([x_f[:, s:s + N] for s in starts])
-  assert X_time.shape == expected.shape == (80, 7, 256)
+  assert X_time.shape == expected.shape == (80, 8, 256)
   np.testing.assert_allclose(X_time, expected, rtol=0, atol=1e-12)
   _, p = periodogram(expected, fs=FS, axis=-1)
   np.testing.assert_allclose(X_psd, p[:, :, 5:36].reshape(80, -1), rtol=1e-12, atol=1e-12)
@@ -563,7 +563,7 @@ def test_script_tree_all_subjects_root_copy_skip_and_figures(tmp_path, rp, capsy
   n_exp = {"S01": 79, "S03": 80, "S04": 80}
   for s, n in n_exp.items():
     X_psd, X_time, y = (np.load(tmp_path / "proc" / s / f"{a}.npy") for a in arrays)
-    assert X_psd.shape == (n, 217) and X_time.shape == (n, 7, 256) and y.shape == (n,)
+    assert X_psd.shape == (n, 248) and X_time.shape == (n, 8, 256) and y.shape == (n,)
     assert set(np.unique(y)) <= set(ORDER)
     assert _png_ok(tmp_path / "fig" / "spectra" / s / "average_psd_by_condition.png")
   for a in arrays:
@@ -610,7 +610,7 @@ def test_plots_written_under_agg(tmp_path):
   recs[104] = []
   paths = [
     sp.plot_eeg_window(recs[101][0]["time_data"], FS, tmp_path / "a" / "w.png",
-                       channel_names=SCALP),
+                       channel_names=SCALP[1:]),  # the 7 planted channels
     sp.plot_average_psd_by_condition(recs, tmp_path / "b" / "psd.png"),
     sp.plot_stimulus_vs_baseline_psd(recs, tmp_path / "c" / "svb.png"),
   ]

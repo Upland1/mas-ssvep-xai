@@ -12,7 +12,7 @@ from src.preprocessing.signal.filters import apply_iir_bandpass
 
 FS = 256
 CHANNELS = ["PO7", "PO3", "POz", "PO4", "PO8", "O1", "Oz", "O2", "TIMESTAMP", "FLASHINGTIME", "MARK"]
-SCALP = CHANNELS[1:8]
+SCALP = CHANNELS[:8]  # config v2 (P07): PO7 restored
 
 
 def _signal(n_trials=10, seed=0, spike_trial=None):
@@ -73,7 +73,7 @@ def test_all_writes_arrays_root_copy_figures_and_skips(tree, capsys):
   for s, n in (("S01", 79), ("S03", 80)):
     d = tree / "proc" / s
     X_psd, X_time, y = (np.load(d / f"{k}.npy") for k in rp.ARRAY_FILES)
-    assert X_time.shape == (n, 7, 256) and X_psd.shape == (n, 217) and y.shape == (n,)
+    assert X_time.shape == (n, 8, 256) and X_psd.shape == (n, 248) and y.shape == (n,)
     assert y.dtype == np.int64 and X_time.dtype == np.float64
     assert (tree / "fig" / "spectra" / s / rp.PSD_FIGURE).stat().st_size > 0
     assert (tree / "fig" / "spectra" / s / rp.STIM_FIGURE).stat().st_size > 0
