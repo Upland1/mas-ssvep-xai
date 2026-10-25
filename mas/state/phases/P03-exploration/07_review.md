@@ -159,6 +159,37 @@ Per subject × class, the fundamental is graded:
   to explain before APPROVE. `max |computed - saved| = 0` expected in the fix-3 run.
 - Nothing is re-run with other parameters to reach a grade (golden rule 5).
 
+## Pre-run audit — Round 2
+
+Verdict: PASS
+
+Reviewed at 629e22b: `git diff b4bc757..HEAD` (1869c0a, 78ea210, 89d2b9e, d7a7cac, ee17403, 639ac72).
+Suite: `.venv/bin/python -m pytest tests/ -p no:cacheprovider -o addopts="" -q` → `311 passed in 20.51s`.
+
+| Round-1 fix | Result | Evidence |
+|---|---|---|
+| 1(a) response bin | PASS | `response_bin` = `floor(f·T/header_fs + 0.5)` `src/features/ssvep/spectral_power.py:87-96`; `spectrum_peaks` keeps `k/f_bin/power` (nearest-labelled) and adds `k_resp/f_resp/power_resp`, raises if the response bin falls off the axis `:98-134`; header fs (samples / `sub_window_sec`) passed from `main` `scripts/exploration/diagnose_occipital_spectra.py:304-305`; nearest-labelled bin printed only when it differs `:224-227` |
+| 1(b) specificity | PASS | `specificity_ratio` own / median of other stimulus classes at the 1f0 response bin, 201/202 excluded `diagnose_occipital_spectra.py:186-200`; computed from `res["spectra"]` only `:179-182`; printed per class `:228-232` |
+| 1(c) rest codes | PASS | `format_peaks` omits target, harmonics and specificity for codes without f0 `:203-218`; figures, default fs, axis and `visualize_data.py` unchanged (no diff) |
+| 2(a) 24/30/17 vs 25/31/18 | PASS | `test_response_bins_legacy_axis_24_30_17`: argmax = response bin ≠ nearest-labelled; exact-bin power (N/2)²A² = 65536; mutant `round(f·T/250)` asserted to fail; console line check incl. 105 `2f0 response bin 17 (16.602 Hz)` in `test_response_bins_through_class_spectra_and_console` |
+| 2(b) coincidence at fs 256 | PASS | `test_response_bin_equals_nearest_at_header_fs`: all eight in-band harmonics 24, 20, 15, 30, 11, 22, 9, 17; no nearest-labelled text |
+| 2(c) specificity known answers | PASS | analytic 1 + (AN/2B)² checked by `.venv/bin/python -c "print(1+(10*256/(2*50))**2)"` → `656.3600000000001`; nearest-bin mutant fails; shared 120/11 Hz rhythm → 104 ratio within 0.02 of 1 (tolerance derived from noise variance in the docstring), noise-free exactly 1 |
+| 2(d) format_peaks with 201/202 | PASS | `test_format_peaks_with_rest_codes`: exact rest lines, `n_others` 4 |
+| 3 fourth run command | PASS | `02_plan.md` "Amendment — pre-run audit Round 1" lists `visualize_data --all --fs 256 --out-suffix header`, expected `max |computed - saved| = 0`, and points to the criterion above |
+| Privacy | PASS | `git ls-files` filtered for data/npy/outputs/reports/local tooling: 0; fragment-built vendor/co-author grep over `HEAD` (all paths) and `git log --format=%B main..HEAD`: 0 hits |
+
+Rule table of Round 1 stands, with R9 now PASS and the test-coverage CONCERN (2f0 untested)
+resolved. No new FAIL or CONCERN. Hand-checked variants: response bin taken on the labelled
+axis (caught by 2a), specificity read at the nearest-labelled bin (caught by 2c), 201/202
+counted among the other classes (caught by 2d, `n_others` 4).
+
+Non-blocking: `specificity_ratio` returns `inf` when the other classes' median is exactly 0
+(only on synthetic zero spectra); not reachable on real data.
+
+The pre-committed criterion (Round 1) is unchanged and governs the results review; the
+console line now gives response-bin power, ratio to the band median and specificity directly.
+The runner may proceed with the four commands of `02_plan.md` (amendment).
+
 ## Results review
 
 Verdict: APPROVE / REJECT
