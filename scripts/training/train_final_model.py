@@ -8,9 +8,10 @@ LDA part: StandardScaler + Shrinkage-LDA (lsqr, auto) on the 37-feature hybrid (
 + 5 FBCCA, legacy fs 250, per-window FBCCA), saved to <models-dir>/<S>_shrinkage_lda.joblib as a
 dict {model, scaler, classes, subject_id, feature_dim, fit, data_source, feature_names}.
 
-HOOK (deep-learning builder): the fusion CNN export is added in `main` after the LDA export, as a
-function `export_fusion_cnn(subject, X_psd, X_time, y, hybrid, models_dir)` writing
-<models-dir>/<S>_fusion_cnn.pt; reuse `load_subject_inputs` below.
+CNN part: the DualBranchFusionCNN (10,005 parameters) is fitted on all windows (seed 42, 140
+epochs, per-branch scalers fitted on all windows) and saved to <models-dir>/<S>_fusion_cnn.pt as a
+dict {state_dict, scalers (spatial, fbcca), classes, label_map, subject_id, architecture, fit,
+data_source, n_windows, train_accuracy}. `train_accuracy` is on the fitted windows themselves.
 """
 
 import argparse
@@ -33,12 +34,17 @@ if str(ROOT) not in sys.path:
 
 import joblib  # noqa: E402
 import numpy as np  # noqa: E402
+import torch  # noqa: E402
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis  # noqa: E402
 from sklearn.preprocessing import StandardScaler  # noqa: E402
 
 from scripts.training.train_models import (  # noqa: E402
   CLASS_CODES, DEFAULT_CONFIG, FIT_LABEL, KEEP_CHANNEL_NAMES, STIM_FREQS_HZ, arrays_exist, build_hybrid,
   check_keep_channels, harmonic_bin_indices, load_config, load_stimulus_windows)
+
+from src.models.cnn.spatial_spectral_cnn import (  # noqa: E402
+  ARCHITECTURE, EPOCHS, SEED, apply_scalers, count_parameters, fit_scalers, label_maps,
+  prepare_spatial_spectral_tensors, resolve_device, train_model, predict_proba)
 
 DEFAULT_SUBJECT = "S04"
 DATA_SOURCE = "legacy windows data/processed/<S>/ (P02, OO session), stimulus windows only"
@@ -76,12 +82,38 @@ def export_lda(subject: str, hybrid: np.ndarray, y: np.ndarray, models_dir: Path
   return path
 
 
+def export_fusion_cnn(subject: str, X_psd: np.ndarray, y: np.ndarray, hybrid: np.ndarray, models_dir: Path,
+                      device: str = "auto", epochs: int = EPOCHS) -> Path:
+  """Fit the fusion CNN on all windows (R2 exception: export/XAI only) and write <S>_fusion_cnn.pt."""
+  dev = resolve_device(device)
+  xs, xf = prepare_spatial_spectral_tensors(X_psd), hybrid[:, -5:]
+  classes, to_idx = label_maps(y)
+  yi = np.array([to_idx[int(c)] for c in y])
+  scalers = fit_scalers(xs, xf)
+  xs_s, xf_s = apply_scalers(scalers, xs, xf)
+  model = train_model(xs_s, xf_s, yi, SEED, dev, epochs)
+  train_acc = float(np.mean(predict_proba(model, xs_s, xf_s, dev).argmax(1) == yi))
+  bundle = {"state_dict": {k: v.cpu() for k, v in model.state_dict().items()}, "scalers": scalers,
+            "classes": classes, "label_map": to_idx, "subject_id": subject, "architecture": dict(ARCHITECTURE),
+            "n_parameters": count_parameters(model), "fit": FIT_LABEL, "data_source": DATA_SOURCE,
+            "n_windows": int(len(y)), "epochs": int(epochs), "train_accuracy": train_acc}
+  path = Path(models_dir) / f"{subject}_fusion_cnn.pt"
+  path.parent.mkdir(parents=True, exist_ok=True)
+  torch.save(bundle, path)
+  print(f"  fusion CNN: {bundle['n_parameters']} parameters, {epochs} epochs, device {dev}, "
+        f"accuracy on the fitted windows (not a test score) {100 * train_acc:.2f}%")
+  return path
+
+
 def build_parser() -> argparse.ArgumentParser:
   p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
   p.add_argument("--subject", default=DEFAULT_SUBJECT, help=f"default: {DEFAULT_SUBJECT}")
   p.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
   p.add_argument("--processed-dir", type=Path, default=None)
   p.add_argument("--out-dir", type=Path, default=None, help="default: <root>/outputs (models in <out>/models)")
+  p.add_argument("--device", default="auto", choices=["auto", "cpu", "cuda"])
+  p.add_argument("--epochs", type=int, default=EPOCHS, help=f"fusion CNN epochs (default {EPOCHS}; fewer only for smoke)")
+  p.add_argument("--skip-cnn", action="store_true", help="export the LDA only")
   return p
 
 
@@ -100,7 +132,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         f"FBCCA legacy fs=250 (PF-04), per-window sub-bands (R3/PF-14)")
   path = export_lda(args.subject, hybrid, y, models_dir)
   print(f"Saved: {path}")
-  # HOOK(deep-learning): export_fusion_cnn(args.subject, X_psd, X_time, y, hybrid, models_dir) goes here.
+  if not args.skip_cnn:
+    print(f"Saved: {export_fusion_cnn(args.subject, X_psd, y, hybrid, models_dir, args.device, args.epochs)}")
   return 0
 
 

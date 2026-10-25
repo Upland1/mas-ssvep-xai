@@ -7,8 +7,8 @@ smoothed accuracy on the hybrid (32 harmonic-PSD + 5 FBCCA) under
 (scaler inside each fold, R2). Data source: legacy windows, the `--paradigm` session file.
 Output: <out-dir>/reports/batch_run_subjects.csv.
 
-HOOK (deep-learning builder): `evaluate_subject` returns the row dict of one subject; the fusion
-CNN adds its columns there (`CNN 1.0 s`, `CNN smoothed`) by updating the same dict.
+The fusion CNN (10,005 parameters, same legacy CV and smoothing) adds `CNN 1.0 s`, `CNN smoothed` and
+`CNN train acc` (mean fold training accuracy, reported next to the test accuracy).
 """
 
 import argparse
@@ -30,6 +30,9 @@ if str(ROOT) not in sys.path:
   sys.path.insert(0, str(ROOT))
 
 import pandas as pd  # noqa: E402
+
+from src.models.cnn.spatial_spectral_cnn import (  # noqa: E402
+  EPOCHS, evaluate_temporal_smoothing, prepare_spatial_spectral_tensors, train_and_eval_fusion_cnn_cv)
 
 from scripts.training.train_final_model import load_subject_inputs  # noqa: E402
 from scripts.training.train_models import (  # noqa: E402
@@ -53,7 +56,8 @@ def ensure_arrays(subject: str, processed: Path, paradigm: str, raw_dir: Optiona
   return arrays_exist(processed, subject)
 
 
-def evaluate_subject(subject: str, processed: Path, paradigm: str) -> dict:
+def evaluate_subject(subject: str, processed: Path, paradigm: str, device: str = "auto", epochs: int = EPOCHS,
+                     run_cnn: bool = True) -> dict:
   """Row of one subject: LDA 1.0 s / smoothed (legacy leaky CV, no-reset smoothing)."""
   X_psd, X_time, y, hybrid = load_subject_inputs(processed, subject)
   if len(y) < N_FOLDS * len(CLASS_CODES):
@@ -61,10 +65,15 @@ def evaluate_subject(subject: str, processed: Path, paradigm: str) -> dict:
   lda = {k: v for k, v in make_classifiers().items() if k == "Shrinkage-LDA"}
   df, _ = run_evaluation(hybrid, y, subject, lda)
   r = df.iloc[0]
-  # HOOK(deep-learning): compute the fusion CNN CV on (X_psd, hybrid[:, -5:], y) and add its columns.
-  return {"Subject": subject, "Data source": f"legacy windows, {paradigm}", "n_windows": len(y),
+  row = {"Subject": subject, "Data source": f"legacy windows, {paradigm}", "n_windows": len(y),
           "LDA 1.0 s": r["Accuracy"], "LDA smoothed": r["Smoothed Accuracy"],
           "cv": r["cv"], "smoothing": r["smoothing"]}
+  if run_cnn:
+    res = train_and_eval_fusion_cnn_cv(prepare_spatial_spectral_tensors(X_psd), hybrid[:, -5:], y,
+                                       epochs=epochs, device=device)
+    row.update({"CNN 1.0 s": res["accuracy"], "CNN train acc": res["train_accuracy"],
+                "CNN smoothed": evaluate_temporal_smoothing(res["proba"], y, res["classes"])})
+  return row
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -74,6 +83,9 @@ def build_parser() -> argparse.ArgumentParser:
   p.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
   p.add_argument("--raw-dir", type=Path, default=None)
   p.add_argument("--processed-dir", type=Path, default=None)
+  p.add_argument("--device", default="auto", choices=["auto", "cpu", "cuda"])
+  p.add_argument("--epochs", type=int, default=EPOCHS, help=f"fusion CNN epochs (default {EPOCHS}; fewer only for smoke)")
+  p.add_argument("--skip-cnn", action="store_true", help="LDA columns only")
   p.add_argument("--out-dir", type=Path, default=None, help="default: <root>/outputs")
   return p
 
@@ -91,13 +103,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
       print(f"[-] Skipping {s}: no arrays")
       continue
     try:
-      row = evaluate_subject(s, processed, args.paradigm)
+      row = evaluate_subject(s, processed, args.paradigm, args.device, args.epochs, not args.skip_cnn)
     except (ValueError, RuntimeError) as exc:
       print(f"[-] Skipping {s}: {exc}")
       continue
     rows.append(row)
     print(f"  {s}: n={row['n_windows']}  LDA 1.0 s {100 * row['LDA 1.0 s']:.2f}%  "
           f"smoothed {100 * row['LDA smoothed']:.2f}%")
+    if "CNN 1.0 s" in row:
+      print(f"      fusion CNN 1.0 s {100 * row['CNN 1.0 s']:.2f}% (train {100 * row['CNN train acc']:.2f}%)  "
+            f"smoothed {100 * row['CNN smoothed']:.2f}%")
   if not rows:
     return 1
   df = pd.DataFrame(rows)
@@ -106,6 +121,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
   df.to_csv(csv, index=False)
   print(f"Mean over {len(df)} subjects: LDA 1.0 s {100 * df['LDA 1.0 s'].mean():.2f}%, "
         f"smoothed {100 * df['LDA smoothed'].mean():.2f}%")
+  if "CNN 1.0 s" in df:
+    print(f"Mean fusion CNN 1.0 s {100 * df['CNN 1.0 s'].mean():.2f}%, smoothed {100 * df['CNN smoothed'].mean():.2f}%")
   print(f"Saved: {csv}")
   return 0
 

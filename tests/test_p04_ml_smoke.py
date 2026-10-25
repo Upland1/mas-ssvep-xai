@@ -56,14 +56,14 @@ def test_pipeline_end_to_end(tree):
   assert train_models.main(["--subject", "S01", "--processed-dir", str(proc), "--out-dir", str(out)]) == 0
   assert (out / "reports" / "S01_model_evaluation.csv").is_file()
   for s in ("S01", "S04"):
-    assert train_final_model.main(["--subject", s, "--processed-dir", str(proc), "--out-dir", str(out)]) == 0
+    assert train_final_model.main(["--subject", s, "--processed-dir", str(proc), "--out-dir", str(out), "--epochs", "2"]) == 0
   b = joblib.load(out / "models" / "S01_shrinkage_lda.joblib")
   assert {"model", "scaler", "classes", "subject_id", "feature_dim"} <= set(b) and b["feature_dim"] == 37
   assert run_xai.main(["--subject", "S04", "--processed-dir", str(proc), "--out-dir", str(out)]) == 0
   assert compare_subject_xai.main(["--out-dir", str(out)]) == 0
   assert (out / "figures" / "xai_heatmaps" / "compare_S01_S04.png").is_file()
   assert batch_run_subjects.main(["--subjects", "S01", "S04", "--processed-dir", str(proc),
-                                  "--out-dir", str(out)]) == 0
+                                  "--out-dir", str(out), "--epochs", "2"]) == 0
 
 
 def test_weight_arrays_slices():
