@@ -1,6 +1,6 @@
 # P06 · 07 · Scientific review
 
-Status: DRAFT (pre-run audit PASS; results review part 1 written, report v1 part pending)
+Status: READY
 Author: scientific-reviewer
 Reads: 00, 02, 03_changes_*, 04 and every changed file (pre-run); 05, 06 and the CSVs (results)
 
@@ -188,11 +188,34 @@ Rejecting would only turn an unanswerable definition question into a blocker. Ne
 - **Fitted objects.** Pre-run, I found no full-data fit in the reported path. The R11 note adds that the original fits its scalers per block in-fold, which is equivalent.
 - **Statistics:** none in this phase (R7 N/A).
 
-### Report v1 (P06.4) — pending
+### Report v1 (P06.4) — Round 1
 
-To be completed against the pre-committed checks (a)–(h) above, after the scribe's `docs/report/v1/` and `03_changes_scribe.md` are READY. Report v1 must also meet D-1 conditions (a)–(b): the SFS row shown as ours with R-4 beside it and the reason. No ranking claim may rest on the SFS row.
+Reviewed at a42a66f: `docs/report/v1/report.md` (3881 words, `wc -w`), `docs/report/v1/methodology_infographic_v1.svg`, and `03_changes_scribe.md`. Both report files are tracked (`git ls-files docs/report/v1`).
 
-Verdict: PENDING (report v1)
+| Check | Result | Evidence |
+|---|---|---|
+| (a) Seven sections, about 5 pages | PASS | Abstract (`report.md:7`), 1 Introduction (`:11`), 2 Materials and Methods (`:17`), 3 Results (`:63`), 4 Discussion (`:135`), 5 Conclusion (`:147`), References (`:155`). There is also a §6 "shown script" (`:151`). 3881 words is about 5–6 pages |
+| (b) Historical title + correction note directly under it; no sentence presenting leakage-free as true | PASS | The title (`:1`) is verbatim the roadmap's. The boxed note at `:3` is directly under it. `grep -noiE "leak(age)?[- ]free"` hits only `:1`, `:3`, `:9` ("claim is wrong") and `:145` ("claim is therefore wrong") |
+| (c) Tables equal the CSVs cell by cell, with paths | PASS | Shown command: `.venv/bin/python -I -` parsed the markdown tables of `report.md` and compared them with `pd.read_csv(..., dtype=str, keep_default_na=False)`. Output: `reports/feature_selection_ablation_S03.csv header eq True cells eq True`, `reports/five_subjects_benchmark.csv header eq True cells eq True`, `diag table eq True` (Table 5 vs `reports/feature_selection_sfs_diagnostics_S03.csv`, window counts `round(acc*1.97)`). Each table caption names its CSV and log. Table 2 deltas re-derived: +5.08 / +2.54 |
+| (d) Legacy methods stated | PASS | §2.2 (`:25-33`): window-level StratifiedKFold(5, shuffle, 42), `i % 5`, fs 250, per-window filtering, per-script mask 0.5–120 / 0.1–35 µV, FBCCA on 7 channels (`:37`), PO7 excluded (`:23`) |
+| (e) R9 per subject with data source | PASS (one factual fix) | Table 3 lists all five subjects at 1.0 s and 2.0 s; §2.1 gives the data source (legacy folders `data/processed/<S>/`, OO session). Fix 1 below (rejected-window sentence) |
+| (f) R10, only opened sources | PASS | 16 references, all repository paths or installed-package lines; primary papers explicitly not cited (`:174`). Spot-checked in this run: `sklearn/feature_selection/_sequential.py:189-191` (`direction="forward"`, `scoring=None`, `cv=5`); `sklearn/discriminant_analysis.py:48` ("'auto': automatic shrinkage using the Ledoit-Wolf lemma"); `src/features/ssvep/window_mask.py:17` (0.5/120/0.1/35); `configs/pipeline_config.yaml:15-21` (1–60 Hz, order 4, vpp 200, std 0.5–60); `scripts/preprocessing/run_preprocessing.py:1-7,60-61` (filtfilt, vpp_min 0.5); `mas/state/reports/P05.md:25,59` (Chebyshev-I order 4, 3 harmonics). Each says what the report claims |
+| (g) Infographic present, valid, labelled | PASS | `xml.etree.ElementTree` parse OK, root `svg`, viewBox `0 0 1200 720`. The text includes "Methodology pipeline v1 (historical, P06)", "v1 — historical" and "Not the corrected pipeline". The flow is the planned 8 steps, with the legacy notes (R1/PF-01, PF-04, R3/PF-14) and source paths |
+| (h) No vendor/tool names | PASS (one wording fix) | Fragment-built pattern over `docs/report/v1/*` and the last 3 commit messages: no vendor or assistant hits. The internal word "handback" at `:153` is fix 4 |
+| D-1 (a) ours beside R-4, with reason, never "reproduced" | **FAIL (fix 2)** | §2.5, §3.1 Table 2, §4 and §5 are correct. But three blanket sentences claim the whole ablation was reproduced: `:13` "This report reproduces both", `:137` "The cohort table and the ablation reproduce the legacy protocol numerically", `:149` "This report reproduces … the S03 feature-selection ablation" (`:149` then says four of five; `:13` and `:137` do not) |
+| D-1 (b) SFS definition named | PASS | `:51` and `:87` give the full definition. The abstract and conclusion refer to the row as deviation D-1 without a ranking claim |
+| Interpretation | **FAIL (fix 3)** | `:139` says "No uncertainty interval was computed, so the rows are not ranked by significance" and then "The sub-band pruning result is the clearest effect". Table 1 contradicts it: ANOVA costs more than pruning at 1.0 s (shown command: full − ANOVA = 4.07 pp, 8.02 windows; full − pruning = 3.05; full − MI = 2.54). A single-subject, leaky, interval-free difference is not an "effect" of the band |
+
+### Required fixes (report v1, scribe; saved to `docs/report/v1/report.md` by whoever holds write permission, as for a42a66f)
+
+1. **R9 / factual, `report.md:143`.** "The S02 subject has three rejected windows and S04 one" leaves out S03, which also has 3 rejected windows (Table 3) and is the ablation subject. Name S02 (3), S03 (3) and S04 (1). Say that the `i % 5` resets of these subjects, including every S03 ablation row, are misaligned after their rejections.
+2. **D-1 (a), `report.md:13` and `:137`, and `:149` for consistency.** Qualify the reproduction claims: four of the five ablation rows and all cohort values reproduce the reference; the SFS row is deviation D-1 (ours, not reproduced). Suggested for `:137`: "The cohort table and four of the five ablation rows reproduce the reference values numerically; the SFS row does not (D-1)."
+3. **Interpretation, `report.md:139`.** Delete "The sub-band pruning result is the clearest effect: removing the 38–52 Hz band costs about three points at 1.0 s on this subject." Or replace it with a reading Table 1 supports, e.g. "Every reduced set is at or below the full baseline at 1.0 s (by 0.51–4.07 pp, 1–8 windows); with one subject, a leaky split and no interval, no reduction is singled out." Any arithmetic must come from a shown command.
+4. **Traceability, `report.md:153`.** "The script is in Part C of the handback" points to something not in the repository. Point to `mas/state/phases/P06-feature-selection-cohort/03_changes_scribe.md`, "Part C". Also extend reference [8] (`:164`) with "results review part 1 (D-1, commit 637dad6)", since §2.5, §3.1 and §4 cite [8] for D-1.
+
+No other change is needed. Tables, title, note, methods, references and infographic pass. Re-review covers the changed lines and re-runs the table-equality command.
+
+Verdict: REJECT
 
 ### Decisions for decisions.md
 
