@@ -138,3 +138,26 @@ Result and scope
 - S03 ablation, 1.0 s / 2.0 s smoothed: full 90.36 / 95.43; pruning (p 45) 87.31 / 94.92; ANOVA (p 25) 86.29 / 94.42; mutual information (p 25) 87.82 / 93.40; SFS (p 20) 89.85 / 95.94.
 - Four R-4 rows and all R-5 values exact. The SFS row is not reproduced (the original has no SFS); accepted as D-1, reported as ours.
 - Cohort S01–S05 at R-5 exactly; mean 83.33 / 87.57. Legacy and leaky; not comparable with R-6.
+
+## P07 — Two-tier artifact quality gate and the 8-channel montage
+
+2026-10-25, branch `phase/P07-two-tier-quality`. Code and run at `fa5dade`; results review at `8b6262f`. Report: `mas/state/reports/P07.md`.
+
+Added
+- `src/io/channels.py`: `FULL_MONTAGE`, `resolve_channel_names(n)` (8 full montage, 7 without PO7, else None), `legacy_scalp`, `subject_channel_names`.
+- `scripts/benchmarks/feature_based/benchmark_n_subjects.py`: five-subject benchmark on the two-tier gate, `--n-jobs`, `reports/n_subjects_benchmark.csv` and `.meta.txt`.
+- Tier-1 channel drop, `apply_artifact_quality_pipeline`, `compute_channel_quality_stats`, `identify_noisy_channels`, `drop_noisy_channels` in `src/preprocessing/signal/quality_check.py`.
+- Tests: `tests/test_p07_quality_signal.py` (17), `tests/test_p07_ml_engineer.py` (15), `tests/test_p07_known_answer.py` (8), `tests/test_p07_round1_known_answer.py` (5); suite `503 passed`.
+
+Changed
+- `configs/pipeline_config.yaml`: config v2, 8 scalp channels in montage order, `excluded: []`.
+- `src/features/ssvep/{fbcca,fbcsp,psd}_extraction.py`, `window_mask.py`, `harmonic_psd.py`, `src/models/classical/{feature_spaces,benchmark_runner}.py`: four-value extractor returns, one shared gate decision (`precomputed=`), names resolved by name, P04 positions checked against each subject's names.
+- `scripts/preprocessing/run_preprocessing.py`: tier-1 detection (`--chan-*`, `--no-channel-drop`), `channels.json`, raw gate `vpp_min` pinned at 0.5 with `--vpp-min 5.0` as the labelled PF-07 demo, ungated summary, `--legacy-p02`, refusal to write into legacy 7-channel folders (`--overwrite-legacy-arrays`).
+- Every feature-based and evaluation script updated to the new API; `Makefile` `preprocess` uses `--legacy-p02`.
+- Six P01, P02, P03, P05 and P06 test files and `tests/p05_synth.py` follow config v2; the vacuous P06 layout test is replaced and the suite cut from 469 s to 191.73 s.
+
+Result and scope
+- Benchmark (legacy leaky CV): clean/rejected 200/0, 196/3, 197/3, 197/1, 200/0 (R-6 exact); channels kept 7, dropped none. 1.0 s / 2.0 s: 64.50 / 75.50, 66.33 / 71.94, 90.36 / 95.43, 98.98 / 98.48, 96.50 / 96.50; mean 83.33 / 87.57 (equal to R-5 to two decimals; not comparable with R-6 accuracies).
+- S03 pinned run: 317 windows, equal to the legacy arrays; PO7 dropped by tier 1 (100 % fail).
+- PF-07: `--vpp-min 5.0 --no-channel-drop` rejects 320 of 320 S03 windows, all by PO7 `vpp_high`; with PO7 dropped, 5.0 and 0.5 both give 317/3. Accepted deviation D-1; open question for Sebastian on the cause.
+- Legacy 7-channel arrays not regenerated (SHA-256 unchanged); `make preprocess` must not run before P11.
