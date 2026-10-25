@@ -23,6 +23,7 @@ Recall per Class, then smoothed and bookkeeping columns) and confusion matrices
 import argparse
 import re
 import sys
+import warnings
 from pathlib import Path
 from typing import Optional, Sequence
 
@@ -58,6 +59,9 @@ from sklearn.preprocessing import StandardScaler  # noqa: E402
 from sklearn.svm import SVC  # noqa: E402
 
 from src.features.ssvep.spectral_power import LEGACY_FS_HZ  # noqa: E402
+
+# SVC(probability=True) is the settled P04 setting (decisions.md); silence its deprecation notice.
+warnings.filterwarnings("ignore", message="The `probability` parameter", category=FutureWarning)
 
 SUBJECT_PATTERN = re.compile(r"^S\d+$")
 DEFAULT_CONFIG = ROOT / "configs" / "pipeline_config.yaml"
