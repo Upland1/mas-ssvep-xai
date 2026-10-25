@@ -8,3 +8,4 @@
 | 3 Brief | orchestrator | 2026-10-25 | skipped | — | — | none | |
 | 4 Plan | orchestrator | 2026-10-25 | 02_plan.md READY (auto) | — | as above | none | legacy arrays not regenerated; PF-07 demo into data/processed_p07_demo/; suite runtime cut required |
 | 5 Build (data-signal) | data-signal | 2026-10-25 | 03_changes_data-signal.md READY; 076375e…a2ff2e9; suite no failures (~8 min) | 1 | 03_ROADMAP P07, PF-05–10 | none | config v2 forced legacy_scalp() in 8 consumers + test updates; plan amended with the --no-channel-drop PF-07 run |
+| 5 Build (ml-engineer) | ml-engineer | 2026-10-25 | 03_changes_ml-engineer.md READY; 020ebc9, 317a995, 7588a25, 97fe5f9; suite 485 passed in 227 s (from 469 s) | 1 | 03_ROADMAP P07, PF-06/08/10 | none | extractors 4-value + precomputed=; all consumers updated; benchmark_n_subjects; vacuous P06 test replaced; P05/P06 old gate reachable via thresholds=P05_MASK_THRESHOLDS, NO_CHANNEL_DROP |
