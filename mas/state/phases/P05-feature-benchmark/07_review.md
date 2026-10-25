@@ -235,7 +235,8 @@ None.
 
 ## Results review
 
-Verdict: APPROVE (with one accepted qualitative deviation, D-1 below)
+Verdict: APPROVE
+Accepted deviation: D-1 (qualitative, see below).
 
 **What I read:**
 - `05_run.md` and `06_verify.md` "Round 2" (971171d);
