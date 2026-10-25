@@ -53,3 +53,30 @@ Total about 74 s, far below `LOCAL_RUN_BUDGET_MIN` (120). No human-run request.
 ## Human run requests
 
 None.
+
+---
+
+## Round 2
+
+Branch / commit: `phase/P05-feature-benchmark` @ edcc17747d0ce57f17d880da24ee3bda1e5bf7a4, clean tree (`git status --porcelain` empty before and after; every log header shows an empty `porcelain:` block). CPU, defaults, figures on, Python 3.12.3. Round 1 logs kept; Round 2 logs carry the `_r2` suffix. Deliverables in `reports/` and `outputs/` were overwritten (Round 1 CSVs copied to `mas/state/scratch/r1_outputs/` for the comparison).
+
+Clean-checkout tests: worktree `mas/state/scratch/verify_P05_r2` @ edcc177 (removed), `python -m pytest tests/ -p no:warnings -o addopts="" -q`: `426 passed in 107.32s (0:01:47)`, exit 0 (`mas/state/scratch/pytest_P05_verify_r2.txt`).
+
+Launcher `mas/state/scratch/run_P05_r2.sh` (same wrapper as Round 1, `set -o pipefail`, exit code from `PIPESTATUS[0]`), start 2026-10-25T02:44:25-06:00. Same seven command lines as Round 1, each run once:
+
+| # | Command (prefix `.venv/bin/python -m`) | Runtime | Exit | Log (`reports/logs/P05/`) |
+|---|---|---|---|---|
+| 1 | `scripts.benchmarks.feature_based.benchmark_cross_validation --subject S03` | 12 s | 0 | `benchmark_cross_validation_S03_r2_20261025T024425.log` |
+| 2 | `scripts.benchmarks.feature_based.benchmark_harmonic_fbcca --subject S03` | 3 s | 0 | `benchmark_harmonic_fbcca_S03_r2_20261025T024437.log` |
+| 3 | `scripts.evaluation.test_sklearn_models --subject S03` | 10 s | 0 | `test_sklearn_models_S03_r2_20261025T024440.log` |
+| 4 | `scripts.evaluation.evaluate_confusion_matrix --subject S03` | 4 s | 0 | `evaluate_confusion_matrix_S03_r2_20261025T024450.log` |
+| 5 | `... evaluate_confusion_matrix --subject S03 --m 2` | 4 s | 0 | `evaluate_confusion_matrix_S03_m2_r2_20261025T024454.log` |
+| 6 | `... evaluate_confusion_matrix --subject S01` | 4 s | 0 | `evaluate_confusion_matrix_S01_r2_20261025T024458.log` |
+| 7 | `... evaluate_confusion_matrix --subject S02` | 4 s | 0 | `evaluate_confusion_matrix_S02_r2_20261025T024502.log` |
+| 8 | `... evaluate_confusion_matrix --subject S04` | 4 s | 0 | `evaluate_confusion_matrix_S04_r2_20261025T024506.log` |
+| 9 | `... evaluate_confusion_matrix --subject S05` | 4 s | 0 | `evaluate_confusion_matrix_S05_r2_20261025T024510.log` |
+| 10 | `scripts.exploration.visualize_data --subject S03` | 4 s | 0 | `visualize_data_S03_r2_20261025T024514.log` |
+
+Key console lines (verbatim): header `smoothing: legacy i%5 trial smoothing (R8 legacy, PF-02): 2-window average, reset at i % 5 == 0 of the clean array` and `window mask (...): vpp [0.5, 120] uV, std [0.1, 35] uV`; #4 `Shrinkage-LDA lsqr: 1.0 s 90.36%  2.0 s smoothed 95.43% (legacy i%5 trial smoothing)` and `DIAGNOSTIC only (not the reported number): no-reset smoothing 95.94%`; #1 `Cohort: 1 subject (S03), 55 rows, 0 model failures; best FBCSP + FBCCA (in-fold) / Shrinkage-LDA eigen 90.36% / 95.43%; runtime 11 s`; #2 `Cohort: 1 subject (S03); 1.0 s 75.63%, 2.0 s smoothed 84.77%; runtime 3 s`; #3 `28 model x space rows, 2 failures (Continuous PSD/QDA, FBCSP (in-fold)/QDA)`.
+
+New outputs: `reports/classification_report_evaluate_confusion_matrix_<S>[_m2]_smoothed_{mod5,noreset}.txt` (12 files); all Round 1 output files overwritten. Total about 53 s. No human-run request.

@@ -99,3 +99,92 @@ All five 1.0 s values equal R-5 exactly. 2.0 s: S02 and S04 exact, S03 +0.51, S0
 - `git status --porcelain` is empty after all runs; deliverables are in the git-ignored `reports/` and `outputs/`. `git ls-files` shows no tracked raw recordings, `.npy`, `.csv`, `.png`, `data/`, `reports/` or `outputs/` entries. A check of tracked paths for the answer-key directory was blocked by the guard hook (the pattern contained its path) and was not repeated in another form; the pre-run review reports 0 hits.
 - `mas/state/scratch/reference_access.log`: 5 lines before and after the runs; no new access. Existing lines: two earlier verifier entries, two main-session entries at 21:27 (README, settled as pre-P04 in decisions.md) and one scribe grep. No P05 consultation; the builders' handoffs state "None". R11 clean.
 - Sources opened: `mas/04_REFERENCE_RESULTS.md` (R-3, R-5, tolerance rules) and the logs/CSVs cited above.
+
+---
+
+## Round 2
+
+Status: READY
+Clean checkout: `mas/state/scratch/verify_P05_r2` @ edcc17747d0ce57f17d880da24ee3bda1e5bf7a4 (worktree removed). Run record: `05_run.md` "Round 2".
+
+Verdict: FAIL
+
+Reasons (numbered; the pre-committed re-run checks 1-6 of `07_review.md` "Pre-run audit — Round 2" applied as written):
+
+1. Check 1, counts: PASS. S03 200/197/3, S01 200/200/0, S02 199/196/3, S04 198/197/1, S05 200/200/0, identical to Round 1 and to R-3/R-5 (exact), under the 0.5/0.1 limits.
+2. Check 2, same rejected set: PASS. 1.0 s unchanged from Round 1 in every subject (S03 90.36, S01 64.50, S02 66.33, S04 98.98, S05 96.50); the 55 1.0 s values of the benchmark CSV are identical to Round 1 (`True`, `mas/state/scratch/check_P05_r2.py`).
+3. Check 3, 2.0 s equals the former j%5 diagnostic: PASS (table below). The printed no-reset DIAGNOSTIC lines repeat the Round 1 reported values in all five subjects.
+4. Check 4, qualitative R-3 read only from `reports/classification_report_evaluate_confusion_matrix_S03_smoothed_mod5.txt` (m=1): half FAIL, half PASS. Class-101 precision is 0.9750 (39 of 40 predicted 101; recall 1.0000), not 1.0000: FAIL on that part. Largest two-way off-diagonal total is 104<->105 = 6 (3 + 3); every other pair is 1: PASS on that part. Per the pre-commitment this is a qualitative deviation with checks 1-3 exact; no definition was changed and the explanation or rejection is left to the results review.
+5. Check 5, benchmark table: PASS. 1.0 s columns equal Round 1 (hybrid best-of-9 90.36 strictly above PSD 84.26, Harmonic PSD 71.57, FBCCA 71.57, FBCSP 84.77; argmax 48.73 below all 18 hybrid-space supervised rows, minimum 70.05, rank 55 of 55). The 2.0 s column changed in 49 of 55 rows, the argmax row included (51.78 -> 52.28). The table has 55 rows.
+6. Check 6, two Harmonic PSD + FBCCA numbers: reported below under distinct names; they differ as expected (75.63 vs 74.11 at 1.0 s; 2.0 s both 84.77).
+7. QDA as pre-committed: absent for Continuous PSD and FBCSP (two printed `LinAlgError` failures), present for FBCCA (2.0 s 80.20).
+8. Privacy/git and R11: PASS (below).
+
+The verdict stays FAIL on the same single criterion as Round 1 (a stated qualitative R-3 item: "perfect precision on 24 Hz"), now narrower: 0.9750 instead of 0.8537, and the 104/105 pair now dominates. All quantitative R-3 items pass exactly.
+
+### R-3, S03 FBCSP(m=1) + FBCCA -> Shrinkage-LDA (`reports/flagship_S03.csv`, log `evaluate_confusion_matrix_S03_r2_20261025T024450.log`)
+
+| Quantity | Reference | Obtained | Delta (pp) | Windows (ref / obtained) |
+|---|---|---|---|---|
+| Clean / rejected | 197 / 3 | 197 / 3 | 0 | exact |
+| 1.0 s | 90.36 | 90.36 | 0.00 | 178 / 178 |
+| 2.0 s smoothed (i%5 trial smoothing, reported) | 95.43 | 95.43 | 0.00 | 188 / 188 |
+| 2.0 s no-reset (DIAGNOSTIC) | - | 95.94 | - | 189 |
+
+`flagship_S03.csv` m=2: 92.89 / 95.94 (no-reset diagnostic 96.95). Round 1 vs Round 2 for S03 m=1: 2.0 s 95.94 -> 95.43.
+
+### Qualitative R-3 (source: `reports/classification_report_evaluate_confusion_matrix_S03_smoothed_mod5.txt`, titled REPORTED, accuracy 95.43%)
+
+Confusion counts from the file (rows true, columns predicted, 101..105):
+
+| true \ pred | 101 | 102 | 103 | 104 | 105 |
+|---|---|---|---|---|---|
+| 101 | 39 | 0 | 0 | 0 | 0 |
+| 102 | 1 | 38 | 0 | 0 | 0 |
+| 103 | 0 | 1 | 39 | 0 | 0 |
+| 104 | 0 | 0 | 1 | 36 | 3 |
+| 105 | 0 | 0 | 0 | 3 | 36 |
+
+Precision: 101 0.9750, 102 0.9744, 103 0.9750, 104 0.9231, 105 0.9231; recall 101 1.0000. Shrinkage-LDA lsqr/eigen tied best on the hybrid (90.36 / 95.43), LogReg L2 95.43 at 2.0 s.
+
+### Feature-space x model, Round 2 2.0 s columns (1.0 s identical to Round 1, see Round 1 table)
+
+| Model | Harm+FBCCA 37 (six-space, FBCCA all channels) | FBCSP+FBCCA 55 |
+|---|---|---|
+| Ridge | 74.62 / 89.34 | 83.25 / 91.88 |
+| LogReg L2 | 73.10 / 84.26 | 89.85 / 95.43 |
+| LogReg L1 | 75.13 / 83.76 | 87.31 / 94.42 |
+| LogReg ElasticNet | 74.11 / 84.26 | 88.32 / 94.92 |
+| SGD log-loss | 70.05 / 77.16 | 87.31 / 91.88 |
+| SGD PA | 70.56 / 82.23 | 85.28 / 94.42 |
+| LDA svd | 74.11 / 87.82 | 81.22 / 89.85 |
+| Shrinkage-LDA lsqr / eigen | 74.11 / 84.77 | 90.36 / 95.43 |
+
+FBCCA argmax (zero-training): 48.73 / 52.28. Full 55-row table: `reports/feature_space_benchmark_S03.csv` (all 2.0 s values reproduced there; the other four spaces' 2.0 s values also changed, Round 1 values in the Round 1 table above).
+
+### Two "Harmonic PSD + FBCCA" numbers (Shrinkage-LDA lsqr, 1.0 s / 2.0 s i%5)
+
+| Name | FBCCA channels | 1.0 s | 2.0 s | Source |
+|---|---|---|---|---|
+| Six-space table, "Harmonic PSD + FBCCA" | all 7 channels | 74.11 | 84.77 | `feature_space_benchmark_S03.csv` rows 34-35 |
+| Harmonic script, `benchmark_harmonic_fbcca` | PO8, O1, Oz, O2 | 75.63 | 84.77 | `classification_report_benchmark_harmonic_fbcca_S03.txt` header; log `benchmark_harmonic_fbcca_S03_r2_20261025T024437.log` |
+
+Harmonic PSD in both uses the PO8, O1, Oz, O2 cluster (32 features). Round 1 harmonic-script value was 74.11 / 86.29 (no-reset, all channels).
+
+### S01-S05 flagship rows (m=1, legacy leaky CV, i%5 trial smoothing; for P06)
+
+| Subject | Stimulus | Clean | Rejected | 1.0 s | 2.0 s (reported) | R-5 1.0 s / 2.0 s | no-reset diagnostic |
+|---|---|---|---|---|---|---|---|
+| S01 | 200 | 200 | 0 | 64.50 | 75.50 | 64.50 / 75.50 | 77.00 |
+| S02 | 199 | 196 | 3 | 66.33 | 71.94 | 66.33 / 71.94 | 71.94 |
+| S03 | 200 | 197 | 3 | 90.36 | 95.43 | 90.36 / 95.43 | 95.94 |
+| S04 | 198 | 197 | 1 | 98.98 | 98.48 | 98.98 / 98.48 | 98.48 |
+| S05 | 200 | 200 | 0 | 96.50 | 96.50 | 96.50 / 96.50 | 98.00 |
+
+All ten R-5 values (1.0 s and 2.0 s, five subjects) are reproduced exactly. Data source: legacy windows `data/processed/S0x/`, OO session, stimulus windows, `StratifiedKFold(5, shuffle, 42)` over windows (R1 legacy, leaky), fs 250, per-window sub-band filtering (R3 legacy), mask vpp [0.5, 120] uV / std [0.1, 35] uV. The `visualize_data` log still labels the FBCSP figure as a full-data fit (visualization only). Not comparable with R-6.
+
+### Privacy, git, R11
+
+- `git status --porcelain` empty before and after the runs; deliverables are git-ignored. No tracked data or generated files (`git ls-files` filter for raw recordings, `.npy`, `.csv`, `.png`, `data/`, `reports/`, `outputs/`: no hits).
+- `mas/state/scratch/reference_access.log` has 14 lines before and after my runs (Round 1 report: 5). Lines 6-14, dated 2026-10-24T23:48:50 to 23:49:50, are all by `ml-engineer`: git queries on the answer-key repository (branch listing, tree listing, history of the confusion-matrix script, and `show` of the original confusion-matrix script, FBCCA and FBCSP extractors, quality check, cross-validation benchmark and harmonic benchmark at commit 69873ea). They match the "Round 2 — implementation" consultation table of the ml-engineer handoff (logged consultations). Trigger: implementation, tests and a FAIL verdict existed beforehand; the reviewer noted the first access preceded the diagnostics commit by 30 s (sequencing CONCERN, not a FAIL). No access by the verifier in this round.
+- Sources opened: `mas/state/decisions.md` P05 rows, `07_review.md` Round 2, `reports/classification_report_evaluate_confusion_matrix_S03_smoothed_mod5.txt`, the logs and CSVs cited.
