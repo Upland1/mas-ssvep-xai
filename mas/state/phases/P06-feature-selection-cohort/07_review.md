@@ -1,6 +1,6 @@
 # P06 · 07 · Scientific review
 
-Status: READY
+Status: DRAFT (pre-run audit PASS; results review part 1 written, report v1 part pending)
 Author: scientific-reviewer
 Reads: 00, 02, 03_changes_*, 04 and every changed file (pre-run); 05, 06 and the CSVs (results)
 
@@ -125,21 +125,81 @@ Expected: about 1.5–3 min and about 0.5–1 min on one core (builder extrapola
 
 ## Results review
 
-Pending (after `06_verify.md` and the scribe's report v1).
+Part 1 of 2: the numeric results (R-4, R-5). Part 2, report v1 (P06.4), is pending below, and the verdict waits for it.
+
+Opened in this part:
+- `05_run.md` and `06_verify.md` (b695b9a, plus the diagnostic-run sections 348f3a4/f2fba32);
+- `03_changes_ml-engineer.md` "Round 1 — investigation" and "Round 1 — R11 consultation" (fbf7391);
+- the last decisions.md rows;
+- `reports/feature_selection_ablation_S03.csv` and the header of `reports/feature_selection_sfs_diagnostics_S03.csv`;
+- `mas/state/scratch/reference_access.log`;
+- the code diff `3030a25..HEAD`.
 
 ### Deviations from references
 
-| Ref | Expected | Obtained (log) | Δ | Within tolerance? | Explanation | Accepted? |
+Counts: windows of 197, the pre-committed ranges. Arithmetic: `round(x/1.97, 2)` and `89.85-84.77`, `95.94-93.40` (shown command: `rep [89.85, 95.94]`, `5.08 2.54`).
+
+| Ref | Expected | Obtained (`reports/feature_selection_ablation_S03.csv`, log `reports/logs/P06/benchmark_feature_selection_20261025_035546.log`) | Δ | Within tolerance? | Explanation | Accepted? |
 |---|---|---|---|---|---|---|
-| | | | | | | |
+| R-4 Full, p 55 | 90.36 (178) / 95.43 (188), = flagship | 90.36 (178) / 95.43 (188), p 55, 197/3; equals `flagship_S03.csv` | 0.00 / 0.00 | yes (exact, as pre-committed) | — | yes |
+| R-4 Pruning, p 45 | 87.31 (172) / 94.92 (187) | 87.31 / 94.92, p 45, 197/3 | 0.00 / 0.00 | yes | — | yes |
+| R-4 ANOVA, p 25 | 86.29 (170) / 94.42 (186) | 86.29 / 94.42, p 25, 197/3 | 0.00 / 0.00 | yes | — | yes |
+| R-4 MI, p 25 | 87.82 (173) / 93.40 (184) | 87.82 / 93.4, p 25, 197/3 | 0.00 / 0.00 | yes | — | yes |
+| R-4 SFS, p 20 | 84.77 (167; 165–169) / 93.40 (184; 182–186) | 89.85 (177) / 95.94 (189), p 20, 197/3 | +5.08 / +2.54 pp (+10 / +5 windows) | **no** | No reference implementation exists (below). The leak audit is clean. Ten labelled variants do not reach both ranges | **yes, as accepted deviation D-1 (P06)** |
+| R-5 S01–S05 | 200/0 64.50/75.50; 196/3 66.33/71.94; 197/3 90.36/95.43; 197/1 98.98/98.48; 200/0 96.50/96.50 | identical (`reports/five_subjects_benchmark.csv`, 06_verify R-5 table) | 0.00 on all ten | yes | same code path as P05 | yes |
+| R-5 Mean | 83.33 / 87.57 | 83.33 / 87.57 (= mean of the rounded rows, 83.334 / 87.57) | 0.00 | yes | — | yes |
+
+**Four R-4 rows and all of R-5 are exact.** I read this as fidelity of the shared path: folds, CSP, mask, FBCCA, scaler + Shrinkage-LDA and `i % 5`. The R11 reading confirms the original's ANOVA, MI and pruning definitions (277ddab `benchmark_feature_selection.py:59-64,88-122`). The one structural difference: the original selects on the scaled FBCSP block, ours on the unscaled one. It cannot move ANOVA (F is invariant to per-column affine scaling). It barely moves MI, because sklearn's MI standardises continuous features internally (installed `sklearn/feature_selection/_mutual_info.py:297`, `scale(...)`). Both rows are exact, so no change is warranted.
+
+### Decision on the SFS row: ACCEPT as deviation D-1 (P06)
+
+Evidence, each item opened in this run:
+1. **There is no SFS in the original's code to reproduce.** The R11 consultation searched the original's history: `log --all -S SequentialFeatureSelector`, "forward selection", the README at the P06-stage commit and at HEAD. It found no sequential forward selection on any branch. The P06-stage ablation script has exactly four methods: Full, ANOVA, MI, pruning (277ddab `benchmark_feature_selection.py:59-64`). R-4's SFS row therefore comes from a run or text that is not in the repository. The original report (.docx) was not readable by the agents. Estimator, candidate set, inner CV, scoring, scaling and in-fold vs full-data fitting are all unknown. No definition can be "demonstrated" from the reference, and golden rule 5 forbids choosing one because it lands near the target.
+2. **The pre-committed procedure was followed, in order.**
+   - The verifier's FAIL came first (b695b9a, 03:58).
+   - Labelled diagnostics: code a5bdafb at 04:14; the run started 04:35:43 and lasted 674 s; recorded in 348f3a4 at 04:47:32.
+   - The first reference access followed at 04:48:01 (`reference_access.log`), after the diagnostics, as required. Every access is a read-only query listed in the handoff (rows 1–6).
+   - No reported definition changed: the diagnostics CSV "reported" variant equals the reported row, and the re-written ablation CSV is byte-identical (`cmp`, 05_run.md).
+   - The diagnostic code is behind `--sfs-diagnostics`, off by default. Its rows carry "DIAGNOSTIC (P06 round 1), not a reported result". `select_sfs_fbcsp_features(cv=None)` keeps cv=5. The new splitter import is registered as legacy in `tests/test_no_leakage.py`.
+3. **No leak in our SFS.** `reports/feature_selection_sfs_audit_S03.csv` shows, per outer fold:
+   - 157–158 SFS input rows, equal to the training rows;
+   - outer index sets disjoint;
+   - 0 outer test rows found by content in the SFS input.
+
+   The audit asserts all of this in code (`leak_audit_row`, `benchmark_feature_selection.py`). This agrees with the pre-run R2 finding and the PF-11 mutant tests.
+4. **No variant reaches both ranges** (06_verify.md "Diagnostic run" table).
+   - "all 55 columns, n=20" hits the 1.0 s range (166) but misses the 2.0 s range (179).
+   - "cv=3" hits the 2.0 s range (185) but misses the 1.0 s range (173).
+
+   A single, natural definition that reproduces R-4 would have been evidence; two different variants each matching one column is not. Note: R-4's 84.77 (167/197) also appears in P05 for other spaces (e.g. FBCSP-only Shrinkage-LDA 1.0 s, `mas/state/reports/P05.md:158`). With 197 windows only about 200 values are possible, so this coincidence is **not** evidence of a transcription error. I mention it only so nobody uses it as one.
+
+Rejecting would only turn an unanswerable definition question into a blocker. Neither code fix nor tuning can resolve it from the material available to the team. Accepting is conditional on:
+- (a) The SFS value is reported as ours, 89.85 / 95.94, with R-4's 84.77 / 93.40 next to it and the reason. It is never called "reproduced".
+- (b) Our SFS definition is named everywhere it appears: `SequentialFeatureSelector`, forward, scaler + Shrinkage-LDA (lsqr, auto), unshuffled stratified inner cv=5, accuracy, 15 of the 50 FBCSP columns + 5 FBCCA, fitted in-fold.
+- (c) **Open question for Sebastian** (not a blocker): the .docx report, or his memory of the SFS run, may give the original configuration. If it does, the row is revisited as a labelled re-run, not a silent change.
+
+**Verifier restatement.** With D-1 accepted, the numeric part of `06_verify.md` should be restated as **PASS with accepted deviation D-1 (R-4 SFS row)**, in the same way P05's D-1 was handled (appended restatement, original FAIL kept). P06.4 (report v1) still has to pass before the phase verdict.
 
 ### Interpretation check
 
-<!-- Per-subject reading; inconclusive results stated as such; leakage in
-fitted objects, normalization, validation sets; statistics unit and
-multiple comparisons. -->
+- **SFS vs Full.** SFS is +1 window at 2.0 s (189 vs 188) and −1 window at 1.0 s (177 vs 178). That is a tie within one window, not "SFS beats Full". The pre-committed leak check for a subset beating Full was done (item 3) and is clean. Under window-level outer CV every row here is leaky (R1/PF-01): S03's trials have windows in both training and test folds. So neither SFS nor any other selection can be read as a real gain or loss over Full. The ordering of rows separated by a few windows is not interpretable.
+- **Configuration sensitivity.** Inner-CV and estimator changes alone move SFS between 172 and 177 windows at 1.0 s (87.31–89.85 %) and between 185 and 189 at 2.0 s (93.91–95.94 %). That is a 5-window (2.5 pp) and 4-window (2.0 pp) spread with the same p = 20. Changing the candidate set (55 columns incl. FBCCA) drops it to 166 / 179. The selected FBCSP columns differ strongly between outer folds (the audit lists five different 15-column sets; only column 9 is in all five). SFS on about 158 rows over 50 correlated CSP features is unstable. R-4's SFS row (−5.6 pp vs Full) is well inside what a plausible configuration change could produce, so the original's ranking "SFS lowest" is not a robust finding. Report v1 must not draw a methodological conclusion from the SFS row.
+- **Per subject (R9).** The ablation is single-subject (S03) by the roadmap. The cohort table reports all five subjects at 1.0 s and 2.0 s with the data source (legacy folders, OO session). The spread is large: S01 64.50 and S02 66.33 against S04 98.98 and S05 96.50. The mean of 83.33 / 87.57 hides it. All values are leaky and not comparable with R-6, as the console and `.meta.txt` state.
+- **Fitted objects.** Pre-run, I found no full-data fit in the reported path. The R11 note adds that the original fits its scalers per block in-fold, which is equivalent.
+- **Statistics:** none in this phase (R7 N/A).
+
+### Report v1 (P06.4) — pending
+
+To be completed against the pre-committed checks (a)–(h) above, after the scribe's `docs/report/v1/` and `03_changes_scribe.md` are READY. Report v1 must also meet D-1 conditions (a)–(b): the SFS row shown as ours with R-4 beside it and the reason. No ranking claim may rest on the SFS row.
+
+Verdict: PENDING (report v1)
 
 ### Decisions for decisions.md
+
+From the results review (part 1):
+- P06 | **Accepted deviation D-1:** R-4 SFS row (p 20) is not reproducible from reference code (no sequential forward selection in any commit; P06-stage 277ddab `benchmark_feature_selection.py:59-64` has Full/ANOVA/MI/pruning only). Ours 89.85 / 95.94 (177 / 189 of 197) vs 84.77 / 93.40. Leak audit clean, ten labelled variants none in both ranges, procedure order verified (diagnostics 04:47:32 before first access 04:48:01). Report it as ours, with R-4 beside it, definition named; open question to Sebastian (original .docx / run). Verifier restates the numeric verification as PASS with D-1 | results review | `P06-feature-selection-cohort/07_review.md`, `06_verify.md`, `03_changes_ml-engineer.md` R11
+- P06 | Four R-4 rows (Full, pruning, ANOVA, MI) and all ten R-5 values + means exact (Δ 0.00); the original selects on the scaled FBCSP block (277ddab l.88–91), ours on the unscaled one — equivalent for ANOVA, MI exact too; not changed | results review | same
+- P06 | Interpretation: SFS vs Full is a ±1-window tie; SFS spans 172–177 / 185–189 windows across inner-CV/estimator variants (unstable, fold-to-fold column sets differ), so neither R-4's "SFS lowest" nor our order is a finding; all P06 numbers leaky (window-level CV) | results review | same
 
 Proposed from the pre-run audit:
 - P06 | SFS estimator scaled vs bare Shrinkage-LDA (lsqr, auto) is the same classifier up to rounding (synthetic check, max |Δproba| 3.9e-15); the open SFS unknowns are estimator family, inner cv and scoring; pre-committed R-4 miss procedure in `07_review.md`.
@@ -148,6 +208,8 @@ Proposed from the pre-run audit:
 ## Sources spot-check
 
 Pre-run: `mas/04_REFERENCE_RESULTS.md` R-4/R-5 (lines 53–74) opened and matched to the plan's targets; `mas/RULES.md:28` (R8 era row) opened; `mas/02_REQUIREMENTS.md` §6 schema line opened and matched to `benchmark_5_subjects.py:54`.
+
+Results (part 1): `reports/feature_selection_ablation_S03.csv` was opened and matches 05_run.md's console rows (MI 2.0 s written `93.4`). The diagnostics CSV "reported" row is 89.85 / 95.94, equal to the reported SFS row. `reference_access.log` entries at 2026-10-25T04:48:01–04:48:46 are all ml-engineer read-only queries, matching handoff rows 1–6. I did not open the reference tree myself.
 
 <!-- Fix rounds: append "## Pre-run audit — Round N". After two failed rounds,
 set Status: BLOCKED. -->
