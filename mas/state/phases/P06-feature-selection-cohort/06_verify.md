@@ -73,7 +73,7 @@ Log: `reports/logs/P06/benchmark_feature_selection_diag_20261025_043543.log`. Ou
 | all 55 columns, n=20 | 20 | 84.26 | 166 | yes | 90.86 | 179 | no |
 | n=20 FBCSP columns | 25 | 89.85 | 177 | no | 94.92 | 187 | no |
 
-No variant lands in both R-4 SFS ranges; none lands in the 1.0 s range 165-169.
+No variant lands in both R-4 SFS ranges. Only "all 55 columns, n=20" (166 windows) lands in the 1.0 s range, and its 2.0 s value (179) is outside; only "cv=3" (185 windows) lands in the 2.0 s range, with its 1.0 s value (173) outside.
 
 (c) reports/feature_selection_sfs_audit_S03.csv (assertions passed):
 
