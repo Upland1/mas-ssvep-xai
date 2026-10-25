@@ -11,6 +11,12 @@ window is valid when **every** channel has `vpp_min <= vpp <= vpp_max` and
 explicitly (PF-07). The other helpers of this module take their thresholds as
 required keyword arguments, so no caller can inherit one silently (R5).
 
+P07 adds the two-tier pipeline (`apply_artifact_quality_pipeline`): tier 1
+drops, for the whole subject, every channel that fails the limits in strictly
+more than 50 % of the windows; tier 2 rejects windows on the surviving channels
+only. Channels are always handled by name (PF-06): after a drop the positions
+move, `channels_kept_idx` maps the kept names back to the input positions.
+
 `quality_stats` is a plain dict accumulator (see `new_quality_stats`) that the
 extractors of `src/features/ssvep/psd_extraction.py` update in place, so a
 script can report rejected windows per condition and per reason.
@@ -22,6 +28,8 @@ import numpy as np
 
 # Reason names, in the order they are reported.
 REJECT_REASONS = ("vpp_low", "vpp_high", "std_low", "std_high")
+# The four limits a `limits` dict must name (R5: none is ever inherited).
+LIMIT_KEYS = ("vpp_min", "vpp_max", "std_min", "std_max")
 
 
 def _as_window_stack(windows: np.ndarray) -> np.ndarray:
@@ -153,6 +161,155 @@ def summarize_window_quality(windows: np.ndarray, *, vpp_min: float, vpp_max: fl
     print(f"  std observed {out['std_min_obs']:.3f} / {out['std_median_obs']:.3f} / "
           f"{out['std_max_obs']:.3f} uV (min/median/max) vs limits [{std_min:g}, {std_max:g}]")
     print("  rejected by reason: " + ", ".join(f"{r} {out['reasons'][r]}" for r in REJECT_REASONS))
+  return out
+
+
+# --- P07: two-tier pipeline (channel drop, then window rejection) -----------------
+
+def _check_limits(limits: dict) -> dict:
+  """The four limits as floats; ValueError naming any that is missing (R5)."""
+  missing = [k for k in LIMIT_KEYS if k not in limits]
+  if missing:
+    raise ValueError(f"limits must name every threshold explicitly (R5); missing {missing}")
+  return {k: float(limits[k]) for k in LIMIT_KEYS}
+
+
+def _check_names(windows: np.ndarray, channel_names: Sequence[str]) -> list:
+  names = [str(c) for c in channel_names]
+  if len(names) != windows.shape[1]:
+    raise ValueError(f"{len(names)} channel names for {windows.shape[1]} channels")
+  if len(set(names)) != len(names):
+    raise ValueError(f"duplicate channel names {names}")
+  return names
+
+
+def compute_channel_quality_stats(windows: np.ndarray, channel_names: Sequence[str],
+                                  limits: dict) -> dict:
+  """Per-channel quality over a stack of windows `(n, C, T)`.
+
+  `limits` names `vpp_min`, `vpp_max`, `std_min`, `std_max` (all required).
+  A channel fails a window when its Vpp or std is outside the limits (bounds
+  inclusive, NaN fails). Returns `{name: {"fail_fraction", "n_failed",
+  "mean_vpp", "mean_std"}}` in channel order; the means are over all windows
+  (NaN-ignoring; NaN when there are no windows), the fraction is 0.0 with no windows.
+  """
+  w = _as_window_stack(windows)
+  names = _check_names(w, channel_names)
+  flags = window_quality_flags(w, **_check_limits(limits))
+  n = w.shape[0]
+  failed = (~flags["channel_ok"]).sum(axis=0)
+  out = {}
+  for c, name in enumerate(names):
+    out[name] = {
+      "fail_fraction": float(failed[c]) / n if n else 0.0,
+      "n_failed": int(failed[c]),
+      "mean_vpp": float(np.nanmean(flags["vpp"][:, c])) if n else float("nan"),
+      "mean_std": float(np.nanmean(flags["std"][:, c])) if n else float("nan"),
+    }
+  return out
+
+
+def identify_noisy_channels(windows: np.ndarray, channel_names: Sequence[str], limits: dict,
+                            fail_fraction_thresh: float = 0.5) -> list:
+  """Names (montage order) of the channels failing `limits` in **strictly more than**
+  `fail_fraction_thresh` of the windows (exactly 50 % keeps the channel)."""
+  stats = compute_channel_quality_stats(windows, channel_names, limits)
+  return [n for n, s in stats.items() if s["fail_fraction"] > fail_fraction_thresh]
+
+
+def drop_noisy_channels(windows: np.ndarray, channel_names: Sequence[str],
+                        noisy: Sequence[str]) -> tuple:
+  """`(windows_kept (n, C', T), kept_names, kept_idx)` without the channels named in `noisy`.
+
+  `kept_idx[j]` is the input position of `kept_names[j]` (PF-06). Unknown names raise ValueError.
+  """
+  w = _as_window_stack(windows)
+  names = _check_names(w, channel_names)
+  unknown = sorted(set(noisy) - set(names))
+  if unknown:
+    raise ValueError(f"channels to drop not in channel_names: {unknown}")
+  kept_idx = np.array([i for i, n in enumerate(names) if n not in set(noisy)], dtype=int)
+  return w[:, kept_idx, :], [names[i] for i in kept_idx], kept_idx
+
+
+def apply_artifact_quality_pipeline(windows: np.ndarray, y: np.ndarray,
+                                    channel_names: Sequence[str],
+                                    vpp_min: float = 5.0, vpp_max: float = 120.0,
+                                    std_min: float = 1.0, std_max: float = 35.0,
+                                    channel_fail_fraction_thresh: float = 0.5,
+                                    verbose: bool = True,
+                                    precomputed: Optional[dict] = None) -> dict:
+  """Two-tier gate: tier 1 drops noisy channels for the whole subject, tier 2 rejects windows.
+
+  `windows (n, C, T)`, `y (n,)`, `channel_names` (C names). Callers should pass
+  every threshold explicitly (R5); the defaults are the roadmap's shared gate.
+  Tier 1 judges every window on every channel (`identify_noisy_channels`,
+  strictly > `channel_fail_fraction_thresh`); tier 2 judges the windows on the
+  surviving channels only (a dropped channel cannot reject a window).
+  Raises ValueError if every channel is dropped.
+
+  `precomputed`: a dict returned by an earlier call on the same windows (same
+  length and `channel_names`); its `channels_kept` and `valid_mask` are reused
+  without recomputing, so several feature blocks share one decision (PF-10).
+
+  Returns a dict: `windows_clean (n_valid, C', T)`, `y_clean`, `valid_mask (n,)`
+  int 1/0 over the input windows, `channels_kept` (names), `channels_kept_idx`
+  (input positions of those names), `channels_dropped` (names), `channel_stats`
+  (`compute_channel_quality_stats` on the input windows; for a reused decision
+  the stats of the call that produced it).
+  """
+  w = _as_window_stack(windows)
+  y = np.asarray(y)
+  if len(y) != w.shape[0]:
+    raise ValueError(f"y has {len(y)} entries for {w.shape[0]} windows")
+  names = _check_names(w, channel_names)
+  limits = {"vpp_min": vpp_min, "vpp_max": vpp_max, "std_min": std_min, "std_max": std_max}
+  _check_limits(limits)
+
+  if precomputed is not None:
+    mask = np.asarray(precomputed["valid_mask"]).reshape(-1).astype(int)
+    if len(mask) != w.shape[0]:
+      raise ValueError(f"precomputed mask has {len(mask)} entries for {w.shape[0]} windows")
+    kept = list(precomputed["channels_kept"])
+    unknown = sorted(set(kept) - set(names))
+    if unknown:
+      raise ValueError(f"precomputed channels_kept not in channel_names: {unknown}")
+    dropped = [n for n in names if n not in set(kept)]
+    stats = precomputed.get("channel_stats")
+    if stats is None:
+      stats = compute_channel_quality_stats(w, names, limits)
+  else:
+    stats = compute_channel_quality_stats(w, names, limits)
+    dropped = [n for n, s in stats.items() if s["fail_fraction"] > channel_fail_fraction_thresh]
+    kept = [n for n in names if n not in set(dropped)]
+    if not kept:
+      raise ValueError(f"all {len(names)} channels fail the limits in > "
+                       f"{channel_fail_fraction_thresh:.0%} of the windows")
+    w_kept, _, _ = drop_noisy_channels(w, names, dropped)
+    mask = validate_eeg_windows(w_kept, **limits)
+
+  kept_idx = np.array([names.index(n) for n in kept], dtype=int)
+  keep = mask == 1
+  out = {
+    "windows_clean": w[keep][:, kept_idx, :],
+    "y_clean": y[keep],
+    "valid_mask": mask,
+    "channels_kept": kept,
+    "channels_kept_idx": kept_idx,
+    "channels_dropped": dropped,
+    "channel_stats": stats,
+  }
+  if verbose:
+    tag = " (reused decision)" if precomputed is not None else ""
+    print(f"[quality] two-tier gate{tag}: vpp [{vpp_min:g}, {vpp_max:g}] uV, std [{std_min:g}, "
+          f"{std_max:g}] uV, channel drop if fail fraction > {channel_fail_fraction_thresh:g}")
+    for n in names:
+      s = stats[n]
+      print(f"  {n}: fail {s['fail_fraction']:.1%} ({s['n_failed']}/{len(w)}), "
+            f"mean Vpp {s['mean_vpp']:.2f} uV, mean std {s['mean_std']:.2f} uV"
+            f"{'  -> DROPPED' if n in dropped else ''}")
+    print(f"  channels kept {kept}; dropped {dropped or 'none'}; windows kept "
+          f"{int(keep.sum())}/{len(w)}, rejected {int((~keep).sum())}")
   return out
 
 
