@@ -14,3 +14,5 @@
 | 7 Pre-run audit | scientific-reviewer | 2026-10-24 | PASS (d894494), no required fixes; P04 tests `38 passed` | 1 | 03_ROADMAP P04, R-2, R-8, PF list | none | run commands fixed by reviewer (CPU, 140 epochs, + param print); results-review checks pre-committed; ref-log 21:27 lines attributed in decisions.md |
 | 8 Run + verify | verifier | 2026-10-24 | PASS (0839e53); 7 commands exit 0, CPU, 140 epochs, ~9.1 min; pytest 349 passed in clean worktree; 10005 params; batch LDA == train_models LDA; R-1 counts | 1 | R-1, R-8 | none | batch run used the default paradigm (same session OO) because the guard blocks the file name in command text; wrapper inspected: no data path, no obfuscation |
 | 9 Results review | scientific-reviewer | 2026-10-24 | APPROVE (824ac6f); leaky/no-reset note stated; S01/S02 no inflation; PF-30 gaps; PF-04 expectation not supported | 1 | CSVs, logs, figures | none | 4 decisions.md rows |
+| 10 Report | scribe | 2026-10-24 | P04.md, RESEARCH_LOG, CHANGELOG (5b7c5f4) | 1 | CSVs, logs | none | |
+| 11 Gate | orchestrator | 2026-10-24 | PASS; `set P04 passed --commit 5b7c5f4`; merged --no-ff into main, tag p04-done | 1 | — | none | |
