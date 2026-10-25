@@ -219,3 +219,70 @@ def test_stale_outputs_removed_for_skipped_subject(tmp_path, capsys):
   assert "Skipping S02" in out and "removed stale output of skipped S02" in out
   assert not any(stale.glob("*.npy"))
   assert (tmp_path / "proc" / "S01" / "y_labels.npy").is_file()
+
+
+# --- Round 1: legacy P02 switch, Makefile, refusal to touch legacy arrays ----------
+
+def _legacy_tree(tmp_path):
+  b = _signal(5, seed=3)
+  _write_ebr(tmp_path / "raw" / "S03" / "OO.ebr", b)
+  return b
+
+
+def test_legacy_p02_switch_reproduces_the_p02_arrays(tmp_path, capsys):
+  """(a) 7 channels (PO7 excluded by name), 217 PSD columns, no channels.json, equal to the P02
+  path (7 scalp names, no tier 1) on the same recording and to the 8-channel run minus PO7."""
+  b = _legacy_tree(tmp_path)
+  assert rp.main(["--raw-dir", str(tmp_path / "raw"), "--processed-dir", str(tmp_path / "leg"),
+                  "--no-figures", "--legacy-p02"]) == 0
+  assert "[legacy] --legacy-p02" in capsys.readouterr().out
+  d = tmp_path / "leg" / "S03"
+  X, P, y = (np.load(d / f"{k}.npy") for k in ("X_time_windows", "X_psd_features", "y_labels"))
+  assert X.shape[1:] == (7, 256) and P.shape[1] == 217
+  assert not (d / "channels.json").exists() and not (tmp_path / "leg" / "channels.json").exists()
+  params = rp.resolve_params(rp.load_config(rp.DEFAULT_CONFIG), rp.build_parser().parse_args([]))
+  params.update(scalp=[c for c in NAMES if c != "PO7"], channel_drop=False)
+  ref = rp.preprocess_recording(b[1:8], b[10], float(FS), params)
+  np.testing.assert_array_equal(X, ref["X_time"])
+  np.testing.assert_array_equal(P, ref["X_psd"])
+  np.testing.assert_array_equal(y, ref["y"])
+  assert _run(tmp_path, "--no-channel-drop") == 0
+  np.testing.assert_array_equal(np.load(tmp_path / "proc" / "S03" / "X_time_windows.npy")[:, 1:], X)
+
+
+def test_makefile_preprocess_uses_legacy_switch():
+  from pathlib import Path
+  mk = (Path(rp.ROOT) / "Makefile").read_text()
+  line = [l for l in mk.splitlines() if "run_preprocessing" in l][0]
+  assert "--legacy-p02" in line
+  assert "7-channel" in [l for l in mk.splitlines() if "make preprocess" in l][0]
+
+
+def test_refuses_to_touch_legacy_arrays_without_switch(tmp_path, capsys):
+  """(c) a folder with 7-channel arrays and no channels.json is neither written nor deleted."""
+  _legacy_tree(tmp_path)
+  (tmp_path / "raw" / "S02").mkdir()                  # skipped subject, would be cleaned
+  for sub in ("S02", "S03"):
+    d = tmp_path / "proc" / sub
+    d.mkdir(parents=True)
+    for k in rp.ARRAY_FILES:
+      np.save(d / f"{k}.npy", np.zeros((3, 7, 4)) if k == "X_time_windows" else np.zeros(3))
+  before = np.load(tmp_path / "proc" / "S03" / "X_time_windows.npy").copy()
+  assert _run(tmp_path, "--subjects", "S02", "S03") == 1
+  assert "Refusing" in capsys.readouterr().out
+  assert (tmp_path / "proc" / "S02" / "y_labels.npy").exists()
+  np.testing.assert_array_equal(np.load(tmp_path / "proc" / "S03" / "X_time_windows.npy"), before)
+  # explicit overwrite flag: allowed, and the new arrays have 8 channels
+  assert _run(tmp_path, "--subjects", "S02", "S03", "--overwrite-legacy-arrays") == 0
+  assert np.load(tmp_path / "proc" / "S03" / "X_time_windows.npy").shape[1] == 8
+  assert not (tmp_path / "proc" / "S02" / "y_labels.npy").exists()
+
+
+def test_legacy_switch_may_overwrite_and_drops_old_channels_file(tmp_path):
+  _legacy_tree(tmp_path)
+  assert _run(tmp_path) == 0                          # 8-channel run writes channels.json
+  assert (tmp_path / "proc" / "S03" / "channels.json").exists()
+  assert _run(tmp_path, "--legacy-p02") == 0          # 8-channel folders are not protected
+  assert not (tmp_path / "proc" / "S03" / "channels.json").exists()
+  assert np.load(tmp_path / "proc" / "S03" / "X_time_windows.npy").shape[1] == 7
+  assert _run(tmp_path, "--legacy-p02") == 0          # legacy rerun over legacy arrays is allowed
