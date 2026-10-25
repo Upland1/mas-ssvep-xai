@@ -21,10 +21,10 @@ unless they start with a top-level folder.
   `git -C reference/ssvep-eeg-xai show <branch>:<path>`, never by checkout.
 - Never touch `data/raw/` or `.ebr` files except by launching project scripts.
 
-## Builder (data-engineer, signal-processing, classical-ml, deep-learning, connectivity-stats, evaluation-lead; scribe for document deliverables)
+## Builder (data-signal, ml-engineer, deep-learning, connectivity-stats; scribe for document deliverables)
 
-1. Start only when `02_plan.md` is `Status: READY` (and, with
-   `PLAN_APPROVAL: required`, ticked "Approved by Sebastian: [x]").
+1. Start only when `02_plan.md` is `Status: READY` (with
+   `PLAN_APPROVAL: required`, also ticked "Approved by Sebastian: [x]").
 2. `git status` must show no modified tracked files. Switch to the phase
    branch (`git switch phase/Pxx-<slug>`, or create it from `main` if you
    are the first builder: `git switch -c phase/Pxx-<slug> main`).
@@ -37,7 +37,7 @@ unless they start with a top-level folder.
    The test hook runs `pytest tests/` after each edit; never loosen a
    tolerance silently.
 5. Smoke-test only (synthetic data or one fold/subject, under ~5 minutes).
-   Real phase runs belong to the runner.
+   Real phase runs belong to the verifier.
 6. Commit on the phase branch, one logical change per commit, with a
    conventional prefix. Never push; never commit on `main`.
 7. Write `03_changes_<agent>.md` and set `Status: READY`. On a fix round, fix
@@ -60,39 +60,36 @@ unless they start with a top-level folder.
 5. Never edit `src/`, `scripts/` or `configs/`. A test that exposes a bug is
    reported in `04_tests.md` with `Status: BLOCKED`.
 
-## runner
+## verifier (runs and verifies)
 
-1. Start when `07_review.md` has a pre-run audit with `Verdict: PASS`.
-2. Check out the phase branch at the commit in the builders' handoffs; the
-   tree must be clean.
-3. For each command in `02_plan.md` "Run commands": if its expected runtime
-   exceeds `LOCAL_RUN_BUDGET_MIN` or it needs GPU hours beyond
-   `MAX_GPU_HOURS_PER_PHASE`, do not run it; write a human run request.
-   Otherwise run it as
+The run and its verification are one execution, from a clean checkout.
+
+1. Start when `07_review.md` has a pre-run audit with `Verdict: PASS`. You
+   never built this phase.
+2. Clean checkout: `git worktree add mas/state/scratch/verify/Pxx <commit>`
+   at the commit in the builders' handoffs; inside it, symlink only what the
+   phase needs from the main checkout (`data/`, never by copying recordings)
+   and use the project environment (`.venv/bin/python`).
+3. Run `python -m pytest -q`.
+4. For each command in `02_plan.md` "Run commands": if its expected runtime
+   exceeds `LOCAL_RUN_BUDGET_MIN`, or it needs more GPU time than
+   `MAX_GPU_HOURS_PER_PHASE`, or it needs Colab, do not run it: write a
+   human-run request (exact command, where, expected runtime, outputs to drop
+   into `reports/logs/Pxx/`) and set `05_run.md` to `Status: BLOCKED`.
+   Otherwise run it once as
    `{ echo "$ <cmd>"; git rev-parse HEAD; git status --porcelain; python -V; <cmd>; } 2>&1 | tee reports/logs/Pxx/<script>_<timestamp>.log`
-   (naming per `02_REQUIREMENTS.md` §4).
-4. Never edit code, configs, CSVs or logs. Record exit codes, runtimes and
-   produced files in `05_run.md`; do not interpret numbers.
-5. With pending human runs, set `Status: BLOCKED` and list exactly what
-   Sebastian must run and where to drop the outputs.
-
-## verifier
-
-1. Start when `05_run.md` is `READY`. You never built this phase.
-2. Clean checkout: `git worktree add mas/state/scratch/verify/Pxx <commit>`;
-   inside it, symlink only what the phase needs from the main checkout
-   (`data/`, never by copying recordings), and set up the environment from
-   `requirements.txt`.
-3. Run `python -m pytest -q`. Re-run every acceptance command that fits the
-   budget; for human-run outputs, check that the logs exist and their headers
-   show the phase commit.
-4. Compare every acceptance criterion and every number in the handoffs with
+   (naming per `02_REQUIREMENTS.md` §4), from the worktree, writing outputs
+   to the main checkout's git-ignored `reports/` and `outputs/`. Record exit
+   codes, runtimes and produced files in `05_run.md`.
+5. Compare every acceptance criterion and every number in the handoffs with
    the logs and with `04_REFERENCE_RESULTS.md`, applying its tolerance rules.
-5. Open at least two cited sources; check every reference consultation has a
+   For human-run outputs, check that the logs exist and their headers show
+   the phase commit.
+6. Open at least two cited sources; check every reference consultation has a
    valid R11 trigger and matches `mas/state/scratch/reference_access.log`.
-6. Write `06_verify.md` with `Verdict: PASS` or `Verdict: FAIL` and numbered
-   reasons. Never fix code. Remove the worktree when done
-   (`git worktree remove mas/state/scratch/verify/Pxx`).
+7. Write `06_verify.md` with `Verdict: PASS` or `Verdict: FAIL` and numbered
+   reasons. Never edit code, configs, CSVs or logs. Remove the worktree when
+   done (`git worktree remove mas/state/scratch/verify/Pxx`).
 
 ## scientific-reviewer
 
@@ -127,9 +124,9 @@ Two passes per phase, both in `07_review.md`.
 3. Concise academic prose; numbers never retyped from memory; arithmetic
    only via a shown Python command.
 
-## literature-scout
+## Research (orchestrator)
 
-Called only when a phase introduces a method new to the team. Write
-`01_brief.md` from the template: questions, findings with sources you opened,
+Only when a phase introduces a method new to the team, the orchestrator writes
+`01_brief.md` from the template: questions, findings with sources it opened,
 reference implementations with licenses and differences from our setup,
-options without choosing. Never run code; never open `data/` or `reference/`.
+options. It never opens `data/` or the reference repository for this.

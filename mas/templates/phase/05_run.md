@@ -1,7 +1,7 @@
 # Pxx · 05 · Run
 
 Status: DRAFT
-Author: runner
+Author: verifier
 Reads: 02_plan.md (Run commands), 07_review.md (pre-run audit PASS)
 Branch / commit:
 Machine: <OS, Python, CPU/GPU, torch/CUDA if used>

@@ -8,15 +8,18 @@ REFERENCE_POLICY: after-attempt
 # dependency: a phase opens when its depends_on have passed (allows P17/P18/P19 in parallel).
 SCHEDULING: sequential
 
-# required: STOP after 02_plan.md until "Approved by Sebastian: [x]" | auto
-PLAN_APPROVAL: required
+# auto: the orchestrator plans and continues | required: STOP after 02_plan.md until "Approved by Sebastian: [x]"
+PLAN_APPROVAL: auto
 
 # human: Sebastian merges passed phases into main | orchestrator: the main session merges --no-ff and tags pxx-done
-MERGE_POLICY: human
+MERGE_POLICY: orchestrator
 
-# Runner limits. Longer runs become human-run requests (local terminal or Colab).
-LOCAL_RUN_BUDGET_MIN: 30
-MAX_GPU_HOURS_PER_PHASE: 0     # 0 = no GPU jobs by agents; use the Colab path (P21)
+# true: after a passed gate the orchestrator opens the next phase by itself (stops only on hard stops)
+AUTO_CONTINUE: true
+
+# Run limits (verifier). Longer runs become human-run requests (local terminal or Colab).
+LOCAL_RUN_BUDGET_MIN: 120
+MAX_GPU_HOURS_PER_PHASE: 2     # agents may train on the local GPU up to this; LOSO-scale jobs go to Colab (P21)
 DEVICE: auto                   # auto | cpu | cuda
 
 # Raw data delivered for this rebuild (data/raw/<S>/*.ebr, git-ignored).

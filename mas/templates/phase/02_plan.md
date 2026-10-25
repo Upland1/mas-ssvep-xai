@@ -48,7 +48,7 @@ least one test fails on the historical bug this phase reproduces or fixes. -->
 |---|---|---|---|---|
 | | | | | |
 
-## Run commands (for the runner)
+## Run commands (for the verifier)
 
 ```bash
 ```
