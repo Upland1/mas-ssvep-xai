@@ -87,3 +87,15 @@ None.
 ## Questions
 
 ACK 02_plan.md data-signal 2026-10-25
+
+## Round 1 fixes (pre-run audit, fix 1)
+
+Commits: 1083862 (script and Makefile), 5bc3fba (tests).
+
+- (a) `run_preprocessing --legacy-p02`: PO7 excluded by name (config scalp minus PO7), tier 1 off, no `channels.json` (an older one in the target folders is removed). Output: `X_time (n, 7, 256)`, `X_psd (n, 217)`; labelled `[legacy]` in the console.
+- (b) `make preprocess` runs `--all --legacy-p02`; its help text now reads "P02: legacy 7-channel windows + PSD (--legacy-p02) -> data/processed/<S>/".
+- (c) Without `--legacy-p02`, the script exits 1 (`[x] Refusing ...`) before writing or deleting anything if any target folder (each subject, plus the root for S03) holds 7-channel `X_time_windows.npy` and no `channels.json`. `--overwrite-legacy-arrays` lifts it. Stale-output deletion for skipped subjects is covered by the same check.
+- Tests (`tests/test_p07_quality_signal.py`): legacy output equals the P02 path on the same synthetic recording (array_equal for X_time, X_psd, y) and equals the 8-channel run minus PO7; Makefile line; refusal leaves a legacy folder and a skipped subject's arrays untouched, and the overwrite flag lifts it; legacy switch over an 8-channel folder. About 0.5 s.
+- Suite (`pytest tests -q`, log `mas/state/scratch/p07_ds_suite3.log`, run while the ml-engineer was editing): one failure, `FAILED tests/test_p07_ml_engineer.py::test_no_script_keeps_the_interim_legacy_scalp_lines`, caused by that test being edited concurrently (its exemption of `scripts/preprocessing/` was not yet in place). Re-run alone afterwards: passes (`.` 100 %). All my tests pass. pytest -q prints no "N passed" line in this environment.
+
+Status: READY
