@@ -60,6 +60,7 @@ LEAK_FREE = {
 }
 # Files that import an sklearn splitter, with their era status (update when a phase changes it).
 KNOWN_SPLITTER_FILES = {
+  "scripts/benchmarks/feature_based/benchmark_feature_selection.py": "legacy",   # P06 DIAGNOSTIC inner SFS CV, training rows only
   "scripts/training/train_models.py": "legacy",
   "src/models/cnn/spatial_spectral_cnn.py": "legacy",
   "src/models/classical/legacy_eval.py": "legacy",
