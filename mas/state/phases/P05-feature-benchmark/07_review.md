@@ -124,6 +124,115 @@ Runtime ≲ 15 min.
    - On S02 (199 stimulus windows) the printed `j % 5` diagnostic drifts after the short block (PF-02).
 8. **Logs.** Every number quoted comes from `reports/logs/P05/*.log` or the CSVs. Each log header carries the commit and a clean-tree flag. The visualize_data FBCSP caption says it is a full-data fit.
 
+## Pre-run audit — Round 2
+
+Verdict: PASS
+
+Trigger: `06_verify.md` (ce30892) gave Verdict FAIL on one stated qualitative R-3 criterion: class-101 precision 0.8537 and a tied 101↔102 / 104↔105 confusion. All quantitative R-3 items passed:
+- 197/3 exact;
+- 1.0 s 178/197 exact;
+- 2.0 s no-reset 189/197, inside tolerance;
+- the printed j%5 diagnostic gave 188/197 = R-3, and it matched all five R-5 2.0 s values.
+
+Read for this round:
+- `03_changes_ml-engineer.md` "Round 2" and "Round 2 — implementation"; `04_tests.md` "Round 2";
+- `mas/RULES.md` @ 3ac8fb3 and the three new P05 rows of `mas/state/decisions.md`;
+- the code diff `80a0a5b..efc1020` (`src/`, `scripts/`, `tests/`);
+- `mas/03_ROADMAP.md` lines 18-19 (conventions), 155-160 (P04.4) and 186-189 (P04 acceptance); PF-02; `02_REQUIREMENTS.md` §5.6;
+- `mas/state/scratch/reference_access.log`.
+
+I did not open the reference tree. Suite re-run at HEAD efc1020: `.venv/bin/python -m pytest tests/ -o addopts="" -q -p no:warnings` → `426 passed in 106.62s (0:01:46)`.
+
+### (1) Is a spec deviation demonstrated, and was anything tuned?
+
+My Round 1 condition was that a definition may change only on a demonstrated deviation from the spec or the original, never because a variant lands closer to R-3.
+
+| Change | Evidence | Demonstrated? | Tuned toward R-3? |
+|---|---|---|---|
+| Reported "2.0 s smoothed" = reset at `i % 5 == 0` of the clean array (was no-reset) | **The spec itself:** `03_ROADMAP.md:18-19` defines "smoothing" for every phase as "the 2-tap trial-aware rule of `02_REQUIREMENTS.md` §5.6". §5.6 defines it on legacy folders as `j % 5 == 0` on the clean array. The only stated exception is P04.4, "**without** trial reset — the original early behavior" (`03_ROADMAP.md:158-159`). PF-02 tells the same history: earliest no-reset, then the `i % 5` legacy rule. **The original:** the R11 read of the P05-stage commit 69873ea, `evaluate_confusion_matrix.py:97-113`, shows `pos = i % 5`; the benchmark scripts at that commit have no smoothing. The independent R-3/R-5 fit (5 of 5 subjects exact under j%5) is corroboration, not the reason | **Yes.** The roadmap text and the original agree. The Round 1 era row (no-reset P04–P10), and the plan and decision built on it, contradicted the roadmap's own convention. I accepted that row as LEGACY (by design) in Round 1; this was my miss | No. The rule was fixed by the spec text before any number is consulted. j%5 was a pre-planned diagnostic of the first run, not chosen among alternatives after the fact |
+| Mask limits vpp 0.5–120 µV, std 0.1–35 µV (were 5–120 / 1–35) | R11: the original extractors' defaults (`fbcca_extraction.py:39-40`, `fbcsp_extraction.py:84-85`, `psd_extraction.py:14-15`, `quality_check.py:6-12` @ 69873ea). The spec is consistent with this: PF-07 says the shared default became `vpp_min = 5.0` only in P07. The roadmap names no thresholds for P05, so the Round 1 "shared defaults" choice anticipated P07 | **Yes,** a deviation from the original legacy behaviour (golden rule 3) | No. The mask could not have helped R-3: under the old limits the counts (197/3) and 1.0 s (178/197) already matched exactly. The change can only leave the numbers unchanged (same rejected set) or move them away from R-3. Re-run check 2 tests this |
+| `benchmark_harmonic_fbcca` gives FBCCA only PO8, O1, Oz, O2 (by name); mask still on all channels; no double gate | R11: original `benchmark_harmonic_fbcca.py:25,34` @ 69873ea selects positional `[3, 4, 5, 6]`, which is PO8, O1, Oz, O2 in the 7-channel layout. Roadmap P05.5 says only "occipital harmonic PSD + FBCCA". Not reproducing the original's unmasked harmonic PSD follows PF-10 ("Align every feature block with the final mask"), a P05 prevention, not a legacy behaviour | **Yes** for the FBCCA channel set; by-name selection follows PF-06 / §6 | No. This script carries no reference number |
+
+**R11 procedure: CONCERN.**
+- The first answer-key access (log 23:48:50) came 30 s before the diagnostics commit 1e85c17 (23:49:20). The investigation round and the consultation therefore overlapped; no real-data diagnostic run came between them.
+- The R11 trigger was still met: an implementation and tests existed, the verifier had FAILed, and the planned j%5 diagnostic had already pointed to the cause.
+- Every access is logged under ml-engineer and listed in the handoff table with files, lines and commit. Nothing was copied, and no code changed in the consultation round itself.
+- Not a FAIL. For later phases, the diagnostics should be run before the answer key is opened.
+
+### (2) Corrected R8 era row
+
+The corrected row reads: "P04: no-reset; P05–P10: reset at `i % 5 == 0` of the clean array (misaligned once a window of a trial is rejected, PF-02)". It is consistent with:
+- PF-02 (both stages, in that order);
+- roadmap P04.4 (no-reset is "the original early behavior") and the P04 acceptance note ("smoothing ignores trial boundaries");
+- the roadmap convention (lines 18-19) and §5.6 (the j%5 legacy definition on the clean array).
+
+The P04 code still uses no-reset (`scripts/training/train_models.py:206`, `src/models/cnn/spatial_spectral_cnn.py:154-157`), as the corrected row requires. **PASS.**
+
+Residual spec tension, for the P11 assignment (orchestrator; non-blocking now):
+- R8's text ("`i % 5` on legacy") and §5.6 ("legacy folders define … `j % 5 == 0` on the clean array, a known approximation") make i%5 look like the enforced form on legacy folders.
+- The corrected row, PF-02 ("reset at the first window of each true trial") and PF-03 (pre-gate `build_trial_ids`, indexed with the mask) treat it as the legacy flaw.
+- P11 must state which rule its R-6 numbers use on legacy folders: i%5 on the clean array, or pre-gate trial ids. In a subject with a rejection (S02, S03, S04) the two differ.
+
+### (3) Implementation and tests
+
+PASS.
+- `legacy_eval.accuracies` uses `smooth_reported = smooth_probabilities_mod5` (`src/models/classical/legacy_eval.py`). The argmax row uses the same rule (`benchmark_cross_validation.py:104`).
+- Every header, `.meta.txt` file and report title carries `SMOOTH_LABEL` and `MASK_LABEL`. No-reset appears only as a printed DIAGNOSTIC line and as `_smoothed_noreset.txt`, titled "DIAGNOSTIC … not the reported number". `_smoothed_mod5.txt` is titled REPORTED. Both files hold the confusion counts as text, which resolves Round 1 note 5 for the smoothed predictions.
+- The mask is still computed once on all channels and shared. `fbcca_channels` is selected by name and defaults to None, so the flagship, `test_sklearn_models` and the six-space benchmark are unchanged (`src/models/classical/feature_spaces.py`).
+- The new tests catch the plausible wrong variants I would try: no-reset wired into `accuracies` (mutant, 0.9 vs 1.0); reset by trial id instead of clean index (12-row closed form); a CSV written with no-reset (flagship script vs independent i%5 on spied scores, on a tree where the rules differ); an argmax row left on no-reset; the old 5/1 limits (vpp 2 / std 0.5 window, plus boundary cases); a positional or POz cluster; FBCCA gated on its own 4 channels (PF-10 mutant).
+- The tests pin the "mask on all channels" choice. That choice differs from the original harmonic script, where FBCCA gated its own 4-channel input; it is labelled in the script docstring and affects no reference.
+
+### (4) Two different "Harmonic PSD + FBCCA" numbers
+
+The six-space benchmark row keeps all-channel FBCCA, while `benchmark_harmonic_fbcca` uses the 4-channel cluster. **Acceptable, with labelling.**
+- Inside the six-space table one FBCCA block serves the FBCCA, Harmonic PSD + FBCCA and FBCSP + FBCCA rows, and the all-channel flagship reproduced R-3 1.0 s exactly.
+- The decision row names only the harmonic script.
+- The original `benchmark_cross_validation.py` was searched only for smoothing and thresholds, so its FBCCA channel set is **unverified**. Record it as an open item; a verification-type R11 read is allowed later.
+- Labelling is incomplete: the harmonic script's console and report name the channels, but the six-space header and `.meta.txt` do not say "FBCCA on all channels".
+- Required of the verifier and the scribe: quote the two numbers under distinct names ("six-space table, FBCCA all 7 channels" vs "harmonic script, FBCCA PO8/O1/Oz/O2"), never as one quantity. The ml-engineer adds the channel names to the six-space header when the file is next touched (non-blocking).
+
+### (5) Run commands and re-run checks
+
+The run commands are unchanged from Round 1 (same seven lines, defaults `--fs 250 --seed 42 --m 1`, no `--no-figures`, repo root, clean tree):
+
+```bash
+.venv/bin/python -m scripts.benchmarks.feature_based.benchmark_cross_validation --subject S03
+.venv/bin/python -m scripts.benchmarks.feature_based.benchmark_harmonic_fbcca --subject S03
+.venv/bin/python -m scripts.evaluation.test_sklearn_models --subject S03
+.venv/bin/python -m scripts.evaluation.evaluate_confusion_matrix --subject S03
+.venv/bin/python -m scripts.evaluation.evaluate_confusion_matrix --subject S03 --m 2
+for S in S01 S02 S04 S05; do .venv/bin/python -m scripts.evaluation.evaluate_confusion_matrix --subject $S; done
+.venv/bin/python -m scripts.exploration.visualize_data --subject S03
+```
+
+New outputs to collect: `reports/classification_report_evaluate_confusion_matrix_<S>[_m2]_smoothed_{mod5,noreset}.txt`.
+
+Pre-committed re-run checks. They replace Round 1 checks 1, 2, 5 and 7; checks 3, 4, 6 and 8 stand.
+1. **Counts under the new limits (exact).** S03: 200 / 197 / 3. Others: S01 200/0, S02 196/3, S04 197/1, S05 200/0. Any change means the 0.5/0.1 limits contradict the R-3/R-5 counts. That would be a finding against decision (2), reported, with no further change in this phase.
+2. **Same rejected set.** The 1.0 s values must be unchanged from the first run: S03 90.36 (178/197); S01 64.50, S02 66.33, S04 98.98, S05 96.50. The same 1.0 s with the same counts is the observable sign that the rejected windows are the same. Any 1.0 s change is reported with the affected windows.
+3. **2.0 s equals the former j%5 diagnostic.**
+   - Flagship m=1: S03 95.43 (188/197), S01 75.50, S02 71.94, S04 98.48, S05 96.50 (`06_verify.md` table). S03 m=2: 95.94.
+   - The new DIAGNOSTIC no-reset line must repeat the first run's reported values: S03 95.94, S01 77.00, S02 71.94, S04 98.48, S05 98.00.
+   - Any other value is a bug (same scores, a different rule applied).
+4. **Qualitative R-3, read only from the REPORTED file** `classification_report_evaluate_confusion_matrix_S03_smoothed_mod5.txt` (m=1): class-101 precision = 1.0000, and the largest two-way off-diagonal total is 104↔105.
+   - Not read from the 1.0 s report, the no-reset file, m=2 or the 1.0 s figure.
+   - Choosing among these outputs after the fact is forbidden.
+   - If either part fails while checks 1–3 pass exactly, it is a qualitative deviation. The results review explains it (the statement's source is only inferred: the original's figure is computed from smoothed predictions, 69873ea:130) or rejects it. No further definition change is allowed.
+5. **Benchmark table.** The 1.0 s columns of `feature_space_benchmark_S03.csv` must equal the first run, so the hybrid and argmax criteria hold as before. All 2.0 s columns change, the argmax row included.
+6. **Two Harmonic PSD + FBCCA numbers.** The harmonic script's Shrinkage-LDA value is reported next to the six-space row with the channel sets named. They are expected to differ.
+
+### Required fixes
+
+None.
+
+### Non-blocking notes (Round 2)
+
+1. Name the FBCCA channels in the six-space header and `.meta.txt` (ml-engineer, next touch).
+2. Before P11 relies on the original `benchmark_cross_validation.py`, settle its FBCCA channel set and its mask-on-which-channels choice by a logged verification read.
+3. R11 sequencing: run the diagnostics before opening the answer key.
+4. The flagship figure `cm_fbcsp_m1_fbcca_cv[_S].png` shows 1.0 s predictions (title says so). The original's figure showed smoothed predictions; the smoothed counts are now in `_smoothed_mod5.txt`. Accepted as labelled.
+5. Carry the R8-on-legacy-folders question (i%5 on the clean array vs pre-gate trial ids) into the P11 assignment.
+
 ## Results review
 
 Verdict: APPROVE / REJECT
