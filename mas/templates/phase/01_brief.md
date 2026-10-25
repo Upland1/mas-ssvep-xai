@@ -1,7 +1,7 @@
 # Pxx · 01 · Brief
 
 Status: DRAFT
-Author: literature-scout
+Author: orchestrator
 Reads: 00_assignment.md, mas/RULES.md
 
 ## Questions this brief answers

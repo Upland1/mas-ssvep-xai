@@ -3,26 +3,29 @@
 # (see team_mapping.md and decisions.md, 2026-10-24).
 
 # Role (as written in phases.yaml owners) -> agent.
+# From P04 on (decisions.md, 2026-10-24): 8 agents. P00–P03 handoffs keep the
+# earlier names (data-engineer, signal-processing, runner).
 roles:
   Orchestrator: orchestrator
-  Data Engineer: data-engineer
-  Infra: data-engineer
-  Signal Processing: signal-processing
-  Online / Real-time: signal-processing
-  Classical ML: classical-ml
-  XAI: classical-ml
+  Data Engineer: data-signal
+  Infra: data-signal
+  Signal Processing: data-signal
+  Online / Real-time: data-signal
+  Classical ML: ml-engineer
+  XAI: ml-engineer
+  Evaluation Lead: ml-engineer
   Deep Learning: deep-learning
   Connectivity & Stats: connectivity-stats
-  Evaluation Lead: evaluation-lead
   Scribe: scribe
+  Runner: verifier
   Verifier: verifier
   Scientific Reviewer: scientific-reviewer
 
 # Every phase also gets these, whatever its owners say (mas/README.md §2).
-always: [orchestrator, synthetic-tester, runner, verifier, scientific-reviewer, scribe]
+always: [orchestrator, synthetic-tester, verifier, scientific-reviewer, scribe]
 
 # Agents that never receive a 03_changes file (checkers and the gatekeeper).
-checkers: [orchestrator, synthetic-tester, runner, verifier, scientific-reviewer]
+checkers: [orchestrator, synthetic-tester, verifier, scientific-reviewer]
 
 # Branch/folder slug and the rules deliberately violated in each phase
 # (mas/RULES.md era matrix).

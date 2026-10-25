@@ -34,27 +34,27 @@ mas/
 
 ## 1. Team
 
-The orchestrator is the main session that Sebastian talks to (run a phase with
-`/phase`). Every other member is a subagent with its own instructions, tools
-and model. The 13 roles of `06_AGENT_ROLES.md` map to 11 agents, plus two
-added for independence (`synthetic-tester`) and research (`literature-scout`).
-See `state/team_mapping.md`.
+The orchestrator is the main session that Sebastian talks to (start or resume
+with `/phase`; it runs phases back to back until a hard stop). Every other
+member is a subagent with its own instructions, tools and model. From P04 the
+13 roles of `06_AGENT_ROLES.md` map to 7 agents plus an added independent
+tester (P00–P03 used 11 agents; their handoffs keep those names). See
+`state/team_mapping.md`.
 
-| Agent | Roles held | Kind | Writes |
-|---|---|---|---|
-| orchestrator (main session) | Orchestrator | gate | `00_assignment.md`, `02_plan.md`, `log.md`, `phase_status.yaml`, `decisions.md`, blockers |
-| literature-scout | (added) | research, optional | `01_brief.md` |
-| data-engineer | Data Engineer, Infra | builder | code + `03_changes_data-engineer.md` |
-| signal-processing | Signal Processing, Online/Real-time | builder | code + `03_changes_signal-processing.md` |
-| classical-ml | Classical ML, XAI | builder | code + `03_changes_classical-ml.md` |
-| deep-learning | Deep Learning | builder | code + `03_changes_deep-learning.md` |
-| connectivity-stats | Connectivity & Stats | builder | code + `03_changes_connectivity-stats.md` |
-| evaluation-lead | Evaluation Lead | builder | code + `03_changes_evaluation-lead.md` |
-| synthetic-tester | (added; independent known-answer tests) | checker | `tests/` + `04_tests.md` |
-| runner | Runner | executor | `reports/logs/` + `05_run.md` |
-| verifier | Verifier | independent checker | `06_verify.md` |
-| scientific-reviewer | Scientific Reviewer (+ the former methods-auditor) | independent checker | `07_review.md` |
-| scribe | Scribe | writer | `reports/Pxx.md`, `RESEARCH_LOG.md`, `CHANGELOG.md`, docs |
+| Agent | Roles held | Kind | Model tier | Writes |
+|---|---|---|---|---|
+| orchestrator (main session) | Orchestrator; research when needed | gate | session | `00_assignment.md`, `01_brief.md`, `02_plan.md`, `log.md`, `phase_status.yaml`, `decisions.md`, blockers |
+| data-signal | Data Engineer, Infra, Signal Processing, Online/Real-time | builder | mid | code + `03_changes_data-signal.md` |
+| ml-engineer | Classical ML, XAI, Evaluation Lead | builder | mid | code + `03_changes_ml-engineer.md` |
+| deep-learning | Deep Learning | builder | mid | code + `03_changes_deep-learning.md` |
+| connectivity-stats | Connectivity & Stats | builder | mid | code + `03_changes_connectivity-stats.md` |
+| synthetic-tester | (added; independent known-answer tests) | checker | mid | `tests/` + `04_tests.md` |
+| verifier | Runner, Verifier | independent executor and checker | mid | `reports/logs/` + `05_run.md` + `06_verify.md` |
+| scientific-reviewer | Scientific Reviewer (+ the former methods-auditor) | independent checker | strongest | `07_review.md` |
+| scribe | Scribe | writer | light | `reports/Pxx.md`, `RESEARCH_LOG.md`, `CHANGELOG.md`, docs |
+
+Builders whose work fails review twice are re-called on the strongest tier for
+their last fix round.
 
 Each agent's procedure is in `PROCEDURES.md`. Independence: builders never verify or review; the verifier, the reviewer and
 the tester never edit pipeline code (`src/`, `scripts/`, `configs/`). The
@@ -66,18 +66,20 @@ guard hook enforces the write boundaries.
  orchestrator  mas_status.py open Pxx ──► state/phases/Pxx-<slug>/00_assignment.md
       │                                   (tasks + acceptance copied verbatim from the roadmap,
       │                                    PF/R entries, owners, branch phase/Pxx-<slug>)
-      ├─► literature-scout   01_brief.md                     (only for methods new to the team)
-      ├─► orchestrator       02_plan.md  ──► STOP for Sebastian if PLAN_APPROVAL: required
+      ├─► orchestrator       01_brief.md (only for methods new to the team), 02_plan.md
+      │                      (STOP for Sebastian only if PLAN_APPROVAL: required)
       ├─► builders           code on phase/Pxx-<slug> + 03_changes_<agent>.md
       ├─► synthetic-tester   tests/test_pxx_*.py + 04_tests.md
       ├─► scientific-reviewer 07_review.md  "## Pre-run audit"   (code vs R1–R11, era matrix)
-      │        FAIL → builders fix (Round N) → tester → reviewer; 2 failed rounds → blocker
-      ├─► runner             run commands → reports/logs/Pxx/ + 05_run.md
+      │        FAIL → builders fix (Round N; round 2 on the strongest tier) → tester → reviewer;
+      │        2 failed rounds → blocker
+      ├─► verifier           clean checkout → pytest → run commands once → reports/logs/Pxx/
+      │                      + 05_run.md → acceptance vs R-x → 06_verify.md
       │        over budget → "human run" request → STOP for Sebastian
-      ├─► verifier           clean checkout → pytest → re-run acceptance → 06_verify.md
       ├─► scientific-reviewer 07_review.md  "## Results review"  (deviations vs R-x, interpretation)
       ├─► scribe             state/reports/Pxx.md, RESEARCH_LOG.md, CHANGELOG.md
-      └─► orchestrator gate  PASS: merge/tag per MERGE_POLICY, status passed, decisions.md
+      └─► orchestrator gate  PASS: merge/tag per MERGE_POLICY, status passed, decisions.md,
+                             next phase if AUTO_CONTINUE: true
                              FAIL: reasons back to builders
 ```
 
@@ -105,7 +107,7 @@ report links the log or CSV behind every number.
 6. **Fix loop.** On `FAIL`, builders append `## Round N` to their
    `03_changes_*.md`; tester and reviewer append their own `## Round N`. After
    two failed rounds the orchestrator writes a blocker and stops.
-7. **Numbers come from runs.** Only `05_run.md` (and human-run outputs dropped
+7. **Numbers come from runs.** Only the verifier's `05_run.md` (and human-run outputs dropped
    into `reports/logs/Pxx/`) introduce numbers; everyone else copies them
    with the path.
 8. **Log every step.** The orchestrator adds one row per agent step to the
@@ -119,8 +121,8 @@ report links the log or CSV behind every number.
 
 | Gate | When | Controlled by |
 |---|---|---|
-| Plan approval | after `02_plan.md` | `PLAN_APPROVAL` (`required` / `auto`) |
-| Human run | runner request over budget or needing Colab | `LOCAL_RUN_BUDGET_MIN`, `MAX_GPU_HOURS_PER_PHASE` |
+| Plan approval (off by default) | after `02_plan.md` | `PLAN_APPROVAL` (`auto` / `required`) |
+| Human run | verifier request over budget or needing Colab | `LOCAL_RUN_BUDGET_MIN`, `MAX_GPU_HOURS_PER_PHASE` |
 | Blockers | ambiguous spec, unexplained deviation, missing input | `state/blockers/` |
 | Merge to `main` | after a passed gate | `MERGE_POLICY` (`human` / `orchestrator`) |
 | Push | always | Sebastian only |
