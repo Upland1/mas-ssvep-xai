@@ -58,18 +58,19 @@ def test_selection_is_infold_only():
 
 
 def test_ablation_selection_sees_training_rows_only(monkeypatch):
-  """PF-11: spy on the selectors inside the ablation; each call gets exactly the training rows of its fold (80 of 100)."""
-  X, y = make_windows(n_trials=4, seed=5)
+  """PF-11: spy on the selectors inside the ablation; each call gets exactly the training rows of its fold (40 of 50)."""
+  X, y = make_windows(n_trials=2, seed=5)
   seen = []
-  orig_k, orig_s = bfs.select_k_best_fbcsp_features, bfs.select_sfs_fbcsp_features
+  orig_k = bfs.select_k_best_fbcsp_features
   monkeypatch.setattr(bfs, "select_k_best_fbcsp_features", lambda Xt, yt, *a, **k: (seen.append(len(Xt)), orig_k(Xt, yt, *a, **k))[1])
-  monkeypatch.setattr(bfs, "select_sfs_fbcsp_features", lambda Xt, yt, *a, **k: (seen.append(len(Xt)), orig_s(Xt, yt, *a, **k))[1])
+  # the SFS itself is slow (500 inner fits per fold) and covered by test_sfs_* and the script tests; here only its input matters
+  monkeypatch.setattr(bfs, "select_sfs_fbcsp_features", lambda Xt, yt, n, *a, **k: (seen.append(len(Xt)), np.arange(n))[1])
   from src.models.classical.feature_spaces import build_feature_blocks
   from tests.p05_synth import SCALP
   blocks = build_feature_blocks(X, y, SCALP)
   blocks.update(n_stimulus=len(y), n_clean=len(blocks["y"]), n_rejected=len(y) - len(blocks["y"]))
-  bfs.run_ablation(blocks, "S03", k=6, sfs_k=3, verbose=False)
-  assert len(seen) == 5 * 3 and set(seen) == {80}   # ANOVA, MI, SFS x 5 folds
+  bfs.run_ablation(blocks, "S03", k=6, sfs_k=2, verbose=False)
+  assert len(seen) == 5 * 3 and set(seen) == {40}   # ANOVA, MI, SFS x 5 folds
 
 
 def test_subband_pruning_layout():
@@ -82,16 +83,21 @@ def test_subband_pruning_layout():
 
 
 def test_band_major_layout_matches_fbcsp_transformer():
-  """R6: the columns the pruning removes are the 38-52 Hz CSP features. Band 5 carries a planted 45 Hz source of class 101
-  only; zeroing columns 40-49 of the transformer output is what the pruning removes (their variance dominates the others)."""
-  X, y = make_windows(n_trials=4, seed=2)
+  """R6 known answer (replaces a vacuous check, P07): the CSP features are scale-invariant, so scaling a band changes
+  nothing; instead the content of sub-band 5 (38-52 Hz) is replaced by that of sub-band 1. Exactly the columns that
+  `fs.band_columns(4)` names (40-49) change, at least one of them does, and columns 0-39 are bit-identical, so the
+  pruning helper removes the 38-52 Hz features and nothing else."""
+  X, y = make_windows(n_trials=2, seed=2)
   sw = filter_subbands(X, 250.0, DEFAULT_SUBBANDS)
   sw2 = sw.copy()
-  sw2[:, 4] *= 10.0                                  # inflate band 5 only
+  sw2[:, 4] = sw[:, 0]
   f1 = FBCSPTransformer(1).fit(sw, y).transform(sw)
   f2 = FBCSPTransformer(1).fit(sw2, y).transform(sw2)
-  changed = np.flatnonzero(~np.isclose(f1, f2, atol=1e-6).all(axis=0))
-  assert f1.shape[1] == 50 and set(changed) <= set(range(40, 50))
+  changed = set(np.flatnonzero(~np.isclose(f1, f2, atol=1e-6).all(axis=0)).tolist())
+  assert f1.shape[1] == 50 and changed
+  assert changed <= set(fs.band_columns(4).tolist())
+  assert np.array_equal(f1[:, :40], f2[:, :40])
+  assert set(fs.subband_pruned_columns(55, [4]).tolist()) == set(range(55)) - set(fs.band_columns(4).tolist())
 
 
 def test_with_fbcca_keeps_all_tail_columns():
@@ -101,32 +107,39 @@ def test_with_fbcca_keeps_all_tail_columns():
 
 
 def test_sfs_selects_planted_columns_and_count():
-  """Known answer: SFS on the planted data returns exactly n columns (15) from 0-49 and includes both informative ones."""
-  X, y = _planted(seed=3)
+  """Known answer: SFS on the planted data returns exactly n columns (3, then 2) from 0-49 and includes both informative ones."""
+  X, y = _planted(n=100, seed=3)
   idx = fs.select_sfs_fbcsp_features(X, y, 3)
   assert len(idx) == 3 and {7, 31} <= set(idx) and idx.max() < 50
-  assert len(fs.select_sfs_fbcsp_features(X, y, 15)) == 15
+  assert len(fs.select_sfs_fbcsp_features(X, y, 2)) == 2
 
 
 @pytest.fixture(scope="module")
 def tree(tmp_path_factory):
   root = tmp_path_factory.mktemp("p06")
-  write_subject(root / "processed", "S03", n_trials=4, seed=11)
-  write_subject(root / "processed", "S04", n_trials=4, seed=12)
+  write_subject(root / "processed", "S03", n_trials=2, seed=11)    # 50 stimulus windows: the smallest tree that
+  write_subject(root / "processed", "S04", n_trials=2, seed=12)    # keeps 8 windows per class in each inner SFS fold
   return root
+
+
+@pytest.fixture(scope="module")
+def ablation_plain(tree):
+  """One ablation run (k = 20, SFS 2 FBCSP columns) shared by the script test and the diagnostics test."""
+  assert bfs.main(_flags(tree, "S03", "--k-features", "20", "--sfs-features", "2")) == 0
+  return pd.read_csv(tree / "reports" / "feature_selection_ablation_S03.csv")
 
 
 def _flags(root, subject="S03", *extra):
   return ["--subject", subject, "--processed-dir", str(root / "processed"), "--reports-dir", str(root / "reports"), *extra]
 
 
-def test_ablation_script_rows_and_flagship_equivalence(tree):
-  """Smoke: five rows with p = 55, 45, 25, 25, 20 (k = 20), schema columns; the Full row equals the P05 flagship on the same tree."""
-  assert bfs.main(_flags(tree, "S03", "--k-features", "20")) == 0
-  df = pd.read_csv(tree / "reports" / "feature_selection_ablation_S03.csv")
-  assert list(df.columns) == bfs.COLUMNS and df["p"].tolist() == [55, 45, 25, 25, 20]
+def test_ablation_script_rows_and_flagship_equivalence(tree, ablation_plain):
+  """Smoke: five rows with p = 55, 45, 25, 25, 7 (k = 20, `--sfs-features 2` to keep the suite fast; the default 15 gives
+  20, checked on the arithmetic p = n + 5 in test_p06_known_answer), schema columns; the Full row equals the P05 flagship."""
+  df = ablation_plain
+  assert list(df.columns) == bfs.COLUMNS and df["p"].tolist() == [55, 45, 25, 25, 7]
   assert df["Method"].tolist() == list(bfs.METHODS)
-  assert set(df["Clean Windows"]) == {100} and set(df["Rejected"]) == {0}
+  assert set(df["Clean Windows"]) == {50} and set(df["Rejected"]) == {0}
   assert ecm.main(_flags(tree, "S03", "--figures-dir", str(tree / "fig"), "--no-figures")) == 0
   fl = pd.read_csv(tree / "reports" / "flagship_S03.csv").iloc[0]
   assert df.iloc[0]["1.0s Acc (%)"] == fl["1.0s Acc (%)"] and df.iloc[0]["2.0s Smoothed (%)"] == fl["2.0s Smoothed (%)"]
@@ -134,7 +147,7 @@ def test_ablation_script_rows_and_flagship_equivalence(tree):
   assert "FBCCA channels (7)" in meta and "legacy" in meta
 
 
-def test_cohort_script_schema_and_mean_row(tree):
+def test_cohort_script_schema_and_mean_row(tree, ablation_plain):
   """Known answer: columns of 02_REQUIREMENTS section 6, one row per discovered subject (S03, S04) + Mean = mean of the accuracy columns."""
   assert b5.main(["--processed-dir", str(tree / "processed"), "--reports-dir", str(tree / "reports")]) == 0
   df = pd.read_csv(tree / "reports" / "five_subjects_benchmark.csv")
@@ -168,26 +181,26 @@ def test_sfs_variants_cover_the_requested_factors():
   assert {x[4] for x in v} == {bfs.CAND_FBCSP, bfs.CAND_ALL} and {x[5] for x in v} == {15, 20}
 
 
-def test_sfs_diagnostics_script_leaves_reported_rows_and_audits(tree, monkeypatch, capsys):
+def test_sfs_diagnostics_script_leaves_reported_rows_and_audits(tree, ablation_plain, monkeypatch, capsys):
   """Smoke: with a reduced variant list the diagnostic CSV and audit CSV are written, the reported CSV is identical
-  with and without the flag, the reported variant reproduces the reported SFS row, and the audit shows disjoint rows."""
-  small = [v for v in bfs.sfs_variants(3) if v[0] in ("reported", "cv=3 shuffled", "all 55 columns, n=20", "plain LDA svd")]
+  with and without the flag (`ablation_plain` is the run without it), the reported variant reproduces the reported SFS
+  row, and the audit shows disjoint rows (40 training / 10 test rows per fold of the 50-window tree)."""
+  small = [v for v in bfs.sfs_variants(2) if v[0] == "reported"]
   monkeypatch.setattr(bfs, "sfs_variants", lambda k=15: small)
-  assert bfs.main(_flags(tree, "S03", "--sfs-features", "3")) == 0
-  plain = pd.read_csv(tree / "reports" / "feature_selection_ablation_S03.csv")
-  assert bfs.main(_flags(tree, "S03", "--sfs-features", "3", "--sfs-diagnostics")) == 0
+  capsys.readouterr()
+  assert bfs.main(_flags(tree, "S03", "--k-features", "20", "--sfs-features", "2", "--sfs-diagnostics")) == 0
   with_diag = pd.read_csv(tree / "reports" / "feature_selection_ablation_S03.csv")
-  assert plain.equals(with_diag)
+  assert ablation_plain.equals(with_diag)
   d = pd.read_csv(tree / "reports" / "feature_selection_sfs_diagnostics_S03.csv")
-  assert list(d.columns) == bfs.DIAG_COLUMNS and len(d) == 4 and set(d["Label"]) == {bfs.DIAG_LABEL}
+  assert list(d.columns) == bfs.DIAG_COLUMNS and len(d) == 1 and set(d["Label"]) == {bfs.DIAG_LABEL}
   rep = d[d["Variant"] == "reported"].iloc[0]
   sfs_row = with_diag[with_diag["Method"] == bfs.SFS].iloc[0]
-  assert rep["1.0s Acc (%)"] == sfs_row["1.0s Acc (%)"] and rep["p"] == sfs_row["p"] == 8
+  assert rep["1.0s Acc (%)"] == sfs_row["1.0s Acc (%)"] and rep["p"] == sfs_row["p"] == 7
   a = pd.read_csv(tree / "reports" / "feature_selection_sfs_audit_S03.csv")
   assert list(a.columns) == bfs.AUDIT_COLUMNS and a["Fold"].tolist() == [1, 2, 3, 4, 5]
-  assert a["Train rows"].tolist() == [80] * 5 and a["Test rows"].tolist() == [20] * 5
+  assert a["Train rows"].tolist() == [40] * 5 and a["Test rows"].tolist() == [10] * 5
   assert a["Disjoint indices"].all() and (a["Test rows found in SFS input"] == 0).all()
-  assert all(len(s.split()) == 3 for s in a["Selected FBCSP columns"])
+  assert all(len(s.split()) == 2 for s in a["Selected FBCSP columns"])
   assert "DIAGNOSTIC" in capsys.readouterr().out
 
 

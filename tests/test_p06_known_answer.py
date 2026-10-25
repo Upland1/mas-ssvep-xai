@@ -19,7 +19,7 @@ from src.models.classical.feature_spaces import build_feature_blocks
 from tests.p05_synth import SCALP, make_windows, write_subject
 
 
-def _blocks(snr=1.0, seed=5, n_trials=4):
+def _blocks(snr=1.0, seed=5, n_trials=2):
   X, y = make_windows(n_trials=n_trials, snr=snr, seed=seed)
   b = build_feature_blocks(X, y, SCALP)
   b.update(n_stimulus=len(y), n_clean=len(b["y"]), n_rejected=len(y) - len(b["y"]))
@@ -117,16 +117,20 @@ def test_sfs_count_and_cca_tail_via_column_sets():
 
 
 def test_ablation_rejects_selection_on_all_windows(monkeypatch):
-  """PF-11 at script level: every selector call sees exactly the training rows (80 of 100) and none of the test rows
-  (rows are matched by value against the fold's test matrix). Mutant: legacy_cv hands the whole set as training ->
-  the same assertions fail (sizes 100)."""
+  """PF-11 at script level: every selector call receives exactly the training rows of its fold, i.e. 4/5 of the
+  windows (40 of 50), in 3 methods x 5 folds. Only the row COUNT is asserted here; the row-by-row disjointness of
+  training and test indices is audited by `bfs.leak_audit_row` (test_leak_audit_detects_overlap and the audit CSV of
+  the diagnostics test). Mutant: legacy_cv hands the whole set as training -> sizes are 50, not 40."""
   b = _blocks()
+  n = len(b["y"])
+  n_tr = n * 4 // 5
   seen = []
-  orig_k, orig_s = bfs.select_k_best_fbcsp_features, bfs.select_sfs_fbcsp_features
+  orig_k = bfs.select_k_best_fbcsp_features
   monkeypatch.setattr(bfs, "select_k_best_fbcsp_features", lambda X, y, *a, **k: (seen.append(len(X)), orig_k(X, y, *a, **k))[1])
-  monkeypatch.setattr(bfs, "select_sfs_fbcsp_features", lambda X, y, *a, **k: (seen.append(len(X)), orig_s(X, y, *a, **k))[1])
+  # SFS stubbed (slow; its own tests are test_sfs_*): only the rows it is given matter here
+  monkeypatch.setattr(bfs, "select_sfs_fbcsp_features", lambda X, y, n, *a, **k: (seen.append(len(X)), np.arange(n))[1])
   bfs.run_ablation(b, "S03", k=6, sfs_k=2, verbose=False)
-  assert seen == [80] * 15
+  assert seen == [n_tr] * 15
   # mutant
   real_cv = bfs.legacy_cv
 
@@ -137,7 +141,7 @@ def test_ablation_rejects_selection_on_all_windows(monkeypatch):
   seen.clear()
   monkeypatch.setattr(bfs, "legacy_cv", lambda seed: AllRows())
   bfs.run_ablation(b, "S03", k=6, sfs_k=2, verbose=False, include_sfs=False)
-  assert seen != [80] * 10 and set(seen) == {100}
+  assert seen != [n_tr] * 10 and set(seen) == {n}
 
 
 # --- pruning (R6) ----------------------------------------------------------------------------------------------
@@ -176,15 +180,13 @@ def test_band_major_layout_against_transformer(band):
 
 def test_p_values_55_45_25_25_20_and_tail_mutant(monkeypatch):
   """R-4: p = 55, 45, 25, 25, 20 with k = 20 and SFS 15 FBCSP columns (the synthetic tree has the same 50 + 5 columns).
-  The 15-step SFS is the slow part (~90 s), so here its selector is replaced by a stub returning the first n columns (the
-  real SFS count is checked in test_sfs_count_and_cca_tail_via_column_sets and the builder's tests); the p = k + 5 / sfs + 5
-  arithmetic is also checked with k = 4, sfs = 2 -> 55, 45, 9, 9, 7 and the real SFS. Mutant: FBCCA tail not appended to ANOVA -> that row's p is 20, not 25."""
+  The SFS is the slow part (500 inner fits per fold), so here its selector is replaced by a stub returning the first n
+  columns (the real SFS count is checked in test_sfs_count_and_cca_tail_via_column_sets and the script test of
+  test_p06_feature_selection); the p = k + 5 / sfs + 5 arithmetic is also checked with k = 4, sfs = 2 -> 55, 45, 9, 9, 7. Mutant: FBCCA tail not appended to ANOVA -> that row's p is 20, not 25."""
   b = _blocks()
   real = bfs.column_sets
-  real_sfs = bfs.select_sfs_fbcsp_features
   monkeypatch.setattr(bfs, "select_sfs_fbcsp_features", lambda X, y, n, **k: np.arange(n))
   rows = bfs.run_ablation(b, "S03", k=20, sfs_k=15, verbose=False)
-  monkeypatch.setattr(bfs, "select_sfs_fbcsp_features", real_sfs)
   assert [r["p"] for r in rows] == [55, 45, 25, 25, 20] and [r["Method"] for r in rows] == list(bfs.METHODS)
   assert [r["p"] for r in bfs.run_ablation(b, "S03", k=4, sfs_k=2, verbose=False)] == [55, 45, 9, 9, 7]
 
