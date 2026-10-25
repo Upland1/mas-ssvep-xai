@@ -33,11 +33,11 @@ phases:
     passed: '2026-10-24'
   P04:
     slug: early-models-xai
-    status: pending
+    status: in_progress
     owner: orchestrator
-    branch: null
+    branch: phase/P04-early-models-xai
     commit: null
-    opened: null
+    opened: '2026-10-24'
     passed: null
   P05:
     slug: feature-benchmark

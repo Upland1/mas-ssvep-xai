@@ -34,7 +34,7 @@ phases:
   P01: {slug: ebr-parser,                legacy: []}
   P02: {slug: legacy-windowing,          legacy: []}   # corrected 2026-10-24, see decisions.md
   P03: {slug: exploration,               legacy: [fs250]}
-  P04: {slug: early-models-xai,          legacy: [R1, R8, fs250]}
+  P04: {slug: early-models-xai,          legacy: [R1, R3, R8, fs250]}   # R3 added 2026-10-24, see decisions.md
   P05: {slug: feature-benchmark,         legacy: [R1, R3, R8, fs250]}
   P06: {slug: feature-selection-cohort,  legacy: [R1, R3, R8, fs250]}
   P07: {slug: two-tier-quality,          legacy: [R1, R3, R5, R8, fs250]}
