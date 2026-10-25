@@ -134,3 +134,43 @@ for r in aud[1:]:
 ```
 
 Run as: `python3 -I - <repo root> < script` (reads only the CSVs under reports/).
+
+## Round 2
+
+Status: READY
+
+Trigger: 07_review.md, "Report v1 (P06.4) — Round 1", Verdict REJECT with four required fixes (commit 9473718). Base commit 3137dc5. Only `docs/report/v1/report.md` (MODIFIED) and this file (MODIFIED) changed; all edits made with the Edit tool, none refused.
+
+| Fix | Line(s) of `docs/report/v1/report.md` | Change |
+|---|---|---|
+| 1 (R9, factual) | 143 | Rejected-window sentence now names S02 (3), S03 (3) and S04 (1), and states that the `i % 5` resets of these subjects, including every S03 ablation row, are misaligned after their rejections [13, 3] |
+| 2 (D-1 a) | 13, 137, 149 | "reproduces both" / "the ablation reproduce … numerically" / "reproduces … the S03 ablation" qualified: the cohort table and four of the five ablation rows reproduce the reference; the SFS row is ours, not reproduced (D-1) |
+| 3 (interpretation) | 139, plus the arithmetic list at 153 | "The sub-band pruning result is the clearest effect …" replaced by: every reduced set is at or below the full baseline at 1.0 s by 0.51–4.07 pp (1–8 windows); with one subject, a leaky split and no interval, no reduction is singled out. The ANOVA and MI differences were added to the §6 arithmetic list so the stated range traces to a shown command |
+| 4 (traceability) | 153, 164 | "Part C of the handback" now points to `mas/state/phases/P06-feature-selection-cohort/03_changes_scribe.md`, "Part C"; reference [8] extended with "results review part 1 (D-1, commit 637dad6)" |
+
+Shown command for fix 3 (reads only `reports/feature_selection_ablation_S03.csv`):
+
+```bash
+python3 -I -c "
+import csv
+r=list(csv.DictReader(open('reports/feature_selection_ablation_S03.csv')))
+f=float(r[0]['1.0s Acc (%)'])
+for x in r[1:]:
+  d=f-float(x['1.0s Acc (%)']); print(x['Method'], round(d,2), round(d*197/100,2))
+"
+```
+
+Output:
+
+```
+Sub-band pruning (drop 38-52 Hz) 3.05 6.01
+ANOVA F-score 4.07 8.02
+Mutual information 2.54 5.0
+Sequential forward selection 0.51 1.0
+```
+
+Range: min 0.51 (SFS, 1 window), max 4.07 (ANOVA, 8.02 windows).
+
+Table check after the edits (`python3 -I -c`, each CSV row rendered as a markdown row and searched in `report.md`): `reports/feature_selection_ablation_S03.csv True`, `reports/five_subjects_benchmark.csv True`. Tables 1–5 untouched (`git diff -U0` hunks only at lines 13, 137, 139, 143, 149, 153, 164).
+
+Commit: `docs: P06 report v1 round 2 text fixes` (SHA reported in the scribe's run summary). No reference consultation; no data read.
