@@ -57,12 +57,12 @@ phases:
     passed: '2026-10-25'
   P07:
     slug: two-tier-quality
-    status: pending
+    status: passed
     owner: orchestrator
-    branch: null
-    commit: null
-    opened: null
-    passed: null
+    branch: phase/P07-two-tier-quality
+    commit: f927a36
+    opened: '2026-10-25'
+    passed: '2026-10-25'
   P08:
     slug: eegnet
     status: pending

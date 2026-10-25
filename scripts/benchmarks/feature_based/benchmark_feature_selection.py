@@ -1,9 +1,10 @@
 """Feature-selection ablation on one subject (P06.2, legacy Era A).
 
 Data source: legacy folders <processed-dir>/<S>/ (P02, OO session, 7 channels), stimulus windows
-only, one window mask (vpp 0.5-120 uV, std 0.1-35 uV; R5 per-script gate) as the P05 flagship.
+only, one quality decision (two-tier gate from P07: vpp 5-120 uV, std 1-35 uV, channel dropped if it fails
+in > 50 % of the windows; R5 per-script gate) as the P05 flagship.
 Base matrix = the P05 flagship: FBCSP m = 1 on 5 bands (50 columns, CSP fitted on the training
-rows of each fold, R2/PF-11) + 5 FBCCA scores (all 7 channels) = 55. Model: StandardScaler ->
+rows of each fold, R2/PF-11) + 5 FBCCA scores (all kept channels) = 55. Model: StandardScaler ->
 Shrinkage-LDA (lsqr, auto), as the flagship.
 
 Five rows, all evaluated inside the same legacy folds of the flagship; every selection is
@@ -56,6 +57,7 @@ from src.features.selection.feature_selection import (  # noqa: E402
   select_k_best_fbcsp_features, select_sfs_fbcsp_features, subband_pruned_columns, with_fbcca)
 from src.features.ssvep.fbcsp_extraction import DEFAULT_SUBBANDS  # noqa: E402
 from src.features.ssvep.spectral_power import LEGACY_FS_HZ  # noqa: E402
+from src.models.classical.benchmark_runner import channel_summary  # noqa: E402
 from src.models.classical.benchmark_runner import (  # noqa: E402
   DEFAULT_SUBJECT, legacy_header_lines, load_config, prepare_subject)
 from src.models.classical.feature_spaces import benchmark_spaces  # noqa: E402
@@ -248,12 +250,11 @@ def run_sfs_diagnostics(blocks: dict, subject: str, sfs_k: int = 15, m: int = 1,
 def main(argv: Optional[Sequence[str]] = None) -> int:
   args = build_parser().parse_args(argv)
   cfg = load_config(args.config)
-  scalp = list(cfg["channels"]["scalp"])
   processed = args.processed_dir or ROOT / cfg["paths"]["data_processed_dir"]
   reports = Path(args.reports_dir or ROOT / "reports")
   t0 = time.time()
   try:
-    b = prepare_subject(processed, args.subject, scalp, args.fs)
+    b = prepare_subject(processed, args.subject, None, args.fs)
   except (FileNotFoundError, ValueError) as exc:
     print(f"[-] Skipping {args.subject}: {exc}")
     return 1
@@ -262,6 +263,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 f"FBCCA always kept; all selection fitted on the training rows of each fold")
   print(f"Data source: legacy windows, {_rel(processed)}/{args.subject}/ (P02, OO session), stimulus windows only")
   print("\n".join(header))
+  print(f"  {channel_summary(b)}")
   print(f"\n[+] {args.subject}: {b['n_stimulus']} stimulus windows, {b['n_clean']} clean, {b['n_rejected']} rejected")
   rows = run_ablation(b, args.subject, args.k_features, args.sfs_features, args.m, args.seed, args.n_jobs,
                       include_sfs=not args.skip_sfs)

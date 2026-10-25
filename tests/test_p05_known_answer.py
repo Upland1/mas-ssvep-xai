@@ -27,7 +27,7 @@ from src.models.classical import feature_spaces as fsp
 from src.models.classical import legacy_eval as le
 from src.models.classical.sklearn_models import get_sklearn_model_suite
 from src.preprocessing.dataset.smoothing import smooth_probabilities_legacy, smooth_probabilities_mod5
-from tests.p05_synth import SCALP, make_windows
+from tests.p05_synth import SCALP, keep_all, make_windows
 
 FS = 250.0
 T = 256
@@ -117,8 +117,8 @@ def test_fbcca_argmax_recovers_planted_target_other_seed():
       X.append(8 * mix[:, None] * np.sin(2 * np.pi * f * t + rng.uniform(0, 6.28))[None] + rng.normal(0, 2, (7, T)))
       y.append(k)
   X, y = np.stack(X), np.array(y)
-  S, yc, mask = fb.extract_fbcca_features(X, y)
-  assert S.shape == (20, 5) and mask.sum() == 20
+  S, yc, mask, rep = fb.extract_fbcca_features(X, y)
+  assert S.shape == (20, 5) and mask.sum() == 20 and rep["channels_dropped"] == []
   assert np.array_equal(S.argmax(1), y)
   assert S.min() >= 0 and S.max() <= 1.25 + 0.6704 + 0.5033 + 1e-3
 
@@ -128,8 +128,8 @@ def test_fbcca_at_wrong_fs_loses_the_24hz_target_margin():
   by >= 25 % relative to fs 250 (measured ratio ~0.6)."""
   rng = np.random.default_rng(5)
   x = 8 * np.sin(2 * np.pi * 24 * t + 1.0)[None] * np.ones((7, 1)) + rng.normal(0, 1, (7, T))
-  s250, _, _ = fb.extract_fbcca_features(x[None], np.array([0]), fs=250.0)
-  s256, _, _ = fb.extract_fbcca_features(x[None], np.array([0]), fs=256.0)
+  s250, _, _, _ = fb.extract_fbcca_features(x[None], np.array([0]), fs=250.0)
+  s256, _, _, _ = fb.extract_fbcca_features(x[None], np.array([0]), fs=256.0)
   assert s256[0, 0] < 0.75 * s250[0, 0]
 
 
@@ -139,7 +139,7 @@ def test_fbcca_failure_gives_zero_correlation_not_exception():
   const = np.full((7, T), 3.0)
   assert fb.canonical_correlation(const.T, fb.generate_reference_signals(10.0, FS, T).T) == 0.0
   X = np.stack([const, np.zeros((7, T))])
-  S, _, m = fb.extract_fbcca_features(X, np.array([101, 102]), valid_mask=np.ones(2, int))
+  S, _, m, _ = fb.extract_fbcca_features(X, np.array([101, 102]), precomputed=keep_all(2))
   assert S.shape == (2, 5) and np.all(np.isfinite(S)) and m.tolist() == [1, 1]
   assert np.all(S[1] == 0.0)                                                # zero window -> r = 0 -> score 0
 
@@ -323,7 +323,7 @@ def test_continuous_psd_closed_form_amplitude_and_channel_major_position():
   x = np.zeros((1, 7, T))
   tt = np.arange(T) / FS
   x[0, 2] = A * np.sin(2 * np.pi * 10 * FS / T * tt)
-  P, _, m = extract_continuous_psd_features(x, np.array([101]), valid_mask=np.ones(1, int))
+  P, _, m, _ = extract_continuous_psd_features(x, np.array([101]), precomputed=keep_all(1))
   assert P.shape == (1, 210)
   assert np.isclose(P[0, 64], A ** 2 * T / (2 * FS), rtol=1e-9)
   other = np.delete(P[0], 64)
@@ -362,7 +362,7 @@ def test_harmonic_psd_picks_po8_o1_oz_o2_by_name_with_closed_form_power():
   assert not np.allclose(p04, want)
   assert VISUAL_CLUSTER == ("PO8", "O1", "Oz", "O2")
   freqs = continuous_psd_freqs(T, FS)
-  P, _, _ = extract_continuous_psd_features(X, y, valid_mask=np.ones(10, int))
+  P, _, _, _ = extract_continuous_psd_features(X, y, precomputed=keep_all(10))
   mut = visual_cluster_harmonic_psd(P, freqs, list(reversed(SCALP)), cluster=("POz", "O1", "Oz", "O2"))
   assert not np.allclose(mut[:, 2::8], want[None], rtol=1e-6)
 
@@ -449,23 +449,23 @@ def test_single_mask_removes_window_from_every_block_under_stricter_threshold():
   assert all(len(strict[k]) == len(X) - 1 for k in keys)
   keep = np.delete(np.arange(len(X)), bad)
   assert np.array_equal(strict["y"], y[keep])
-  ref = extract_continuous_psd_features(X[keep], y[keep], valid_mask=np.ones(len(keep), int))[0]
+  ref = extract_continuous_psd_features(X[keep], y[keep], precomputed=keep_all(len(keep)))[0]
   assert np.allclose(strict["psd"], ref)
   # mutant: PSD on the shared mask, FBCCA gated on its own with the strict limit -> misaligned
   psd_loose = loose["psd"]
-  fb_strict, _, _ = fb.extract_fbcca_features(X, y, thresholds=strict_th)
+  fb_strict, _, _, _ = fb.extract_fbcca_features(X, y, thresholds=strict_th, channel_fail_fraction=1.0)
   assert len(psd_loose) != len(fb_strict)
 
 
 def test_blocks_receive_the_same_mask_object(monkeypatch):
-  """PF-10 known answer: build_feature_blocks hands one identical non-None `valid_mask` to the PSD and the
-  FBCCA extractor (spy), equal to the returned mask."""
+  """PF-10 known answer: build_feature_blocks hands one identical non-None decision (`precomputed`, P07) to the PSD
+  and the FBCCA extractor (spy); its `valid_mask` is the returned mask."""
   seen = {}
   X, y = make_windows(n_trials=1, seed=3)
 
   def wrap(name, fn):
     def inner(*a, **k):
-      seen[name] = k.get("valid_mask")
+      seen[name] = k.get("precomputed")
       return fn(*a, **k)
     return inner
 
@@ -473,7 +473,8 @@ def test_blocks_receive_the_same_mask_object(monkeypatch):
   monkeypatch.setattr(fsp, "extract_fbcca_features", wrap("fbcca", fsp.extract_fbcca_features))
   b = fsp.build_feature_blocks(X, y, SCALP)
   assert seen["psd"] is not None and seen["fbcca"] is not None
-  assert np.array_equal(seen["psd"], seen["fbcca"]) and np.array_equal(seen["psd"], b["mask"])
+  assert np.array_equal(seen["psd"]["valid_mask"], seen["fbcca"]["valid_mask"])
+  assert np.array_equal(seen["psd"]["valid_mask"], b["mask"])
 
 
 # --- suite ----------------------------------------------------------------------------------------------

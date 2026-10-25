@@ -36,7 +36,7 @@ from src.models.cnn.spatial_spectral_cnn import (  # noqa: E402
 
 from scripts.training.train_final_model import load_subject_inputs  # noqa: E402
 from scripts.training.train_models import (  # noqa: E402
-  CLASS_CODES, DEFAULT_CONFIG, N_FOLDS, arrays_exist, check_keep_channels, load_config, make_classifiers,
+  CLASS_CODES, DEFAULT_CONFIG, N_FOLDS, arrays_exist, check_keep_channels, check_subject_keep_channels, load_config, make_classifiers,
   print_legacy_header, run_evaluation)
 
 DEFAULT_PARADIGM = "OO.ebr"
@@ -103,6 +103,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
       print(f"[-] Skipping {s}: no arrays")
       continue
     try:
+      check_subject_keep_channels(processed, s)
       row = evaluate_subject(s, processed, args.paradigm, args.device, args.epochs, not args.skip_cnn)
     except (ValueError, RuntimeError) as exc:
       print(f"[-] Skipping {s}: {exc}")

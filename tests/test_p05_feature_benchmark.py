@@ -21,12 +21,12 @@ from src.features.ssvep import fbcca_extraction as fb
 from src.features.ssvep import fbcsp_extraction as csp
 from src.features.ssvep.harmonic_psd import VISUAL_CLUSTER, visual_cluster_harmonic_psd
 from src.features.ssvep.psd_extraction import continuous_psd_freqs, extract_continuous_psd_features
-from src.features.ssvep.window_mask import P05_MASK_THRESHOLDS
+from src.features.ssvep.window_mask import GATE_THRESHOLDS, NO_CHANNEL_DROP, P05_MASK_THRESHOLDS
 from src.models.classical import legacy_eval as le
 from src.models.classical.feature_spaces import build_feature_blocks
 from src.models.classical.sklearn_models import MODEL_NAMES, get_sklearn_model_suite
 from src.preprocessing.dataset.smoothing import smooth_probabilities_legacy, smooth_probabilities_mod5
-from tests.p05_synth import FS, SCALP, TARGETS, make_windows, write_subject
+from tests.p05_synth import FS, SCALP, TARGETS, keep_all, make_windows, write_subject
 
 
 # --- FBCCA ----------------------------------------------------------------------
@@ -60,7 +60,7 @@ def test_chebyshev_subbands_design_and_gain():
 def test_fbcca_planted_sinusoid_picks_its_target():
   """Known answer: a 7-channel window with a sinusoid at target k (+ noise) has its largest FBCCA score at k, X (5, 5)."""
   X, y = make_windows(n_trials=1, seed=3)
-  Xf, yf, mask = fb.extract_fbcca_features(X[::5], y[::5])   # one window per class
+  Xf, yf, mask, _ = fb.extract_fbcca_features(X[::5], y[::5])   # one window per class
   assert Xf.shape == (5, 5) and mask.tolist() == [1] * 5
   assert np.argmax(Xf, axis=1).tolist() == [0, 1, 2, 3, 4]
   assert np.all(Xf >= 0) and np.all(Xf <= fb.fbcca_weights(3).sum() + 1e-9)
@@ -172,11 +172,11 @@ def test_butter_bandpass_caps_high_edge_at_nyquist_minus_one():
 def test_continuous_psd_shape_and_bins():
   """Known answer: 256-sample windows at fs 250, 5-35 Hz -> 30 bins 5.859...34.180 Hz, (n, 7*30 = 210)."""
   X, y = make_windows(n_trials=1)
-  P, yc, mask = extract_continuous_psd_features(X, y)
+  P, yc, mask, _ = extract_continuous_psd_features(X, y)
   assert P.shape == (len(X), 210) and len(yc) == len(X)
   f = continuous_psd_freqs(256, 250.0, (5, 35))
   assert len(f) == 30 and np.isclose(f[0], 6 * 250 / 256) and np.isclose(f[-1], 35 * 250 / 256)
-  Pdb, _, _ = extract_continuous_psd_features(X, y, use_db=True)
+  Pdb, _, _, _ = extract_continuous_psd_features(X, y, use_db=True)
   assert np.allclose(Pdb, 10 * np.log10(P + 1e-12))
 
 
@@ -212,27 +212,27 @@ def test_single_mask_aligns_every_block():
   X = X.copy()
   X[bad, 3, :] += 500.0 * np.sin(np.arange(256))
   b = build_feature_blocks(X, y, SCALP)
-  assert b["thresholds"] == P05_MASK_THRESHOLDS
+  assert b["thresholds"] == GATE_THRESHOLDS and b["channels_dropped"] == []
   assert b["mask"].sum() == len(X) - 1 and b["mask"][bad] == 0
   n = len(X) - 1
   assert all(len(b[k]) == n for k in ("y", "psd", "harmonic", "fbcca", "subbands"))
   keep = np.delete(np.arange(len(X)), bad)
-  ref, _, _ = fb.extract_fbcca_features(X[keep], y[keep], valid_mask=np.ones(n, int))
+  ref, _, _, _ = fb.extract_fbcca_features(X[keep], y[keep], precomputed=keep_all(n))
   assert np.allclose(b["fbcca"], ref)
 
 
 def test_extractors_do_not_regate_when_given_a_mask():
-  """PF-10 known answer: a window failing the extractor gate (flat: vpp 0) is kept when valid_mask says 1 and
-  dropped by the extractor's own gate otherwise (no second, different decision)."""
+  """PF-10 known answer: a window failing the extractor gate (flat: vpp 0) is kept when the decision handed in
+  (`precomputed`) says 1 and dropped by the extractor's own gate otherwise (no second, different decision)."""
   X, y = make_windows(n_trials=1, seed=6)
   X = X.copy()
   X[2] = 0.0
-  own, _, m_own = extract_continuous_psd_features(X, y)
-  forced, _, m_forced = extract_continuous_psd_features(X, y, valid_mask=np.ones(len(X), int))
+  own, _, m_own, _ = extract_continuous_psd_features(X, y)
+  forced, _, m_forced, _ = extract_continuous_psd_features(X, y, precomputed=keep_all(len(X)))
   assert m_own[2] == 0 and len(own) == len(X) - 1
   assert len(forced) == len(X) and m_forced.all()
   with pytest.raises(ValueError):
-    extract_continuous_psd_features(X, y, valid_mask=np.ones(len(X) - 1, int))
+    extract_continuous_psd_features(X, y, precomputed=keep_all(len(X) - 1))
   with pytest.raises(ValueError):
     extract_continuous_psd_features(X, y, thresholds={"vpp_min": 5.0})   # R5: every limit explicit
 
@@ -428,18 +428,19 @@ def test_visualize_data_p05_blocks(tree):
 
 # --- Round 2 (decisions.md P05: original extractor limits, i%5 reported smoothing, visual-cluster FBCCA) ---
 
-def test_mask_limits_are_the_original_extractor_limits():
-  """Known answer (R11 round 2): limits vpp 0.5-120 uV, std 0.1-35 uV. A window with a 2 uV peak-to-peak channel
-  (std ~0.7) is kept by these limits and rejected by the shared 5-120 / 1-35 limits (the superseded P05 row)."""
+def test_p05_limits_stay_reachable_and_the_default_is_the_p07_gate():
+  """Known answer (R11 round 2, P07): the legacy P05 limits vpp 0.5-120 uV, std 0.1-35 uV stay reachable
+  (`thresholds=P05_MASK_THRESHOLDS`, tier 1 off); a window with a 2 uV peak-to-peak channel (std ~0.7) is kept by
+  them and rejected by the default P07 gate (5-120 / 1-35 + channel drop at > 50 %)."""
   assert P05_MASK_THRESHOLDS == {"vpp_min": 0.5, "vpp_max": 120.0, "std_min": 0.1, "std_max": 35.0}
+  assert GATE_THRESHOLDS == {"vpp_min": 5.0, "vpp_max": 120.0, "std_min": 1.0, "std_max": 35.0}
   X, y = make_windows(n_trials=1, seed=8)
   X = X.copy()
   X[3, 4] = np.sign(np.sin(2 * np.pi * 10 * np.arange(256) / FS))   # vpp 2, std 1 -> scale to std ~0.7
   X[3, 4] *= 0.7
-  b = build_feature_blocks(X, y, SCALP)
-  assert b["mask"][3] == 1
-  shared = build_feature_blocks(X, y, SCALP, thresholds={"vpp_min": 5.0, "vpp_max": 120.0,
-                                                         "std_min": 1.0, "std_max": 35.0})
+  b = build_feature_blocks(X, y, SCALP, thresholds=P05_MASK_THRESHOLDS, channel_fail_fraction=NO_CHANNEL_DROP)
+  assert b["mask"][3] == 1 and b["channels_dropped"] == []
+  shared = build_feature_blocks(X, y, SCALP)
   assert shared["mask"][3] == 0
 
 
@@ -464,7 +465,8 @@ def test_fbcca_channels_by_name_and_same_mask():
   full = build_feature_blocks(X, y, SCALP)
   vis = build_feature_blocks(X, y, SCALP, fbcca_channels=VISUAL_CLUSTER)
   idx = [list(SCALP).index(c) for c in VISUAL_CLUSTER]
-  ref, _, _ = fb.extract_fbcca_features(X[:, idx], y, valid_mask=full["mask"])
+  ref, _, _, _ = fb.extract_fbcca_features(X[:, idx], y, list(VISUAL_CLUSTER),
+                                           precomputed=dict(full["channel_report"], channels_kept=list(VISUAL_CLUSTER)))
   assert np.allclose(vis["fbcca"], ref) and not np.allclose(vis["fbcca"], full["fbcca"])
   assert np.array_equal(vis["mask"], full["mask"]) and np.allclose(vis["psd"], full["psd"])
   assert vis["fbcca_channels"] == list(VISUAL_CLUSTER) and full["fbcca_channels"] == list(SCALP)

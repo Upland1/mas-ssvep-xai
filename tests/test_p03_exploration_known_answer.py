@@ -13,6 +13,7 @@ Each "variant" block re-runs a check against a plausible buggy implementation
 (monkeypatched inside the test) and asserts that the check would fail on it.
 """
 
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -214,12 +215,13 @@ def test_occipital_by_name_reordered(monkeypatch):
 
 
 def test_occipital_by_name_through_config(tmp_path, capsys):
-  """Known answer: the script takes names from config `channels.scalp`; with the reordered
-  list and the decoy array it reports channels [0, 2, 3] = ['O1', 'Oz', 'O2'] and the planted
+  """Known answer: the script takes names from the subject's `channels.json` (P07: the scripts no
+  longer read config `channels.scalp`); with the reordered list and the decoy array it reports channels [0, 2, 3] = ['O1', 'Oz', 'O2'] and the planted
   maxima (fs 256: 24.000, 20.000, 15.000, 11.000, 9.000 Hz). Exact. Source: PF-06.
   """
   X, y = _legacy_subject(names=REORDERED, decoy=([4, 5, 6], 33.0, 30.0))
   _write_subject(tmp_path / "proc" / "S01", X, y)
+  (tmp_path / "proc" / "S01" / "channels.json").write_text(json.dumps({"kept": REORDERED}))
   rc = dos.main(["--subject", "S01", "--fs", "256", "--no-figures", "--config",
                  str(_config(tmp_path, REORDERED)), "--processed-dir", str(tmp_path / "proc")])
   out = capsys.readouterr().out
@@ -440,12 +442,15 @@ def test_channel_count_mismatch_fails_loudly(tmp_path, capsys):
     vd.explore_subject({"X_time": X, "y": y}, FS_LEGACY, eight, STIM, (5.0, 35.0), LEGACY)
 
   _write_subject(tmp_path / "proc" / "S01", X, y)
-  cfg = str(_config(tmp_path, eight))
+  # P07: the scripts take names from channels.json (else by channel count), so a real mismatch
+  # is a channels.json with 6 names for the 7-channel array
+  (tmp_path / "proc" / "S01" / "channels.json").write_text(json.dumps({"kept": SCALP[:-1]}))
+  cfg = str(_config(tmp_path, SCALP))
   for mod in (dos, vd):
     rc = mod.main(["--subject", "S01", "--config", cfg, "--processed-dir", str(tmp_path / "proc"),
                    "--figures-dir", str(tmp_path / "figs")])
     out = capsys.readouterr().out
-    assert rc == 1 and "[-] Skipping S01: 8 channel names" in out
+    assert rc == 1 and "[-] Skipping S01: 6 channel names" in out
   assert not (tmp_path / "figs").exists() or not any((tmp_path / "figs").rglob("*.png"))
 
 

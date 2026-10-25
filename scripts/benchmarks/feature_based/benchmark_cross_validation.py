@@ -1,8 +1,9 @@
 """Feature-space x model benchmark on one subject (P05.5, legacy Era A).
 
 Data source: legacy folders <processed-dir>/<S>/ (P02, OO session, 7 channels, 256-sample
-windows), stimulus windows only (101-105). One window mask (original extractor limits written
-out: vpp 0.5-120 uV, std 0.1-35 uV; R5 per-script gate) feeds every feature block (PF-10).
+windows), stimulus windows only (101-105). One quality decision (two-tier gate from P07, limits
+written out: vpp 5-120 uV, std 1-35 uV, channel dropped if it fails in > 50 % of the windows; R5
+per-script gate) feeds every feature block (PF-10).
 
 Six feature spaces (p printed at fs 250): continuous PSD 5-35 Hz (210), harmonic PSD on
 PO8, O1, Oz, O2 (32 = 4 channels x 8 bins), FBCCA (5), harmonic PSD + FBCCA (37), FBCSP
@@ -45,6 +46,7 @@ if str(ROOT) not in sys.path:
   sys.path.insert(0, str(ROOT))
 
 from src.features.ssvep.spectral_power import LEGACY_FS_HZ  # noqa: E402
+from src.models.classical.benchmark_runner import channel_summary  # noqa: E402
 from src.models.classical.benchmark_runner import (  # noqa: E402
   DEFAULT_SUBJECT, legacy_header_lines, load_config, prepare_subject)
 from src.models.classical.feature_spaces import benchmark_spaces  # noqa: E402
@@ -114,12 +116,11 @@ def run_benchmark(blocks: dict, subject: str, m: int = 1, seed: int = SEED, verb
 def main(argv: Optional[Sequence[str]] = None) -> int:
   args = build_parser().parse_args(argv)
   cfg = load_config(args.config)
-  scalp = list(cfg["channels"]["scalp"])
   processed = args.processed_dir or ROOT / cfg["paths"]["data_processed_dir"]
   reports = args.reports_dir or ROOT / "reports"
   t0 = time.time()
   try:
-    blocks = prepare_subject(processed, args.subject, scalp, args.fs)
+    blocks = prepare_subject(processed, args.subject, None, args.fs)
   except (FileNotFoundError, ValueError) as exc:
     print(f"[-] Skipping {args.subject}: {exc}")
     return 1
@@ -127,6 +128,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                          blocks["fbcca_channels"])
   print(f"Data source: legacy windows, {_rel(processed)}/{args.subject}/ (P02, OO session), stimulus windows only")
   print("\n".join(header))
+  print(f"  {channel_summary(blocks)}")
   print(f"\n[+] {args.subject}: {blocks['n_stimulus']} stimulus windows, {blocks['n_clean']} clean, "
         f"{blocks['n_rejected']} rejected")
   rows, failures = run_benchmark(blocks, args.subject, args.m, args.seed)

@@ -19,7 +19,7 @@ import numpy as np
 from scipy.signal import periodogram
 
 from src.features.ssvep.spectral_power import LEGACY_FS_HZ
-from src.features.ssvep.window_mask import resolve_window_mask
+from src.features.ssvep.window_mask import CHANNEL_FAIL_FRACTION, channel_report, quality_gate
 from src.preprocessing.signal.quality_check import (
   ensure_quality_stats, merge_quality_stats, new_quality_stats, update_quality_stats,
   window_quality_flags)
@@ -202,28 +202,35 @@ def continuous_psd_freqs(n_samples: int, fs: float = LEGACY_FS_HZ,
   return f[(f >= freq_range[0]) & (f <= freq_range[1])]
 
 
-def extract_continuous_psd_features(windows: np.ndarray, y: np.ndarray, fs: float = LEGACY_FS_HZ,
-                                    freq_range: tuple = (5, 35), use_db: bool = False,
-                                    valid_mask: Optional[np.ndarray] = None,
-                                    thresholds: Optional[dict] = None) -> tuple:
-  """Periodogram features of the accepted windows: `(X (n_clean, C * F), y_clean, valid_mask (n,))`.
+def extract_continuous_psd_features(windows: np.ndarray, y: np.ndarray,
+                                    channel_names: Optional[Sequence[str]] = None,
+                                    fs: float = LEGACY_FS_HZ, freq_range: tuple = (5, 35),
+                                    use_db: bool = False, precomputed: Optional[dict] = None,
+                                    thresholds: Optional[dict] = None,
+                                    channel_fail_fraction: float = CHANNEL_FAIL_FRACTION,
+                                    verbose: bool = False) -> tuple:
+  """Periodogram features of the accepted windows: `(X (n_clean, C' * F), y_clean, valid_mask (n,), channel_report)`.
 
-  P05.3. `windows (n, C, T)`; `scipy.signal.periodogram(x, fs, axis=-1)` (boxcar, constant
-  detrend, density), bins inside `freq_range`, flattened channel-major (feature `c * F + j` =
-  channel c, bin j; `continuous_psd_freqs` gives the bins). `use_db` returns `10 log10(psd + 1e-12)`.
-  `valid_mask` is used as given (PF-10: one mask for every feature block); otherwise the
-  per-script gate of `window_mask` runs with `thresholds`. legacy (PF-04): fs 250 by default,
+  P05.3 / P07.2. `windows (n, C, T)`; the two-tier gate (`window_mask.quality_gate`) drops noisy
+  channels and rejects windows, or `precomputed` (an earlier `channel_report`) is reused (PF-10).
+  `scipy.signal.periodogram(x, fs, axis=-1)` (boxcar, constant detrend, density) on the C' kept
+  channels, bins inside `freq_range`, flattened channel-major (feature `c * F + j` = kept channel c,
+  bin j, names in `channel_report["channels_kept"]`; `continuous_psd_freqs` gives the bins).
+  `use_db` returns `10 log10(psd + 1e-12)`. legacy (PF-04): fs 250 by default,
   so 7 channels give 210 features (the saved P02 `X_psd_features` has 217, true fs 256).
   """
   w = np.asarray(windows, dtype=np.float64)
   y = np.asarray(y)
   if w.ndim != 3 or len(w) != len(y):
     raise ValueError(f"windows {w.shape} and y {y.shape} do not match")
-  mask = resolve_window_mask(w, valid_mask, thresholds)
-  keep = mask == 1
-  freqs, psd = periodogram(w[keep], fs=fs, axis=-1)
+  q = quality_gate(w, y, channel_names, thresholds, channel_fail_fraction, precomputed, verbose)
+  wc = q["windows_clean"]
+  if len(wc) == 0:   # every window rejected: empty matrix with the right width
+    n_cols = wc.shape[1] * len(continuous_psd_freqs(wc.shape[2], fs, freq_range))
+    return np.zeros((0, n_cols)), q["y_clean"], q["valid_mask"], channel_report(q)
+  freqs, psd = periodogram(wc, fs=fs, axis=-1)
   sel = (freqs >= freq_range[0]) & (freqs <= freq_range[1])
   psd = psd[..., sel]
   if use_db:
     psd = 10.0 * np.log10(psd + 1e-12)
-  return psd.reshape(len(psd), -1), y[keep], mask
+  return psd.reshape(len(psd), -1), q["y_clean"], q["valid_mask"], channel_report(q)

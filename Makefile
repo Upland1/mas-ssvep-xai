@@ -9,7 +9,7 @@ help:
 	@echo "make venv       create .venv and install requirements.txt"
 	@echo "make test       run the synthetic test suite (no real data)"
 	@echo "make inventory  P00: header + MARK inventory of the raw recordings -> reports/raw_inventory.csv"
-	@echo "make preprocess P02: legacy windows + PSD of every subject -> data/processed/<S>/"
+	@echo "make preprocess P02: legacy 7-channel windows + PSD (--legacy-p02) -> data/processed/<S>/"
 	@echo "make explore    P03: occipital spectra + PSD by class (fs 250 legacy) -> outputs/figures/exploration/<S>/"
 
 venv:
@@ -24,7 +24,7 @@ inventory:
 	$(PYTHON) scripts/exploration/inventory_raw.py
 
 preprocess:
-	$(PYTHON) -m scripts.preprocessing.run_preprocessing --all
+	$(PYTHON) -m scripts.preprocessing.run_preprocessing --all --legacy-p02
 
 explore:
 	$(PYTHON) -m scripts.exploration.diagnose_occipital_spectra --all

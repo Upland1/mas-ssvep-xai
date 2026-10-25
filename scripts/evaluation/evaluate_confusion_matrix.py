@@ -3,8 +3,8 @@
 Data source: legacy folders <processed-dir>/<S>/ (P02, OO session, 7 channels), stimulus
 windows only. Features: FBCSP with m CSP components per side (default m = 1: 5 bands x 5
 classes x 2 = 50) fitted on the training rows of each fold (R2/PF-11) + 5 FBCCA scores = 55;
-one window mask (original extractor limits written out: vpp 0.5-120 uV, std 0.1-35 uV; R5 gate)
-feeds both blocks (PF-10). Model: Pipeline(StandardScaler, LDA(lsqr, shrinkage auto)).
+one quality decision (two-tier gate from P07, limits written out: vpp 5-120 uV, std 1-35 uV, channel
+dropped if it fails in > 50 % of the windows; R5 gate) feeds both blocks (PF-10). Model: Pipeline(StandardScaler, LDA(lsqr, shrinkage auto)).
 
 Reported: out-of-fold 1.0 s accuracy, and "2.0 s smoothed" = legacy i%5 trial smoothing (R8
 legacy, PF-02): 2-window average of the out-of-fold probabilities, reset at i % 5 == 0 of the
@@ -50,6 +50,7 @@ if str(ROOT) not in sys.path:
 
 from src.features.ssvep.spectral_power import LEGACY_FS_HZ  # noqa: E402
 from src.preprocessing.dataset.legacy_windows import CLASS_CODES  # noqa: E402
+from src.models.classical.benchmark_runner import channel_summary  # noqa: E402
 from src.models.classical.benchmark_runner import (  # noqa: E402
   DEFAULT_SUBJECT, figure_paths, legacy_header_lines, load_config, plot_confusion, prepare_subject,
   save_classification_report)
@@ -126,13 +127,12 @@ def update_flagship_csv(path: Path, row: dict) -> pd.DataFrame:
 def main(argv: Optional[Sequence[str]] = None) -> int:
   args = build_parser().parse_args(argv)
   cfg = load_config(args.config)
-  scalp = list(cfg["channels"]["scalp"])
   processed = args.processed_dir or ROOT / cfg["paths"]["data_processed_dir"]
   reports = Path(args.reports_dir or ROOT / "reports")
   figures = args.figures_dir or ROOT / cfg["paths"]["figures_dir"]
   t0 = time.time()
   try:
-    b = prepare_subject(processed, args.subject, scalp, args.fs)
+    b = prepare_subject(processed, args.subject, None, args.fs)
   except (FileNotFoundError, ValueError) as exc:
     print(f"[-] Skipping {args.subject}: {exc}")
     return 1
@@ -142,6 +142,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
   space = [s for s in benchmark_spaces(b, args.m) if s.name == SPACE][0]
   y = b["y"]
   n_bands = b["subbands"].shape[1]
+  print(f"  {channel_summary(b)}")
   print(f"\n[+] {args.subject}: {b['n_stimulus']} stimulus windows, {b['n_clean']} clean, {b['n_rejected']} rejected; "
         f"{SPACE}, m={args.m}, p={space_width(space, n_bands)} (FBCSP {5 * 2 * args.m * n_bands} + FBCCA 5)")
   res, errs = oof_space(space, b["subbands"], y, {MODEL: get_sklearn_model_suite(args.seed)[MODEL]}, args.seed)

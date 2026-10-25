@@ -36,7 +36,7 @@ import numpy as np  # noqa: E402
 from scripts.training.train_final_model import (  # noqa: E402
   DEFAULT_SUBJECT, fit_full_lda, load_subject_inputs)
 from scripts.training.train_models import (  # noqa: E402
-  CLASS_CODES, DEFAULT_CONFIG, KEEP_CHANNEL_NAMES, STIM_FREQS_HZ, arrays_exist, check_keep_channels,
+  CLASS_CODES, DEFAULT_CONFIG, KEEP_CHANNEL_NAMES, STIM_FREQS_HZ, arrays_exist, check_keep_channels, check_subject_keep_channels,
   harmonic_bin_indices, load_config)
 
 N_SPATIAL = 32
@@ -132,6 +132,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
   out = args.out_dir or ROOT / "outputs"
   if not arrays_exist(processed, args.subject):
     print(f"[x] {args.subject}: arrays missing in {processed}/{args.subject}")
+    return 1
+  try:
+    check_subject_keep_channels(processed, args.subject)
+  except ValueError as exc:
+    print(f"[x] {exc}")
     return 1
   _, _, y, hybrid = load_subject_inputs(processed, args.subject)
   _, lda = fit_full_lda(hybrid, y)

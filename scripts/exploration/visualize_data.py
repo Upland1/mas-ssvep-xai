@@ -7,8 +7,8 @@ per-script gate; default the P02 legacy limits: vpp 0.5-200 uV, std 0.5-60 uV,
 `vpp_max` and `std_range` from the config, `vpp_min` the legacy constant), keep
 the accepted stimulus windows (101-105), compute periodogram PSD features
 (5-35 Hz, P02 layout: channel-major, 31 bins at fs 256, 30 at fs 250) and plot
-the per-class mean PSD, one panel per channel (names from config
-`channels.scalp`, length checked against the array).
+the per-class mean PSD, one panel per channel (names from the
+subject's `channels.json`, else `resolve_channel_names(n_channels)`; PF-06).
 
 Prints windows kept/rejected by the mask (per label and reason), the per-class
 counts and, when the PSD is computed at the header fs, the largest difference
@@ -50,8 +50,10 @@ if str(ROOT) not in sys.path:
 from scripts.exploration.diagnose_occipital_spectra import (  # noqa: E402
   DATA_SOURCE, DEFAULT_CONFIG, DEFAULT_SUBJECT, figure_path, header_fs, load_config,
   load_legacy_windows, resolve_subjects, stimulus_conditions)
+from src.io.channels import subject_channel_names  # noqa: E402
 from src.features.ssvep.fbcca_extraction import TARGET_FREQS, extract_fbcca_features  # noqa: E402
 from src.features.ssvep.fbcsp_extraction import extract_fbcsp_features  # noqa: E402
+from src.features.ssvep.window_mask import names_for  # noqa: E402
 from src.features.ssvep.spectral_power import (  # noqa: E402
   LEGACY_FS_HZ, fs_label, psd_features, select_channels_by_name)
 from src.preprocessing.signal.quality_check import (  # noqa: E402
@@ -107,27 +109,37 @@ def format_quality(subject: str, q: dict) -> str:
 
 # --- Feature blocks --------------------------------------------------------------
 
-def psd_block(X_stim: np.ndarray, fs: float, freq_range: tuple, y: Optional[np.ndarray] = None) -> dict:
+def _accepted(X_stim: np.ndarray, channel_names: Optional[Sequence[str]]) -> dict:
+  """Decision for windows the script's mask already accepted: all windows, all channels kept (PF-10)."""
+  return {"valid_mask": np.ones(len(X_stim), int), "channels_kept": names_for(channel_names, X_stim.shape[1])}
+
+
+def psd_block(X_stim: np.ndarray, fs: float, freq_range: tuple, y: Optional[np.ndarray] = None,
+              channel_names: Optional[Sequence[str]] = None) -> dict:
   """Periodogram block: `X (n, C*F)`, `freqs (F,)`, `per_window (n, C, F)`."""
   X, freqs, psd = psd_features(X_stim, fs, freq_range)
   return {"X": X, "freqs": freqs, "per_window": psd}
 
 
-def fbcca_block(X_stim: np.ndarray, fs: float, freq_range: tuple, y: Optional[np.ndarray] = None) -> dict:
+def fbcca_block(X_stim: np.ndarray, fs: float, freq_range: tuple, y: Optional[np.ndarray] = None,
+                channel_names: Optional[Sequence[str]] = None) -> dict:
   """FBCCA block (P05.1): `X (n, 5)` scores per target, `freqs` = the 5 targets, `per_window` = X.
 
   The windows are already accepted by the script's mask, so the extractor gate is bypassed with an
-  all-ones mask (PF-10). legacy (R3/PF-14): per-window sub-band filtering.
+  all-ones decision on every channel (`precomputed`, PF-10). legacy (R3/PF-14): per-window sub-band filtering.
   """
-  X, _, _ = extract_fbcca_features(X_stim, np.zeros(len(X_stim)), fs, valid_mask=np.ones(len(X_stim), int))
+  X, _, _, _ = extract_fbcca_features(X_stim, np.zeros(len(X_stim)), channel_names, fs,
+                                      precomputed=_accepted(X_stim, channel_names))
   return {"X": X, "freqs": np.asarray(TARGET_FREQS), "per_window": X}
 
 
-def fbcsp_block(X_stim: np.ndarray, fs: float, freq_range: tuple, y: Optional[np.ndarray] = None) -> dict:
+def fbcsp_block(X_stim: np.ndarray, fs: float, freq_range: tuple, y: Optional[np.ndarray] = None,
+                channel_names: Optional[Sequence[str]] = None) -> dict:
   """FBCSP block (P05.2, m = 1): `X (n, 50)`, `per_window` = X. FULL-DATA CSP fit: visualization only (R2 exception, PF-11)."""
   if y is None:
     raise ValueError("the FBCSP block needs the class labels")
-  X, _, _ = extract_fbcsp_features(X_stim, y, fs, m=1, valid_mask=np.ones(len(X_stim), int))
+  X, _, _, _ = extract_fbcsp_features(X_stim, y, channel_names, fs, m=1,
+                                      precomputed=_accepted(X_stim, channel_names))
   return {"X": X, "freqs": np.arange(X.shape[1]), "per_window": X}
 
 
@@ -163,7 +175,7 @@ def explore_subject(d: dict, fs: float, channel_names: Sequence[str], conditions
   y_k = y[keep]
   out = {"quality": q, "keep": keep, "y": y_k, "features": {}, "psd_check": None}
   for name in blocks:
-    b = FEATURE_BLOCKS[name](X[keep], fs, freq_range, y_k)
+    b = FEATURE_BLOCKS[name](X[keep], fs, freq_range, y_k, channel_names)
     b["class_means"], b["counts"] = class_means(b["per_window"], y_k, conditions)
     out["features"][name] = b
   saved = d.get("X_psd")
@@ -285,7 +297,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
   if not subjects:
     print(f"[x] No subject folders matching ^S\\d+$ in {processed_dir}")
     return 1
-  scalp = list(cfg["channels"]["scalp"])
   conds = stimulus_conditions(cfg)
   freq_range = tuple(float(v) for v in cfg["features"]["psd_range_hz"])
   sub_sec = float(cfg["preprocessing"]["sub_window_sec"])
@@ -293,13 +304,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
   print(f"Data source: {DATA_SOURCE} -> {_rel(processed_dir)}/<S>/")
   print(f"Quality mask (legacy per-script gate, R5): vpp [{th['vpp_min']:g}, {th['vpp_max']:g}] uV, "
-        f"std [{th['std_min']:g}, {th['std_max']:g}] uV; channels {scalp}")
+        f"std [{th['std_min']:g}, {th['std_max']:g}] uV; channel names from channels.json or resolve_channel_names (PF-06)")
   print(f"Features: {args.features}, {freq_range[0]:g}-{freq_range[1]:g} Hz; classes {list(conds)}")
 
   done, skipped, kept_total, rej_total = [], [], 0, 0
   for subject in subjects:
     try:
       d = load_legacy_windows(processed_dir, subject, with_psd=True)
+      scalp = subject_channel_names(processed_dir, subject, d["X_time"].shape[1])
       res = explore_subject(d, args.fs, scalp, conds, freq_range, th, blocks=args.features)
     except (FileNotFoundError, ValueError) as exc:
       print(f"[-] Skipping {subject}: {exc}")
