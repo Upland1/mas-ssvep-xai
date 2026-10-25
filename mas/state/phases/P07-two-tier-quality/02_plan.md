@@ -87,6 +87,7 @@ with 3-value unpacking fails the smoke test).
 ```bash
 # PF-07 regression demo and the 8-channel path, S03 only, separate output folder
 .venv/bin/python -m scripts.preprocessing.run_preprocessing --subject S03 --vpp-min 5.0 --processed-dir data/processed_p07_demo/vppmin5 --no-figures
+.venv/bin/python -m scripts.preprocessing.run_preprocessing --subject S03 --vpp-min 5.0 --no-channel-drop --processed-dir data/processed_p07_demo/vppmin5_nodrop --no-figures   # exact PF-07 reproduction (the original had no tier 1)
 .venv/bin/python -m scripts.preprocessing.run_preprocessing --subject S03 --processed-dir data/processed_p07_demo/pinned --no-figures
 # two-tier benchmark on the legacy 7-channel arrays
 .venv/bin/python -m scripts.benchmarks.feature_based.benchmark_n_subjects --data-root data/processed --n-jobs 5
