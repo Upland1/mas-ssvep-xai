@@ -192,17 +192,108 @@ The runner may proceed with the four commands of `02_plan.md` (amendment).
 
 ## Results review
 
-Verdict: APPROVE / REJECT
+Verdict: APPROVE
+
+Reviewed: `05_run.md` (7405cd1), `06_verify.md` (e9c9ae6, PASS); logs
+`reports/logs/P03/diagnose_occipital_spectra_header_20261024T180126.log` (primary),
+`diagnose_occipital_spectra_fs250_20261024T180123.log`, `visualize_data_fs250_20261024T180129.log`,
+`visualize_data_header_20261024T180134.log`; figures `outputs/figures/exploration/S0{1..5}/occipital_spectra_header.png`
+opened (all five). Data source (R9): legacy, `data/processed/<S>/` from P02, session OO; occipital mean O1/Oz/O2
+(channels `[4, 5, 6]` by name, log). Criterion applied exactly as pre-committed (Round 1); nothing re-run.
 
 ### Deviations from references
 
 | Ref | Expected | Obtained (log) | Δ | Within tolerance? | Explanation | Accepted? |
 |---|---|---|---|---|---|---|
-| | | | | | | |
+| R-x | none for P03 (`04_REFERENCE_RESULTS.md`) | — | — | — | acceptance is the figure criterion below | — |
+| Mask consistency | rejected 0 (same limits as P02) | `kept 320/320, 318/318, 317/317, 317/317, 320/320, rejected 0` (both `visualize_data` logs; `grep -c "rejected [1-9]"` = 0, 0) | 0 | yes | — | yes |
+| PSD consistency (fix 3) | `max |computed - saved| = 0` | `= 0` for S01–S05 (`visualize_data_header_…log`) | 0 | yes | — | yes |
+| Legacy identity | band-max bin equal at fs 250 and 256; label = k·250/256 | 25 / 25 rows (my own regex over both occipital logs, `.venv/bin/python -c "…re.findall(r'max in band at ([\d.]+) Hz \(bin (\d+)'…)"` → `25 25 25`; verifier 25/25) | 0 | yes | PF-04 shift only relabels the axis | yes |
+
+### Grades (pre-committed criterion; numbers verbatim from the fs-256 occipital log)
+
+Columns: band max (bin) | 1f0 response bin, ×band median | specificity | local max at response bin in the
+figure | grade.
+
+| S | Class | Band max | 1f0 ×median | Spec. | Local max | Grade |
+|---|---|---|---|---|---|---|
+| S01 | 101 24 Hz | 10 Hz (10) | bin 24 ×0.88 | ×1.48 | small bump | absent |
+| S01 | 102 20 Hz | 8 Hz (8) | bin 20 ×1.41 | ×1.42 | small bump | absent (< 1.5× median) |
+| S01 | 103 15 Hz | 8 Hz (8) | bin 15 ×2.10 | ×0.99 | marginal | partial (non-specific: spec < 1.5) |
+| S01 | 104 10.91 Hz | 11 Hz (11) | bin 11 ×4.28 | ×1.78 | yes | clear by the rule (see caveat) |
+| S01 | 105 8.57 Hz | 8 Hz (8) | bin 9 ×2.05 | ×0.87 | no (bin 9 below bins 8 and 10) | partial (alpha-confounded) |
+| S02 | 101 24 Hz | 6 Hz (6) | bin 24 ×1.04 | ×1.29 | no | absent |
+| S02 | 102 20 Hz | 6 Hz (6) | bin 20 ×1.00 | ×1.19 | no | absent |
+| S02 | 103 15 Hz | 6 Hz (6) | bin 15 ×3.64 | ×1.49 | yes | partial (spec 1.49 < 1.5) |
+| S02 | 104 10.91 Hz | 6 Hz (6) | bin 11 ×4.89 | ×1.24 | no (falling slope after bin 10) | partial (alpha-confounded) |
+| S02 | 105 8.57 Hz | 6 Hz (6) | bin 9 ×8.87 | ×1.01 | yes | partial (alpha-confounded: 9 Hz peak in every class) |
+| S03 | 101 24 Hz | 24 Hz (24) | ×5.97 | ×12.12 | yes | clear |
+| S03 | 102 20 Hz | 20 Hz (20) | ×12.93 | ×15.73 | yes | clear |
+| S03 | 103 15 Hz | 15 Hz (15) | ×14.32 | ×9.33 | yes | clear |
+| S03 | 104 10.91 Hz | 11 Hz (11) | ×6.94 | ×2.17 | yes | clear |
+| S03 | 105 8.57 Hz | 9 Hz (9) | ×4.63 | ×2.43 | yes | clear |
+| S04 | 101 24 Hz | 24 Hz (24) | ×9.59 | ×20.92 | yes | clear |
+| S04 | 102 20 Hz | 20 Hz (20) | ×14.68 | ×20.17 | yes | clear |
+| S04 | 103 15 Hz | 15 Hz (15) | ×29.56 | ×14.55 | yes | clear |
+| S04 | 104 10.91 Hz | 11 Hz (11) | ×31.47 | ×16.37 | yes | clear |
+| S04 | 105 8.57 Hz | 9 Hz (9) | ×9.55 | ×4.73 | yes | clear |
+| S05 | 101 24 Hz | 24 Hz (24) | ×8.74 | ×19.54 | yes | clear |
+| S05 | 102 20 Hz | 20 Hz (20) | ×5.46 | ×6.78 | yes | clear |
+| S05 | 103 15 Hz | 15 Hz (15) | ×10.87 | ×6.59 | yes | clear |
+| S05 | 104 10.91 Hz | 22 Hz (22, = 2f0) | ×8.22 | ×3.53 | yes | visible |
+| S05 | 105 8.57 Hz | 17 Hz (17, = 2f0) | ×5.01 | ×2.48 | yes (bin 9 just above bin 8 on the log axis) | visible (partial at worst under the 8/9 plateau clause; decision unchanged) |
+
+**Strong responders (fixed a priori):** S03 5/5 clear; S04 5/5 clear; S05 3 clear + 2 visible = 5/5.
+All ≥ 4/5 → acceptance met: visible fundamental peaks confirmed for S03, S04, S05.
+
+**S01, S02 (recorded, no threshold):** S01: 1 clear (104), 2 partial (103 non-specific, 105
+alpha-confounded), 2 absent (101, 102); band maxima at 8–11 Hz in every class (101 → 10 Hz, as
+P02). S02: 0 clear/visible, 3 partial (103, 104, 105; all fail specificity), 2 absent (101, 102);
+band maximum at 6 Hz in every class, with a second 9 Hz peak in every class.
+Caveat on S01 104: it passes the rule (×4.28, spec ×1.78), but 11 Hz is inside S01's alpha
+range (the other classes peak at 8–10 Hz) and the specificity is the lowest among the "clear"
+cells; read it as a weak, possibly alpha-assisted 10.91 Hz response, not as a responder.
+
+**2f0 (separate, response bins 30/22/17):** S03 ×1.92 / ×1.60 / ×0.93; S04 ×1.03 / ×1.67 / ×5.71;
+S05 ×4.42 / ×11.11 / ×13.50 (2f0 is the band maximum for S05 104 and 105); S01 ×0.22 / ×0.88 / ×1.90;
+S02 ×0.97 / ×0.85 / ×1.50 (log). Ratios checked: `.venv/bin/python -c "print(round(1.527e5/1.374e4,2), round(1.71e5/1.266e4,2))"` → `11.11 13.51`
+(log prints ×13.50 from unrounded values).
+
+**Alpha / low band (separate):** S01 8–11 Hz maxima in all classes; S02 6 Hz maximum and 9 Hz peak in all
+classes; S03 101 and S05 101 show secondary peaks near 10–11 Hz in the figures.
 
 ### Interpretation check
 
+- Per-subject reading (R9) above; no cohort-only statement.
+- The S03 8.57 Hz target, partial in P02's 7-channel mean, is clear in the occipital O1/Oz/O2 mean
+  (bin-9 maximum, spec ×2.43): the channel set, not the data, explains the P02 plateau.
+- S05's low-frequency classes are dominated by the 2nd harmonic: feature sets with harmonics (FBCCA,
+  P05) should help S05 104/105 more than fundamental-only PSD.
+- S01/S02 have no class-specific fundamental peaks except S01 104 (weak); their low R-6 accuracies
+  (61.00/67.50 %, 56.12/61.73 %) are consistent with this and are not a pipeline defect.
+- The quality mask's "rejected 0" is a consistency check on already-gated windows, not a rejection
+  rate (pre-run note); P02's 8 `vpp_high` losses remain the quality record.
+- `06_verify.md` §3 prose quotes S05 2f0 ratios as ×11.3 / ×14.5; the log says ×11.11 / ×13.50. The
+  verifier's table is correct; the scribe must take these numbers from the log, not the prose.
+- No fitted object, normalization, split or statistic exists in P03 (no leakage path).
+
+### Carry-forward for RESEARCH_LOG (P03.3) and later phases
+
+- P03.3: clear SSVEP fundamentals in S03, S04 (5/5) and S05 (5/5, 104/105 via strong 2f0);
+  none in S02; S01 only a weak 10.91 Hz response; S01/S02 spectra dominated by 8–11 Hz (S01) and
+  6/9 Hz (S02) activity in every class.
+- P04/P05: expect S01/S02 near chance-to-moderate and S05 104/105 to gain from harmonics; any S01/S02
+  accuracy far above R-6 is a leakage suspect (golden rule: surprising gains are bugs).
+- P16 (fs fix): legacy fs 250 only relabels the axis on these arrays (identity 25/25); the effect of
+  PF-04 appears where 250 Hz enters filters and reference sinusoids (P04/P05), not here.
+
 ### Decisions for decisions.md
+
+- P03 | Figure criterion (pre-committed, 07_review Round 1) met: S03 5/5 clear, S04 5/5 clear, S05 3 clear + 2 visible (104/105 band maxima at 2f0); acceptance confirmed. No parameter changed | `P03-exploration/07_review.md` results review
+- P03 | S01: 104 clear by rule but alpha-adjacent (spec ×1.78), 103/105 partial, 101/102 absent, maxima 8–11 Hz; S02: no clear/visible class, maxima at 6 Hz, 9 Hz peak in every class — carried to P04/P05 interpretation and RESEARCH_LOG | same
+- P03 | S03 8.57 Hz (partial in P02 7-channel mean) is clear in the O1/Oz/O2 mean (bin 9, spec ×2.43); P02 partial attributed to the channel set | same
+- P03 | Legacy fs 250 identity 25/25, mask rejected 0, PSD recomputation = saved (0) for S01–S05 | logs `reports/logs/P03/*`
+- P03 | `06_verify.md` §3 prose S05 2f0 ratios (×11.3/×14.5) superseded by the log values ×11.11/×13.50 | `diagnose_occipital_spectra_header_20261024T180126.log`
 
 ## Sources spot-check
 
