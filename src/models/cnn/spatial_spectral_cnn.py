@@ -20,6 +20,9 @@ from sklearn.preprocessing import StandardScaler
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
+from src.features.ssvep.harmonic_psd import extract_harmonic_features
+from src.preprocessing.dataset.smoothing import smooth_probabilities_legacy
+
 N_CLASSES = 5
 N_SPATIAL = (4, 8)
 N_FBCCA = 5
@@ -64,7 +67,6 @@ def resolve_device(device: str = "auto") -> torch.device:
 
 def prepare_spatial_spectral_tensors(X_psd: np.ndarray) -> np.ndarray:
   """`(n, 1, 4, 8)` float32 from `X_psd (n, 217)`: row r = channel, column c = bin (channel-major, R6)."""
-  from scripts.training.train_models import extract_harmonic_features  # lazy: scripts live outside src
   feats = extract_harmonic_features(X_psd)
   return feats.reshape(len(feats), 1, *N_SPATIAL).astype(np.float32)
 
@@ -151,6 +153,5 @@ def train_and_eval_fusion_cnn_cv(X_spatial: np.ndarray, X_fbcca: np.ndarray, y: 
 
 def evaluate_temporal_smoothing(proba: np.ndarray, y: np.ndarray, classes: Optional[Sequence[int]] = None) -> float:
   """legacy (R8, PF-02): accuracy of the 2-window causal average over the array order, no trial reset."""
-  from scripts.training.train_models import smooth_probabilities_legacy
   classes = np.array(classes if classes is not None else np.unique(y))
   return float(np.mean(classes[smooth_probabilities_legacy(proba).argmax(1)] == np.asarray(y)))

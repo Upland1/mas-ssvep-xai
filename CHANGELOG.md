@@ -96,3 +96,25 @@ Result and scope
 - Seven runs on CPU at 140 epochs, all exit 0, 9.07 min in total.
 - Every accuracy is legacy leaky CV (R1, PF-01) with no-reset smoothing (R8, PF-02); not comparable with R-6. Trial-grouped CV and trial-reset smoothing come in P11; the FBCCA sampling rate and filtering come in P16.
 - Shrinkage-LDA 1.0 s: 50.00, 51.26, 83.00, 97.98, 95.50 % for S01–S05; fusion CNN 1.0 s: 51.50, 53.77, 89.00, 99.49, 100.00 %.
+
+## P05 — Feature extractors and feature-space / model benchmark
+
+2026-10-24 (Round 1) and 2026-10-25 (Round 2), branch `phase/P05-feature-benchmark`, code at `edcc177`. Report: `mas/state/reports/P05.md`.
+
+Added
+- `src/features/ssvep/fbcca_extraction.py`, `fbcsp_extraction.py`, `window_mask.py`, `harmonic_psd.py`: FBCCA, FBCSP (in-fold `FBCSPTransformer`; full-data `extract_fbcsp_features` for visualization only) and the explicit window mask.
+- `src/models/classical/` (`sklearn_models.py` ten-model suite; `legacy_eval.py`, `feature_spaces.py`, `benchmark_runner.py`); `src/preprocessing/dataset/smoothing.py`, `legacy_windows.py`.
+- `scripts/benchmarks/feature_based/benchmark_cross_validation.py`, `benchmark_harmonic_fbcca.py`; `scripts/evaluation/test_sklearn_models.py`, `evaluate_confusion_matrix.py` (`--subject`, `--m`, `--seed`, `--fs`, `--no-figures`).
+- Tests: `tests/test_p05_known_answer.py` (30), `tests/test_p05_feature_benchmark.py` (31), `tests/test_p05_round2_known_answer.py` (10), `tests/test_no_leakage.py` (6); suite `426 passed`.
+
+Changed
+- `src/features/ssvep/psd_extraction.py`: continuous PSD `(n, 210)` with `valid_mask` and `thresholds`.
+- `scripts/training/train_models.py`: P04 helpers moved to `src/` and re-exported; `--seed` added.
+- `scripts/exploration/visualize_data.py`: FBCCA and FBCSP blocks.
+- `mas/RULES.md`: R8 era row corrected (P04 no-reset; P05–P10 `i % 5` on the clean array).
+
+Result and scope
+- Ten benchmark and evaluation commands per round, all exit 0; 74 s (Round 1) and 53 s (Round 2).
+- S03 flagship: 197 / 3; 1.0 s 90.36 %; 2.0 s 95.43 % (`i % 5`, reported); no-reset 95.94 % (diagnostic only).
+- S01–S05 flagship, 1.0 s / 2.0 s: 64.50 / 75.50, 66.33 / 71.94, 90.36 / 95.43, 98.98 / 98.48, 96.50 / 96.50.
+- Legacy (window-level CV, `i % 5` after rejections, fs 250, per-window filtering); not comparable with R-6. The 24 Hz precision is 0.9750 (deviation D-1, accepted).

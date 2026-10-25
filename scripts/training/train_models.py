@@ -58,7 +58,13 @@ from sklearn.pipeline import Pipeline  # noqa: E402
 from sklearn.preprocessing import StandardScaler  # noqa: E402
 from sklearn.svm import SVC  # noqa: E402
 
+from src.features.ssvep.harmonic_psd import (  # noqa: E402,F401  (moved to src in P05; re-exported)
+  HARMONIC_TARGETS_HZ, KEEP_CHANNEL_NAMES, KEEP_CHANNELS, check_keep_channels,
+  extract_harmonic_features, harmonic_bin_indices)
 from src.features.ssvep.spectral_power import LEGACY_FS_HZ  # noqa: E402
+from src.preprocessing.dataset.legacy_windows import (  # noqa: E402,F401  (moved to src in P05)
+  CLASS_CODES, arrays_exist, load_stimulus_windows)
+from src.preprocessing.dataset.smoothing import smooth_probabilities_legacy  # noqa: E402,F401
 
 # SVC(probability=True) is the settled P04 setting (decisions.md); silence its deprecation notice.
 warnings.filterwarnings("ignore", message="The `probability` parameter", category=FutureWarning)
@@ -66,11 +72,7 @@ warnings.filterwarnings("ignore", message="The `probability` parameter", categor
 SUBJECT_PATTERN = re.compile(r"^S\d+$")
 DEFAULT_CONFIG = ROOT / "configs" / "pipeline_config.yaml"
 DEFAULT_SUBJECT = "S01"          # the subject of R-2's saved CSV
-CLASS_CODES = (101, 102, 103, 104, 105)
 STIM_FREQS_HZ = (24.0, 20.0, 15.0, 10.9091, 8.5714)   # in CLASS_CODES order (01_DATA_SPEC section 6)
-KEEP_CHANNEL_NAMES = ("POz", "O1", "Oz", "O2")        # positions (1, 4, 5, 6) of the 7-channel layout
-KEEP_CHANNELS = (1, 4, 5, 6)
-HARMONIC_TARGETS_HZ = (8.57, 10.91, 15.0, 20.0, 24.0, 17.14, 21.82, 30.0)
 FBCCA_HIGH_HZ = 55.0
 FBCCA_LOW_HZ = (6.0, 14.0, 22.0)
 N_FOLDS = 5
@@ -84,41 +86,6 @@ MODEL_FILES = {"Shrinkage-LDA": "shrinkage_lda", "Logistic Regression": "logisti
 
 
 # --- Features ------------------------------------------------------------------
-
-def check_keep_channels(scalp_names: Sequence[str], keep_channels: Sequence[int] = KEEP_CHANNELS,
-                        expected: Sequence[str] = KEEP_CHANNEL_NAMES) -> None:
-  """Assert that the positional `keep_channels` are `expected` by name (PF-06)."""
-  got = tuple(scalp_names[i] for i in keep_channels)
-  if got != tuple(expected):
-    raise ValueError(f"keep_channels {tuple(keep_channels)} select {got}, expected {tuple(expected)}")
-
-
-def harmonic_bin_indices(freq_start: float = 5, freq_end: float = 35,
-                         targets: Sequence[float] = HARMONIC_TARGETS_HZ) -> np.ndarray:
-  """Sorted, deduplicated indices of the grid `linspace(freq_start, freq_end, 31)` nearest to `targets`.
-
-  Default: 9, 11, 15, 17, 20, 22, 24, 30 Hz = indices 4, 6, 10, 12, 15, 17, 19, 25.
-  """
-  grid = np.linspace(freq_start, freq_end, int(round(freq_end - freq_start)) + 1)
-  return np.unique([int(np.argmin(np.abs(grid - t))) for t in targets])
-
-
-def extract_harmonic_features(X_psd: np.ndarray, n_channels: int = 7, freq_start: float = 5,
-                              freq_end: float = 35, keep_channels: Sequence[int] = KEEP_CHANNELS) -> np.ndarray:
-  """32 harmonic-PSD features `(n, 4 * 8)`, channel-major: feature `8 r + c` = channel r, bin c.
-
-  `X_psd (n, n_channels * 31)` is reshaped to `(n, n_channels, 31)` (P02 layout, channel-major),
-  channels `keep_channels` (POz, O1, Oz, O2 for the 7-channel layout; names are asserted by
-  `check_keep_channels` in the scripts) and the grid bins nearest to the harmonic targets are kept.
-  """
-  X = np.asarray(X_psd)
-  n_bins = int(round(freq_end - freq_start)) + 1
-  if X.ndim != 2 or X.shape[1] != n_channels * n_bins:
-    raise ValueError(f"X_psd {X.shape} is not (n, {n_channels} * {n_bins})")
-  idx = harmonic_bin_indices(freq_start, freq_end)
-  sel = X.reshape(X.shape[0], n_channels, n_bins)[:, list(keep_channels)][:, :, idx]
-  return sel.reshape(X.shape[0], -1)
-
 
 def fbcca_weights(n_bands: int = 3) -> np.ndarray:
   """Sub-band weights `b^-1.25 + 0.25`, b = 1..n_bands."""
@@ -193,26 +160,6 @@ def discover_subjects(processed_dir: Path) -> list:
   return sorted(found, key=lambda s: int(s[1:]))
 
 
-def arrays_exist(processed_dir: Path, subject: str) -> bool:
-  d = Path(processed_dir) / subject
-  return all((d / f"{n}.npy").is_file() for n in ("X_psd_features", "X_time_windows", "y_labels"))
-
-
-def load_stimulus_windows(processed_dir: Path, subject: str) -> tuple:
-  """`(X_psd, X_time, y)` of the stimulus windows (101-105) of a legacy subject folder.
-
-  y holds the condition codes; 201/202 rows are dropped (stimulus-only, decisions.md P02).
-  """
-  d = Path(processed_dir) / subject
-  X_psd = np.load(d / "X_psd_features.npy")
-  X_time = np.load(d / "X_time_windows.npy")
-  y = np.load(d / "y_labels.npy")
-  if not (len(X_psd) == len(X_time) == len(y)):
-    raise RuntimeError(f"{subject}: array lengths differ ({len(X_psd)}, {len(X_time)}, {len(y)})")
-  m = np.isin(y, CLASS_CODES)
-  return X_psd[m], X_time[m], y[m]
-
-
 # --- Evaluation ----------------------------------------------------------------
 
 def make_classifiers() -> dict:
@@ -228,9 +175,9 @@ def make_classifiers() -> dict:
   return {k: Pipeline([("scaler", StandardScaler()), ("clf", v)]) for k, v in clfs.items()}
 
 
-def legacy_cv() -> StratifiedKFold:
-  """legacy (R1, PF-01): fixed in P11 by StratifiedGroupKFold over trial ids."""
-  return StratifiedKFold(n_splits=N_FOLDS, shuffle=True, random_state=SEED)
+def legacy_cv(seed: Optional[int] = None) -> StratifiedKFold:
+  """legacy (R1, PF-01): fixed in P11 by StratifiedGroupKFold over trial ids. `seed` default: `SEED` (42)."""
+  return StratifiedKFold(n_splits=N_FOLDS, shuffle=True, random_state=SEED if seed is None else seed)
 
 
 def oof_predictions(model, X: np.ndarray, y: np.ndarray) -> tuple:
@@ -247,17 +194,6 @@ def oof_predictions(model, X: np.ndarray, y: np.ndarray) -> tuple:
     pred[te] = m.predict(X[te])
     proba[te] = m.predict_proba(X[te])
   return pred, proba
-
-
-def smooth_probabilities_legacy(proba: np.ndarray) -> np.ndarray:
-  """legacy (R8, PF-02): `p_0` unchanged, `p_j = (p_{j-1} + p_j) / 2` over the array order.
-
-  No trial reset: a window is averaged with the previous row even across trial boundaries.
-  """
-  p = np.asarray(proba, dtype=float)
-  out = p.copy()
-  out[1:] = (p[:-1] + p[1:]) / 2.0
-  return out
 
 
 def per_class_recall(y_true: np.ndarray, y_pred: np.ndarray, labels: Sequence[int]) -> np.ndarray:
@@ -343,6 +279,7 @@ def build_parser() -> argparse.ArgumentParser:
   p.add_argument("--processed-dir", type=Path, default=None, help="default: <root>/ + paths.data_processed_dir")
   p.add_argument("--out-dir", type=Path, default=None, help="default: <root>/outputs")
   p.add_argument("--no-figures", action="store_true")
+  p.add_argument("--seed", type=int, default=SEED, help=f"CV shuffle and model seed (default: {SEED})")
   return p
 
 
@@ -355,14 +292,16 @@ def _rel(path: Path) -> str:
 
 def print_legacy_header(processed: Path) -> None:
   print(f"Data source: legacy windows, {_rel(processed)}/<S>/ (P02, OO session), stimulus windows only")
-  print(f"cv={CV_LABEL}")
+  print(f"cv={CV_LABEL}; seed={SEED}")
   print(f"smoothing: {SMOOTH_LABEL}")
   print(f"FBCCA: legacy fs={LEGACY_FS_HZ:g} Hz (PF-04), per-window sub-band filtering (R3/PF-14), all channels")
   print("Features: 32 harmonic-PSD (POz, O1, Oz, O2) + 5 FBCCA; scaler inside each fold (R2)")
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
+  global SEED
   args = build_parser().parse_args(argv)
+  SEED = args.seed   # read at call time by legacy_cv() and make_classifiers()
   cfg = load_config(args.config)
   check_keep_channels(cfg["channels"]["scalp"])
   processed = args.processed_dir or ROOT / cfg["paths"]["data_processed_dir"]

@@ -16,8 +16,14 @@ from the saved X_psd_features (consistency check).
 
 fs: default `--fs 250` (legacy, PF-04); `--fs 256` = header rate. Printed and
 in the figure title. Figures: <figures-dir>/exploration/<S>/
-psd_features_by_class[_<suffix>].png. FBCCA / FBCSP features arrive in P05:
-see FEATURE_BLOCKS. Data source: legacy, data/processed/<S>/ from P02.
+psd_features_by_class[_<suffix>].png. P05 adds the blocks fbcca and fbcsp (`--features`, default psd fbcca fbcsp):
+fbcca_features_by_class[_<suffix>].png (mean FBCCA score per class and target, fs given by
+`--fs`, per-window Chebyshev sub-bands: legacy R3/PF-14) and fbcsp_features_by_class
+[_<suffix>].png (mean FBCSP feature per class). The FBCSP block fits the CSP filters on ALL
+accepted stimulus windows and labels shown, so it is a full-data fit for visualization only
+(R2 exception, PF-11; the caption of the figure says so); never feed it to a model. Both blocks
+use the windows already accepted by the mask above (no second gate, PF-10).
+Data source: legacy, data/processed/<S>/ from P02.
 """
 
 import argparse
@@ -44,6 +50,8 @@ if str(ROOT) not in sys.path:
 from scripts.exploration.diagnose_occipital_spectra import (  # noqa: E402
   DATA_SOURCE, DEFAULT_CONFIG, DEFAULT_SUBJECT, figure_path, header_fs, load_config,
   load_legacy_windows, resolve_subjects, stimulus_conditions)
+from src.features.ssvep.fbcca_extraction import TARGET_FREQS, extract_fbcca_features  # noqa: E402
+from src.features.ssvep.fbcsp_extraction import extract_fbcsp_features  # noqa: E402
 from src.features.ssvep.spectral_power import (  # noqa: E402
   LEGACY_FS_HZ, fs_label, psd_features, select_channels_by_name)
 from src.preprocessing.signal.quality_check import (  # noqa: E402
@@ -99,16 +107,31 @@ def format_quality(subject: str, q: dict) -> str:
 
 # --- Feature blocks --------------------------------------------------------------
 
-def psd_block(X_stim: np.ndarray, fs: float, freq_range: tuple) -> dict:
+def psd_block(X_stim: np.ndarray, fs: float, freq_range: tuple, y: Optional[np.ndarray] = None) -> dict:
   """Periodogram block: `X (n, C*F)`, `freqs (F,)`, `per_window (n, C, F)`."""
   X, freqs, psd = psd_features(X_stim, fs, freq_range)
   return {"X": X, "freqs": freqs, "per_window": psd}
 
 
-# P05 extension point: add "fbcca" and "fbcsp" entries (same call signature,
-# fitted on nothing but the windows given; FBCSP needs labels and an in-fold
-# fit when it feeds a model, R2) and a plot per block in `plot_blocks`.
-FEATURE_BLOCKS: dict = {"psd": psd_block}
+def fbcca_block(X_stim: np.ndarray, fs: float, freq_range: tuple, y: Optional[np.ndarray] = None) -> dict:
+  """FBCCA block (P05.1): `X (n, 5)` scores per target, `freqs` = the 5 targets, `per_window` = X.
+
+  The windows are already accepted by the script's mask, so the extractor gate is bypassed with an
+  all-ones mask (PF-10). legacy (R3/PF-14): per-window sub-band filtering.
+  """
+  X, _, _ = extract_fbcca_features(X_stim, np.zeros(len(X_stim)), fs, valid_mask=np.ones(len(X_stim), int))
+  return {"X": X, "freqs": np.asarray(TARGET_FREQS), "per_window": X}
+
+
+def fbcsp_block(X_stim: np.ndarray, fs: float, freq_range: tuple, y: Optional[np.ndarray] = None) -> dict:
+  """FBCSP block (P05.2, m = 1): `X (n, 50)`, `per_window` = X. FULL-DATA CSP fit: visualization only (R2 exception, PF-11)."""
+  if y is None:
+    raise ValueError("the FBCSP block needs the class labels")
+  X, _, _ = extract_fbcsp_features(X_stim, y, fs, m=1, valid_mask=np.ones(len(X_stim), int))
+  return {"X": X, "freqs": np.arange(X.shape[1]), "per_window": X}
+
+
+FEATURE_BLOCKS: dict = {"psd": psd_block, "fbcca": fbcca_block, "fbcsp": fbcsp_block}
 
 
 def class_means(per_window: np.ndarray, y: np.ndarray, conditions: Sequence[int]) -> tuple:
@@ -140,7 +163,7 @@ def explore_subject(d: dict, fs: float, channel_names: Sequence[str], conditions
   y_k = y[keep]
   out = {"quality": q, "keep": keep, "y": y_k, "features": {}, "psd_check": None}
   for name in blocks:
-    b = FEATURE_BLOCKS[name](X[keep], fs, freq_range)
+    b = FEATURE_BLOCKS[name](X[keep], fs, freq_range, y_k)
     b["class_means"], b["counts"] = class_means(b["per_window"], y_k, conditions)
     out["features"][name] = b
   saved = d.get("X_psd")
@@ -170,8 +193,8 @@ def build_parser() -> argparse.ArgumentParser:
                  help=f"sampling rate for the PSD (default: {LEGACY_FS_HZ:g}, legacy PF-04; "
                       "256 = header)")
   p.add_argument("--out-suffix", default="", help="appended to the figure name as _<suffix>")
-  p.add_argument("--features", nargs="+", default=["psd"], choices=sorted(FEATURE_BLOCKS),
-                 help="feature blocks to compute and plot (P03: psd; P05 adds fbcca, fbcsp)")
+  p.add_argument("--features", nargs="+", default=["psd", "fbcca", "fbcsp"], choices=sorted(FEATURE_BLOCKS),
+                 help="feature blocks to compute and plot (P03: psd; P05: fbcca, fbcsp)")
   p.add_argument("--no-figures", action="store_true", help="print only")
   g = p.add_argument_group("quality mask thresholds (all passed explicitly, R5)")
   g.add_argument("--vpp-min", type=float, default=LEGACY_VPP_MIN_UV,
@@ -206,8 +229,37 @@ def plot_blocks(res: dict, subject: str, label: str, channel_names: Sequence[str
     out.append(plot_psd_by_class_per_channel(
       b["freqs"], b["class_means"], channel_names,
       figure_path(figures_dir, subject, FIGURE_STEM, suffix), counts=b["counts"], title=title))
-  # P05 extension point: FBCCA / FBCSP figures go here.
+  for name in ("fbcca", "fbcsp"):
+    if name in res["features"]:
+      out.append(_plot_class_feature_heatmap(res["features"][name], name, subject, label,
+                                             figure_path(figures_dir, subject, f"{name}_features_by_class", suffix)))
   return out
+
+
+def _plot_class_feature_heatmap(b: dict, name: str, subject: str, label: str, path: Path) -> Path:
+  """Heatmap of the class-mean feature (rows = classes in code order, columns = features)."""
+  import matplotlib
+  matplotlib.use("Agg")
+  import matplotlib.pyplot as plt
+  codes = sorted(b["class_means"])
+  M = np.stack([b["class_means"][c] for c in codes])
+  fig, ax = plt.subplots(figsize=(7.5 if name == "fbcsp" else 5.5, 3.6))
+  im = ax.imshow(M, aspect="auto", cmap="viridis")
+  ax.set_yticks(range(len(codes)), [f"{c} (n={b['counts'][c]})" for c in codes])
+  if name == "fbcca":
+    ax.set_xticks(range(M.shape[1]), [f"{f:g}" for f in b["freqs"]])
+    ax.set_xlabel("target frequency (Hz)")
+    cap = "FBCCA score (legacy: per-window Chebyshev sub-bands, R3/PF-14)"
+  else:
+    ax.set_xlabel("feature index: band x class x component (5 x 5 x 2)")
+    cap = "FBCSP feature (CSP fitted on ALL shown windows: full-data fit, visualization only, R2 exception/PF-11)"
+  fig.colorbar(im, ax=ax, label=f"class mean of {name} feature")
+  ax.set_title(f"{subject} {cap}, {label}\ndata: {DATA_SOURCE.replace('<S>', subject)}", fontsize=7)
+  fig.tight_layout()
+  Path(path).parent.mkdir(parents=True, exist_ok=True)
+  fig.savefig(path, dpi=150)
+  plt.close(fig)
+  return Path(path)
 
 
 def _rel(path: Path) -> str:
@@ -265,8 +317,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     print(format_quality(subject, res["quality"]))
     for name, b in res["features"].items():
       counts = ", ".join(f"{c}: {n}" for c, n in b["counts"].items())
-      print(f"  {name}: X {b['X'].shape} ({len(b['freqs'])} bins {b['freqs'][0]:.3f}-"
-            f"{b['freqs'][-1]:.3f} Hz); stimulus windows per class: {counts}")
+      what = (f"{len(b['freqs'])} bins {b['freqs'][0]:.3f}-{b['freqs'][-1]:.3f} Hz" if name == "psd"
+              else f"{b['X'].shape[1]} features" + (" (full-data CSP, visualization only)" if name == "fbcsp" else ""))
+      print(f"  {name}: X {b['X'].shape} ({what}); stimulus windows per class: {counts}")
     if res["psd_check"] is None:
       print(f"  saved X_psd_features {d['X_psd'].shape}: not comparable at {label}")
     else:

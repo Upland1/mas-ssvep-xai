@@ -18,6 +18,8 @@ from typing import Optional, Sequence
 import numpy as np
 from scipy.signal import periodogram
 
+from src.features.ssvep.spectral_power import LEGACY_FS_HZ
+from src.features.ssvep.window_mask import resolve_window_mask
 from src.preprocessing.signal.quality_check import (
   ensure_quality_stats, merge_quality_stats, new_quality_stats, update_quality_stats,
   window_quality_flags)
@@ -187,3 +189,41 @@ def prepare_feature_matrix(records: dict, target_conditions: Sequence[int] = FEA
   if len(shapes) != 1:
     raise ValueError(f"records have different time_data shapes {sorted(shapes)}")
   return np.stack(psd_rows), np.stack(time_rows), np.asarray(labels, dtype=np.int64)
+
+
+def continuous_psd_freqs(n_samples: int, fs: float = LEGACY_FS_HZ,
+                         freq_range: tuple = (5, 35)) -> np.ndarray:
+  """Periodogram bins of an `n_samples` window at `fs` inside `freq_range` (inclusive).
+
+  legacy (PF-04): at fs 250 on 256-sample windows the spacing is 250/256 Hz and the range
+  5-35 Hz holds 30 bins (5.86 ... 34.18 Hz).
+  """
+  f = np.fft.rfftfreq(n_samples, d=1.0 / fs)
+  return f[(f >= freq_range[0]) & (f <= freq_range[1])]
+
+
+def extract_continuous_psd_features(windows: np.ndarray, y: np.ndarray, fs: float = LEGACY_FS_HZ,
+                                    freq_range: tuple = (5, 35), use_db: bool = False,
+                                    valid_mask: Optional[np.ndarray] = None,
+                                    thresholds: Optional[dict] = None) -> tuple:
+  """Periodogram features of the accepted windows: `(X (n_clean, C * F), y_clean, valid_mask (n,))`.
+
+  P05.3. `windows (n, C, T)`; `scipy.signal.periodogram(x, fs, axis=-1)` (boxcar, constant
+  detrend, density), bins inside `freq_range`, flattened channel-major (feature `c * F + j` =
+  channel c, bin j; `continuous_psd_freqs` gives the bins). `use_db` returns `10 log10(psd + 1e-12)`.
+  `valid_mask` is used as given (PF-10: one mask for every feature block); otherwise the
+  per-script gate of `window_mask` runs with `thresholds`. legacy (PF-04): fs 250 by default,
+  so 7 channels give 210 features (the saved P02 `X_psd_features` has 217, true fs 256).
+  """
+  w = np.asarray(windows, dtype=np.float64)
+  y = np.asarray(y)
+  if w.ndim != 3 or len(w) != len(y):
+    raise ValueError(f"windows {w.shape} and y {y.shape} do not match")
+  mask = resolve_window_mask(w, valid_mask, thresholds)
+  keep = mask == 1
+  freqs, psd = periodogram(w[keep], fs=fs, axis=-1)
+  sel = (freqs >= freq_range[0]) & (freqs <= freq_range[1])
+  psd = psd[..., sel]
+  if use_db:
+    psd = 10.0 * np.log10(psd + 1e-12)
+  return psd.reshape(len(psd), -1), y[keep], mask

@@ -25,7 +25,7 @@ roadmap prescribes is still a `FAIL`.
 | R5 Shared quality decision | P16 | per-script gates; `vpp_min` regression reproduced in P07 (PF-07) |
 | R6 Index layouts verified | always | contiguous MVAR slicing only inside the P13 bug diagnostic |
 | R7 Honest statistics | P13 (trial-level permutations at the end of P13) | window-level permutations, first P13 run only |
-| R8 Smoothing respects trials | P11 | 2-tap smoothing without trial reset (P04–P10) |
+| R8 Smoothing respects trials | P11 | P04: 2-tap smoothing without trial reset; P05–P10: reset at `i % 5 == 0` of the clean array (misaligned once a window of a trial is rejected, PF-02) — corrected 2026-10-24 from the original P05-stage code, see decisions.md |
 | R9 Per-subject reporting with data source | always | — |
 | R10 Cite every source | always | — |
 | R11 Reference code after an attempt | always | — |
