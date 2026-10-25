@@ -397,10 +397,11 @@ def test_flagship_and_harmonic_scripts(tree):
             "cm_harmonic_fbcca_cv_S03.png", "cm_harmonic_fbcca_cv.png"):
     assert (cm / n).is_file(), n
   assert (tree / "reports" / "classification_report_evaluate_confusion_matrix_S03.txt").is_file()
-  for rule in ("noreset", "mod5"):                       # Round 2 labelled diagnostics
+  for rule, kind in (("noreset", "DIAGNOSTIC"), ("mod5", "REPORTED (legacy i%5")):   # Round 2 labels
     t = (tree / "reports" / f"classification_report_evaluate_confusion_matrix_S03_smoothed_{rule}.txt").read_text()
-    assert "DIAGNOSTIC" in t and "confusion counts" in t
-  assert (tree / "reports" / "classification_report_benchmark_harmonic_fbcca_S03.txt").is_file()
+    assert t.startswith(kind) and "confusion counts" in t
+  t = (tree / "reports" / "classification_report_benchmark_harmonic_fbcca_S03.txt").read_text()
+  assert "FBCCA on PO8, O1, Oz, O2" in t                 # Round 2: visual-cluster FBCCA
 
 
 def test_sklearn_suite_script_reports_qda_failure(tree, capsys):
@@ -423,3 +424,50 @@ def test_visualize_data_p05_blocks(tree):
   assert rc == 0
   for stem in ("psd_features_by_class", "fbcca_features_by_class", "fbcsp_features_by_class"):
     assert (figs / "exploration" / "S03" / f"{stem}.png").is_file()
+
+
+# --- Round 2 (decisions.md P05: original extractor limits, i%5 reported smoothing, visual-cluster FBCCA) ---
+
+def test_mask_limits_are_the_original_extractor_limits():
+  """Known answer (R11 round 2): limits vpp 0.5-120 uV, std 0.1-35 uV. A window with a 2 uV peak-to-peak channel
+  (std ~0.7) is kept by these limits and rejected by the shared 5-120 / 1-35 limits (the superseded P05 row)."""
+  assert P05_MASK_THRESHOLDS == {"vpp_min": 0.5, "vpp_max": 120.0, "std_min": 0.1, "std_max": 35.0}
+  X, y = make_windows(n_trials=1, seed=8)
+  X = X.copy()
+  X[3, 4] = np.sign(np.sin(2 * np.pi * 10 * np.arange(256) / FS))   # vpp 2, std 1 -> scale to std ~0.7
+  X[3, 4] *= 0.7
+  b = build_feature_blocks(X, y, SCALP)
+  assert b["mask"][3] == 1
+  shared = build_feature_blocks(X, y, SCALP, thresholds={"vpp_min": 5.0, "vpp_max": 120.0,
+                                                         "std_min": 1.0, "std_max": 35.0})
+  assert shared["mask"][3] == 0
+
+
+def test_reported_smoothing_is_legacy_i_mod_5():
+  """Known answer: `accuracies` smooths with the i%5 reset. Scores: row 5 (true class 1) is weakly class 1, row 4
+  strongly class 0; with the reset row 5 stays class 1 (2.0 s acc 10/10), the no-reset average flips it (9/10)."""
+  y = np.array([0] * 5 + [1] * 5)
+  s = np.zeros((10, 2))
+  s[:5, 0] = 1.0
+  s[5] = [0.4, 0.6]
+  s[6:, 1] = 1.0
+  a1, a2 = le.accuracies(y, y.copy(), s)
+  assert a1 == 1.0 and a2 == 1.0
+  assert np.mean(np.argmax(smooth_probabilities_legacy(s), axis=1) == y) == 0.9   # the diagnostic rule differs
+  assert le.smooth_reported is smooth_probabilities_mod5 and "i%5" in le.SMOOTH_LABEL
+
+
+def test_fbcca_channels_by_name_and_same_mask():
+  """Known answer: `fbcca_channels=VISUAL_CLUSTER` gives FBCCA = extractor on X[:, PO8, O1, Oz, O2] picked by name
+  (also under a reordered name list); the mask is the all-channel one, so PSD/harmonic rows are unchanged."""
+  X, y = make_windows(n_trials=1, seed=9)
+  full = build_feature_blocks(X, y, SCALP)
+  vis = build_feature_blocks(X, y, SCALP, fbcca_channels=VISUAL_CLUSTER)
+  idx = [list(SCALP).index(c) for c in VISUAL_CLUSTER]
+  ref, _, _ = fb.extract_fbcca_features(X[:, idx], y, valid_mask=full["mask"])
+  assert np.allclose(vis["fbcca"], ref) and not np.allclose(vis["fbcca"], full["fbcca"])
+  assert np.array_equal(vis["mask"], full["mask"]) and np.allclose(vis["psd"], full["psd"])
+  assert vis["fbcca_channels"] == list(VISUAL_CLUSTER) and full["fbcca_channels"] == list(SCALP)
+  perm = np.arange(len(SCALP))[::-1]
+  rev = build_feature_blocks(X[:, perm], y, [SCALP[i] for i in perm], fbcca_channels=VISUAL_CLUSTER)
+  assert np.allclose(rev["fbcca"], vis["fbcca"])
