@@ -49,3 +49,38 @@ Console states the CV is leaky. Python command and output are reproduced from th
 - Privacy/git: tree clean before and after the runs (`git status --porcelain` empty); 0 tracked paths under `data/`; 0 tracked local-instruction/tooling paths. Vendor-name scan of the diff is the reviewer's pre-run result (0 hits); not repeated. One guard block occurred (a grep pattern naming raw-data/recording paths); the command was rewritten without that pattern, no path was split or obfuscated.
 - R11: `mas/state/scratch/reference_access.log` still has 14 lines, last entry 2026-10-24T23:49:50 (P05); no new access in P06.
 - Sources: R-4/R-5 targets opened in `mas/04_REFERENCE_RESULTS.md` and matched to the pre-committed table in `07_review.md`.
+
+## Diagnostic run (investigation round 1)
+
+Diagnostics only; the verdict above is unchanged. Command (repo root, HEAD 7de11cea6518cfc53cdb1a2ffaad1a181f57dabd, clean tree, start 2026-10-25T04:35:43-06:00, exit 0, runtime 674 s):
+`.venv/bin/python -m scripts.benchmarks.feature_based.benchmark_feature_selection --subject S03 --k-features 20 --sfs-diagnostics --n-jobs 8`
+Log: `reports/logs/P06/benchmark_feature_selection_diag_20261025_043543.log`. Outputs: `reports/feature_selection_ablation_S03.csv`, `reports/feature_selection_sfs_diagnostics_S03.csv`, `reports/feature_selection_sfs_audit_S03.csv`.
+
+(a) Reported rows (console, verbatim): Full 55 90.36/95.43; pruning 45 87.31/94.92; ANOVA 25 86.29/94.42; MI 25 87.82/93.40; SFS 20 89.85/95.94. `cmp` of the rewritten reports/feature_selection_ablation_S03.csv against the first run's copy: identical.
+
+(b) reports/feature_selection_sfs_diagnostics_S03.csv (all labelled "DIAGNOSTIC (P06 round 1), not a reported result"; windows = round(acc*1.97)):
+
+| Variant | p | 1.0 s (%) | windows | in 165-169 | 2.0 s (%) | windows | in 182-186 |
+|---|---|---|---|---|---|---|---|
+| reported | 20 | 89.85 | 177 | no | 95.94 | 189 | no |
+| cv=3 | 20 | 87.82 | 173 | no | 93.91 | 185 | yes |
+| cv=10 | 20 | 88.32 | 174 | no | 94.92 | 187 | no |
+| cv=3 shuffled | 20 | 87.82 | 173 | no | 95.43 | 188 | no |
+| cv=5 shuffled | 20 | 87.82 | 173 | no | 95.43 | 188 | no |
+| cv=10 shuffled | 20 | 88.83 | 175 | no | 95.43 | 188 | no |
+| plain LDA svd | 20 | 87.31 | 172 | no | 95.94 | 189 | no |
+| Shrinkage-LDA no scaler | 20 | 89.85 | 177 | no | 95.94 | 189 | no |
+| all 55 columns, n=20 | 20 | 84.26 | 166 | yes | 90.86 | 179 | no |
+| n=20 FBCSP columns | 25 | 89.85 | 177 | no | 94.92 | 187 | no |
+
+No variant lands in both R-4 SFS ranges; none lands in the 1.0 s range 165-169.
+
+(c) reports/feature_selection_sfs_audit_S03.csv (assertions passed):
+
+| Fold | SFS rows | Test rows | Disjoint | Test rows found in SFS input | Selected FBCSP columns |
+|---|---|---|---|---|---|
+| 1 | 157 | 40 | True | 0 | 3 8 9 14 15 17 20 23 25 27 30 38 41 47 48 |
+| 2 | 157 | 40 | True | 0 | 0 1 2 7 9 14 19 20 21 23 32 40 46 47 48 |
+| 3 | 158 | 39 | True | 0 | 0 3 5 6 9 14 16 17 20 23 27 36 41 43 45 |
+| 4 | 158 | 39 | True | 0 | 3 8 9 18 21 22 25 26 30 33 36 37 42 45 47 |
+| 5 | 158 | 39 | True | 0 | 2 9 11 12 21 24 26 30 32 35 36 42 43 44 45 |
