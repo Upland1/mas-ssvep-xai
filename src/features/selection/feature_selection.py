@@ -48,16 +48,17 @@ def select_k_best_fbcsp_features(X_tr: np.ndarray, y_tr: np.ndarray, n_features_
 
 
 def select_sfs_fbcsp_features(X_tr: np.ndarray, y_tr: np.ndarray, n_features_to_select: int = 15,
-                              estimator=None, n_jobs: Optional[int] = None) -> np.ndarray:
+                              estimator=None, n_jobs: Optional[int] = None, cv=None) -> np.ndarray:
   """Sorted indices of the FBCSP columns chosen by forward sequential selection on the training fold.
 
   Default estimator: `Pipeline(StandardScaler, Shrinkage-LDA lsqr)`; scikit-learn's default inner
   5-fold stratified CV (no shuffle, deterministic) and accuracy scoring run inside `X_tr`.
+  `cv` (None = that default) is only for the labelled P06 diagnostics.
   """
   est = clone(estimator) if estimator is not None else Pipeline([
     ("scaler", StandardScaler()), ("clf", LinearDiscriminantAnalysis(solver="lsqr", shrinkage="auto"))])
   sfs = SequentialFeatureSelector(est, n_features_to_select=int(n_features_to_select), direction="forward",
-                                  n_jobs=n_jobs)
+                                  cv=5 if cv is None else cv, n_jobs=n_jobs)
   return np.flatnonzero(sfs.fit(np.asarray(X_tr, dtype=float), y_tr).get_support())
 
 

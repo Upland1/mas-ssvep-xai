@@ -155,3 +155,48 @@ def test_cohort_discovers_numeric_order(tmp_path):
 
 def test_missing_subject_exit_code(tree):
   assert bfs.main(_flags(tree, "S09")) == 1
+
+
+# --- Round 1: SFS diagnostics (labelled DIAGNOSTIC, reported rows unchanged) ---------------------
+
+def test_sfs_variants_cover_the_requested_factors():
+  v = bfs.sfs_variants()
+  names = [x[0] for x in v]
+  assert names[0] == "reported" and v[0][1:] == (5, False, bfs.EST_SCALED, bfs.CAND_FBCSP, 15)
+  assert {x[1] for x in v} == {3, 5, 10} and {x[2] for x in v} == {False, True}
+  assert {x[3] for x in v} == {bfs.EST_SCALED, bfs.EST_SVD, bfs.EST_NOSCALE}
+  assert {x[4] for x in v} == {bfs.CAND_FBCSP, bfs.CAND_ALL} and {x[5] for x in v} == {15, 20}
+
+
+def test_sfs_diagnostics_script_leaves_reported_rows_and_audits(tree, monkeypatch, capsys):
+  """Smoke: with a reduced variant list the diagnostic CSV and audit CSV are written, the reported CSV is identical
+  with and without the flag, the reported variant reproduces the reported SFS row, and the audit shows disjoint rows."""
+  small = [v for v in bfs.sfs_variants(3) if v[0] in ("reported", "cv=3 shuffled", "all 55 columns, n=20", "plain LDA svd")]
+  monkeypatch.setattr(bfs, "sfs_variants", lambda k=15: small)
+  assert bfs.main(_flags(tree, "S03", "--sfs-features", "3")) == 0
+  plain = pd.read_csv(tree / "reports" / "feature_selection_ablation_S03.csv")
+  assert bfs.main(_flags(tree, "S03", "--sfs-features", "3", "--sfs-diagnostics")) == 0
+  with_diag = pd.read_csv(tree / "reports" / "feature_selection_ablation_S03.csv")
+  assert plain.equals(with_diag)
+  d = pd.read_csv(tree / "reports" / "feature_selection_sfs_diagnostics_S03.csv")
+  assert list(d.columns) == bfs.DIAG_COLUMNS and len(d) == 4 and set(d["Label"]) == {bfs.DIAG_LABEL}
+  rep = d[d["Variant"] == "reported"].iloc[0]
+  sfs_row = with_diag[with_diag["Method"] == bfs.SFS].iloc[0]
+  assert rep["1.0s Acc (%)"] == sfs_row["1.0s Acc (%)"] and rep["p"] == sfs_row["p"] == 8
+  a = pd.read_csv(tree / "reports" / "feature_selection_sfs_audit_S03.csv")
+  assert list(a.columns) == bfs.AUDIT_COLUMNS and a["Fold"].tolist() == [1, 2, 3, 4, 5]
+  assert a["Train rows"].tolist() == [80] * 5 and a["Test rows"].tolist() == [20] * 5
+  assert a["Disjoint indices"].all() and (a["Test rows found in SFS input"] == 0).all()
+  assert all(len(s.split()) == 3 for s in a["Selected FBCSP columns"])
+  assert "DIAGNOSTIC" in capsys.readouterr().out
+
+
+def test_leak_audit_detects_overlap():
+  """The audit assertion fails when a test row is part of the SFS input (planted leak)."""
+  rng = np.random.default_rng(0)
+  Xall = rng.normal(size=(20, 55))
+  tr, te = np.arange(16), np.arange(16, 20)
+  ok = bfs.leak_audit_row("S", 0, tr, te, Xall[tr], Xall[te], np.array([1, 2]), 50)
+  assert ok["Test rows found in SFS input"] == 0
+  with pytest.raises(AssertionError):
+    bfs.leak_audit_row("S", 0, tr, te, Xall[:18], Xall[te], np.array([1, 2]), 50)

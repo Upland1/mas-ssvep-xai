@@ -48,6 +48,7 @@ if str(ROOT) not in sys.path:
   sys.path.insert(0, str(ROOT))
 
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis  # noqa: E402
+from sklearn.model_selection import StratifiedKFold  # noqa: E402
 from sklearn.pipeline import Pipeline  # noqa: E402
 from sklearn.preprocessing import StandardScaler  # noqa: E402
 
@@ -83,6 +84,8 @@ def build_parser() -> argparse.ArgumentParser:
   p.add_argument("--fs", type=float, default=LEGACY_FS_HZ, help=f"feature sampling rate (default {LEGACY_FS_HZ:g}, legacy PF-04)")
   p.add_argument("--seed", type=int, default=SEED, help=f"CV shuffle and MI seed (default {SEED})")
   p.add_argument("--n-jobs", type=int, default=1, help="SFS parallel jobs (results do not depend on it)")
+  p.add_argument("--sfs-diagnostics", action="store_true",
+                 help="DIAGNOSTIC only: also run labelled SFS variants and a leak audit (reported rows unchanged)")
   p.add_argument("--skip-sfs", action="store_true", help="omit the SFS row (smoke runs only)")
   return p
 
@@ -150,6 +153,98 @@ def run_ablation(blocks: dict, subject: str, k: int = 20, sfs_k: int = 15, m: in
   return rows
 
 
+# --- DIAGNOSTIC (P06 round 1): SFS variants and leak audit; never part of the reported rows ----------
+
+DIAG_LABEL = "DIAGNOSTIC (P06 round 1), not a reported result"
+DIAG_COLUMNS = ["Subject", "Variant", "Inner CV", "Inner shuffle", "Estimator", "Candidates", "n_features", "p",
+                "1.0s Acc (%)", "2.0s Smoothed (%)", "Clean Windows", "Rejected", "Label"]
+AUDIT_COLUMNS = ["Subject", "Fold", "Train rows", "Test rows", "Disjoint indices", "Test rows found in SFS input",
+                 "Selected FBCSP columns", "Label"]
+EST_SCALED, EST_SVD, EST_NOSCALE = "scaler+Shrinkage-LDA lsqr (reported)", "plain LDA svd", "Shrinkage-LDA lsqr, no scaler"
+CAND_FBCSP, CAND_ALL = "50 FBCSP cols, FBCCA appended (reported)", "all 55 cols"
+
+
+def _diag_estimator(name: str):
+  if name == EST_SVD:
+    return LinearDiscriminantAnalysis(solver="svd")
+  if name == EST_NOSCALE:
+    return LinearDiscriminantAnalysis(solver="lsqr", shrinkage="auto")
+  return _model()
+
+
+def sfs_variants(sfs_k: int = 15) -> list:
+  """One-factor-at-a-time variants around the reported SFS: (name, cv, shuffle, estimator, candidates, n)."""
+  cur = (5, False, EST_SCALED, CAND_FBCSP, sfs_k)
+  v = [("reported", *cur)]
+  for cv in (3, 10):
+    v.append((f"cv={cv}", cv, False, EST_SCALED, CAND_FBCSP, sfs_k))
+  for cv in (3, 5, 10):
+    v.append((f"cv={cv} shuffled", cv, True, EST_SCALED, CAND_FBCSP, sfs_k))
+  v += [("plain LDA svd", 5, False, EST_SVD, CAND_FBCSP, sfs_k),
+        ("Shrinkage-LDA no scaler", 5, False, EST_NOSCALE, CAND_FBCSP, sfs_k),
+        ("all 55 columns, n=20", 5, False, EST_SCALED, CAND_ALL, 20),
+        ("n=20 FBCSP columns", 5, False, EST_SCALED, CAND_FBCSP, 20)]
+  return v
+
+
+def _sfs_columns(Xtr, ytr, n_fbcsp, cv, shuffle, est, cand, n, seed, n_jobs):
+  folds = StratifiedKFold(cv, shuffle=True, random_state=seed) if shuffle else cv
+  if cand == CAND_ALL:
+    return select_sfs_fbcsp_features(Xtr, ytr, n, _diag_estimator(est), n_jobs, folds)
+  idx = select_sfs_fbcsp_features(Xtr[:, :n_fbcsp], ytr, n, _diag_estimator(est), n_jobs, folds)
+  return np.concatenate([idx, np.arange(n_fbcsp, Xtr.shape[1])])
+
+
+def leak_audit_row(subject: str, f: int, tr: np.ndarray, te: np.ndarray, Xtr: np.ndarray, Xte: np.ndarray,
+                   cols: np.ndarray, n_fbcsp: int) -> dict:
+  """What one SFS fit receives: `Xtr` (= the training rows), checked disjoint from the outer test rows by
+  index and by content (no test row equals any row of the SFS input); asserts both."""
+  disjoint = np.intersect1d(tr, te).size == 0
+  inp = np.round(Xtr[:, :n_fbcsp], 10)
+  found = int(sum(bool((inp == np.round(r[:n_fbcsp], 10)).all(axis=1).any()) for r in Xte))
+  assert disjoint and found == 0 and Xtr.shape[0] == len(tr), "SFS input overlaps the outer test rows"
+  return {"Subject": subject, "Fold": f + 1, "Train rows": int(Xtr.shape[0]), "Test rows": int(len(te)),
+          "Disjoint indices": disjoint, "Test rows found in SFS input": found,
+          "Selected FBCSP columns": " ".join(str(c) for c in cols if c < n_fbcsp), "Label": DIAG_LABEL}
+
+
+def run_sfs_diagnostics(blocks: dict, subject: str, sfs_k: int = 15, m: int = 1, seed: int = SEED,
+                        n_jobs: Optional[int] = 1, variants: Optional[list] = None, verbose: bool = True) -> tuple:
+  """`(variant rows, audit rows)`. The final classifier of every variant is the reported scaler + Shrinkage-LDA;
+  only the SFS configuration changes. Fold matrices (and CSP) are built once per fold from its training rows."""
+  y = blocks["y"]
+  space = [s for s in benchmark_spaces(blocks, m) if s.name == SPACE][0]
+  n_fbcsp = len(CLASS_CODES) * 2 * m * blocks["subbands"].shape[1]
+  variants = sfs_variants(sfs_k) if variants is None else variants
+  classes = np.unique(y)
+  splits = list(legacy_cv(seed).split(np.zeros((len(y), 1)), y))
+  mats = [fold_matrices(space, blocks["subbands"], y, tr, te) for tr, te in splits]
+  audit = []
+  rows = []
+  for name, cv, shuffle, est, cand, n in variants:
+    t0 = time.time()
+    pred, sc = np.zeros(len(y), dtype=y.dtype), np.zeros((len(y), len(classes)))
+    width = 0
+    for f, ((tr, te), (Xtr, Xte)) in enumerate(zip(splits, mats)):
+      cols = _sfs_columns(Xtr, y[tr], n_fbcsp, cv, shuffle, est, cand, n, seed, n_jobs)
+      width = len(cols)
+      if name == "reported":
+        audit.append(leak_audit_row(subject, f, tr, te, Xtr, Xte, cols, n_fbcsp))
+      with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        pipe = _model().fit(Xtr[:, cols], y[tr])
+        pred[te], sc[te] = pipe.predict(Xte[:, cols]), class_scores(pipe, Xte[:, cols])
+    a1, a2 = accuracies(y, pred, sc)
+    rows.append({"Subject": subject, "Variant": name, "Inner CV": cv, "Inner shuffle": shuffle, "Estimator": est,
+                 "Candidates": cand, "n_features": n, "p": width, "1.0s Acc (%)": round(100 * a1, 2),
+                 "2.0s Smoothed (%)": round(100 * a2, 2), "Clean Windows": blocks["n_clean"],
+                 "Rejected": blocks["n_rejected"], "Label": DIAG_LABEL})
+    if verbose:
+      print(f"  [{DIAG_LABEL}] {name:<26} p={width:<3} 1.0 s {100 * a1:6.2f}%  2.0 s smoothed {100 * a2:6.2f}% "
+            f"({time.time() - t0:.0f} s)")
+  return rows, audit
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
   args = build_parser().parse_args(argv)
   cfg = load_config(args.config)
@@ -175,6 +270,19 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
   csv.parent.mkdir(parents=True, exist_ok=True)
   df.to_csv(csv, index=False)
   csv.with_suffix(".meta.txt").write_text("\n".join(header) + "\n")
+  if args.sfs_diagnostics:
+    print(f"\n{DIAG_LABEL}: SFS variants (final classifier = reported scaler + Shrinkage-LDA; reported rows above unchanged)")
+    drows, arows = run_sfs_diagnostics(b, args.subject, args.sfs_features, args.m, args.seed, args.n_jobs)
+    dcsv = reports / f"feature_selection_sfs_diagnostics_{args.subject}.csv"
+    pd.DataFrame(drows, columns=DIAG_COLUMNS).to_csv(dcsv, index=False)
+    acsv = reports / f"feature_selection_sfs_audit_{args.subject}.csv"
+    pd.DataFrame(arows, columns=AUDIT_COLUMNS).to_csv(acsv, index=False)
+    print(f"{DIAG_LABEL}: leak audit of the reported SFS (assertions passed)")
+    for r in arows:
+      print(f"  fold {r['Fold']}: SFS input {r['Train rows']} rows, outer test {r['Test rows']} rows, disjoint indices "
+            f"{r['Disjoint indices']}, test rows found in input {r['Test rows found in SFS input']}; "
+            f"selected FBCSP columns {r['Selected FBCSP columns']}")
+    print(f"Saved: {_rel(dcsv)}\nSaved: {_rel(acsv)}")
   print(f"\nCohort: 1 subject ({args.subject}), {len(df)} rows; runtime {time.time() - t0:.0f} s")
   print(f"Saved: {_rel(csv)}")
   return 0
