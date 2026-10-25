@@ -301,7 +301,7 @@ def test_cnn_temporal_smoothing_is_legacy(monkeypatch):
   p[5] = [0.0, 0.5, 0.1, 0.0, 0.0]
   y = np.full(10, 101)
   assert cnn.evaluate_temporal_smoothing(p, y, classes) == 1.0
-  monkeypatch.setattr(tm, "smooth_probabilities_legacy", trial_aware_smooth)
+  monkeypatch.setattr(cnn, "smooth_probabilities_legacy", trial_aware_smooth)  # P05: helper moved to src, bound in cnn
   assert cnn.evaluate_temporal_smoothing(p, y, classes) == pytest.approx(0.9)
 
 
