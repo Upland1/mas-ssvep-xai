@@ -235,23 +235,131 @@ None.
 
 ## Results review
 
-Verdict: APPROVE / REJECT
+Verdict: APPROVE (with one accepted qualitative deviation, D-1 below)
+
+**What I read:**
+- `05_run.md` and `06_verify.md` "Round 2" (971171d);
+- the run outputs:
+  - `reports/flagship_S0{1..5}.csv`;
+  - `reports/feature_space_benchmark_S03.csv` and its `.meta.txt`;
+  - `reports/sklearn_suite_S03.csv`;
+  - `reports/classification_report_evaluate_confusion_matrix_S03_smoothed_{mod5,noreset}.txt`;
+  - `reports/classification_report_benchmark_harmonic_fbcca_S03.txt`;
+- the log `reports/logs/P05/evaluate_confusion_matrix_S03_r2_20261025T024450.log`. Its header shows commit edcc177 and an empty `porcelain:` block.
+
+**How the numbers were checked:**
+- I recomputed every acceptance criterion from the CSVs with a shown `.venv/bin/python` pandas command (groupby maxima, hybrid-row minima, row count).
+- All arithmetic used `python3 -c`.
+- No new runs, and no definition changed.
+
+### Acceptance (verbatim criteria)
+
+| Criterion | Obtained | Met? |
+|---|---|---|
+| S03 FBCSP(m=1)+FBCCA → Shrinkage-LDA = R-3 (90.36 % / 95.43 %, 197 clean, 3 rejected) within tolerance | 90.36 / 95.43, 197 / 3 (`flagship_S03.csv`; log lines 12-13); 178/197 and 188/197; Δ 0.00 / 0.00 pp | **Yes, exact** |
+| the hybrid beats every single-domain space | best of 9 at 1.0 s: FBCSP+FBCCA 90.36 > FBCSP 84.77, PSD 84.26, FBCCA 71.57, Harmonic PSD 71.57 (margin 5.59 pp); also at 2.0 s: 95.43 > 90.86 (PSD), the highest single-domain value | **Yes** |
+| FBCCA argmax is the lowest supervised reference | argmax 48.73 / 52.28, below the minimum of the 18 hybrid-space rows (70.05 / 77.16) and of all 54 supervised rows (62.94 at 1.0 s); rank 55 of 55 | **Yes** |
+| Report the full feature-space × model table | 55 rows = 6 × 9 + argmax; p ∈ {210, 32, 5, 37, 50, 55}; 197/3 on every row | **Yes** (the scribe copies it from the CSV) |
+| R-3 qualitative (04_REFERENCE_RESULTS, cited in 00_assignment): perfect precision on 24 Hz; residual confusion concentrated on 10.91/8.57; hybrid + lsqr LDA best; every supervised hybrid configuration beats the argmax | from the REPORTED `_smoothed_mod5.txt`: 101 precision 0.9750 (39/40), recall 1.0000 (39/39); largest two-way confusion 104↔105 = 6, every other pair ≤ 1; lsqr and eigen tied best (90.36 / 95.43), LogReg L2 ties at 2.0 s; argmax below all hybrid rows | 24 Hz precision **not met by one window** (accepted, D-1); the other three qualitative items **met** |
 
 ### Deviations from references
 
 | Ref | Expected | Obtained (log) | Δ | Within tolerance? | Explanation | Accepted? |
 |---|---|---|---|---|---|---|
-| | | | | | | |
+| R-3 counts | 197 / 3 | 197 / 3 | 0 | yes (exact) | — | — |
+| R-3 1.0 s | 90.36 | 90.36 (178/197) | 0.00 | yes | — | — |
+| R-3 2.0 s | 95.43 | 95.43 (188/197), i%5 rule | 0.00 | yes | after the Round 2 rule correction (spec convention + original code; Round 2 audit) | — |
+| R-3 qualitative, 24 Hz precision | "perfect" (1.0) | 0.9750 = 39/40; one true-102 window predicted 101 (`_smoothed_mod5.txt`) | −2.5 pp of precision = 1 window of 40 predictions (1/40 = 2.5 %) | no numeric tolerance (qualitative) | see D-1 | **yes** |
+| R-5 (P06 target, read for the record) | 10 values | all 10 exact (`flagship_S0x.csv`) | 0 | yes | — | — |
+
+**D-1, the one-window 24 Hz precision difference.** It is acceptable under the tolerance rule ("a deviation can be accepted when the Scientific Reviewer signs an explanation … documented ambiguity").
+- **What is exact.** Every quantitative quantity matches, for all five subjects:
+  - window counts;
+  - 1.0 s accuracy;
+  - 2.0 s accuracy;
+  - all ten R-5 values.
+  
+  The deviation is the predicted label of **one misclassified window**: true 102, predicted 101.
+- **Why the exact accuracies do not decide it.** Moving that window's error from column 101 to another column would leave every accuracy unchanged. So the exact numbers neither prove nor exclude the original having precision 1.0.
+- **Two explanations remain. Both are inferences; neither is demonstrated.**
+  - (a) **The wording describes recall, not precision.** The original's figure was computed from the smoothed predictions (`confusion_matrix(y_clean, preds_smoothed)`, 69873ea:130, as quoted in the ml-engineer's R11 table). The 24 Hz row of such a figure is perfect: 39/39, recall 1.0000 here. This makes it the most likely reading of "perfect … on 24 Hz". I did not check whether the original figure was row-normalised; the answer key was not opened by me.
+  - (b) **A different library version changes where one error lands.** The iterative sklearn CCA, the Ledoit-Wolf shrinkage and the LDA lsqr solve could all differ slightly between scikit-learn versions. Such a difference could move one near-tie window between the 101 and 103 columns of row 102, again without changing any accuracy.
+- **No further definition change, as pre-committed.** The criterion was read only from the REPORTED file. I did not shop among the other outputs (1.0 s, no-reset, m=2).
+- **Optional.** A logged verification read of the original figure's normalisation (R11 permits verifying a finished implementation) could turn explanation (a) from inferred to demonstrated. It is not needed for this decision.
+
+**Restating the verifier's verdict.** The verifier's FAIL rests only on this item. With D-1 accepted, the orchestrator and scribe should restate the P05 verification as **PASS with one accepted deviation (D-1)**. All other verifier checks pass exactly. `06_verify.md` itself stays as written (the verifier's file).
 
 ### Interpretation check
 
-<!-- Per-subject reading; inconclusive results stated as such; leakage in
-fitted objects, normalization, validation sets; statistics unit and
-multiple comparisons. -->
+**Leakage and comparability**
+- Every P05 accuracy comes from window-level `StratifiedKFold` (R1 legacy, leaky). None is comparable with R-6.
+- Leaky flagship minus R-6 at 1.0 s: S01 +3.50, S02 +10.21, S03 +3.56, S04 +1.52, S05 +1.50 pp. These gaps are expected from the leak and are left for P11 to measure.
+- No fitted object leaks beyond the prescribed legacy CV:
+  - CSP, scaler and LDA shrinkage are fitted in-fold;
+  - the full-data CSP appears only in the visualisation, labelled in the log.
+
+**2.0 s smoothing**
+- Gains (2.0 s − 1.0 s) under the reported i%5 rule: S01 +11.00, S02 +5.61, S03 +5.07, S04 −0.50, S05 0.00 pp.
+- On condition-ordered legacy arrays, i%5 averages adjacent windows of the same or a neighbouring same-class trial. After a rejection (S02, S03, S04) the blocks drift across trial boundaries (PF-02).
+- So the gain is partly an artefact of the legacy order and is not an honest 2 s decision gain. P11 fixes this.
+- The no-reset diagnostic is never below i%5 (S01 +1.50, S03 +0.51, S05 +1.50, S02/S04 0.00 pp). This is consistent with the extra cross-trial averaging also exploiting label order. Diagnostic only.
+
+**Feature-space × model table (S03)**
+- The hybrid wins by 5.59 pp over the best single-domain space at 1.0 s.
+- Spatial (FBCSP 84.77) and broadband spectral (PSD 84.26) are close.
+- FBCCA (71.57) and harmonic PSD (71.57) are weaker.
+- Shrinkage-LDA lsqr and eigen give identical numbers, which is expected: the same shrunk covariance and the same discriminant. They are best or tied best on the hybrid. LogReg L2 ties at 2.0 s.
+- "Best of 9" is a maximum over models evaluated on the test folds, so it is descriptive only and not an accuracy estimate.
+- Two readings are plausible but **not demonstrated** in P05:
+  - the weak harmonic PSD and the very low zero-training argmax (48.73) are consistent with the fs-250 error: off-target bins for 17.14/24/30 Hz (Round 1 note 6); reference sinusoids off-frequency (PF-04);
+  - P16 quantifies this, and this report must not claim it as the cause.
+
+**Two "Harmonic PSD + FBCCA" numbers (Shrinkage-LDA lsqr)**
+- Six-space table, FBCCA on all 7 channels: 74.11 / 84.77.
+- Harmonic script, FBCCA on PO8/O1/Oz/O2: 75.63 / 84.77.
+- Δ 1.52 pp at 1.0 s = 3 windows (`python3 -c`: 3/197 = 1.52 %); identical at 2.0 s.
+- No reference exists for either. They are separate quantities and must keep separate names in the report.
+
+**QDA**
+- As expected under PF-12: rank failures, printed as `LinAlgError`, on Continuous PSD (210) and FBCSP (50).
+- It runs on FBCCA (5) with 70.56 / 80.20, slightly below the linear models on that space. `sklearn_suite_S03.csv` has 28 rows = 3 spaces × 10 models − 2 failures.
+
+**m=2 variant**
+- 92.89 / 95.94; no reference. The +2.53 pp at 1.0 s over m=1 is a single leaky split on one subject; inconclusive.
+
+**S01–S05 for P06**
+- All ten R-5 values are reproduced exactly, with exact counts. P06's cohort table should reproduce them unchanged.
+- S01 and S02 (64.50 / 66.33 at 1.0 s) agree with the P03 finding of weak or absent SSVEP peaks. S04 and S05 are near ceiling.
+- Per-subject reading only; no cohort claim is made here.
+
+### Round history (for the report)
+
+1. **Round 1, pre-run.** My audit PASSed and accepted the era row "no-reset P04–P10" as LEGACY. That row contradicted the roadmap convention (`03_ROADMAP.md:18-19` → §5.6). It was my miss and is recorded in my bug patterns.
+2. **Round 1, run.** Verifier FAIL on the 24 Hz precision (0.8537, from 1.0 s predictions). The pre-planned j%5 diagnostic equalled R-3 and all five R-5 2.0 s values.
+3. **Investigation, R11, and three corrections.** Each was demonstrated by the spec and/or the original:
+   - the R8 era row: P04 no-reset; P05–P10 i%5 on the clean array;
+   - mask limits 0.5–120 / 0.1–35;
+   - visual-cluster FBCCA in the harmonic script.
+   
+   None was tuning: the counts and 1.0 s already matched before, and the smoothing rule follows from the spec text.
+4. **R11 sequencing CONCERN.** The first access came 30 s before the diagnostics commit. Every access was logged and listed.
+5. **Round 2 run.** Pre-committed checks 1, 2, 3, 5 and 6 came out exact, and check 4 is split (D-1). Two pre-run rounds were used; neither pre-run FAILed.
 
 ### Decisions for decisions.md
 
-<!-- Accepted deviations, one line each; the orchestrator copies them. -->
+- P05 results accepted at 971171d:
+  - R-3 exact: 197/3, 90.36 / 95.43 = 178/197, 188/197;
+  - all ten R-5 values exact under the i%5 rule and the original mask limits (feeds P06);
+  - hybrid > every single-domain space (90.36 vs 84.77); FBCCA argmax last (48.73);
+  - table 55 rows.
+- **D-1 (accepted deviation).** R-3 qualitative "perfect precision on 24 Hz" is not reproduced by one window: 101 precision 0.9750 (39/40) and recall 1.0000 in the REPORTED i%5 smoothed report. Every accuracy and count is exact, and 104↔105 is the dominant confusion as R-3 states. Most plausible explanations: the wording describes the perfect 24 Hz row (recall) of the original's smoothed-prediction figure, or a library-version difference in where one error lands. No definition was changed. With D-1 the P05 verification is restated as PASS with an accepted deviation.
+- **Labelling.** Every P05 accuracy is legacy-leaky (R1) with legacy i%5 smoothing (R8, misaligned after rejections), fs 250 (PF-04) and per-window filtering (R3), and is not comparable with R-6. 2.0 s gains are partly label-order artefacts.
+- **Two "Harmonic PSD + FBCCA" quantities.** Six-space (FBCCA 7 channels) 74.11 / 84.77 vs harmonic script (FBCCA PO8/O1/Oz/O2) 75.63 / 84.77. Always named separately.
+- **Open items.**
+  - Six-space header/`.meta.txt` to name the FBCCA channels (ml-engineer, next touch).
+  - Before reuse, a logged verification read of the original `benchmark_cross_validation.py` FBCCA channel set and of whether the original figure was row-normalised (optional, for D-1).
+  - P11 assignment must state the R8 legacy-folder rule (i%5 on the clean array vs pre-gate trial ids) for R-6.
+  - R11 practice: run the diagnostics before opening the answer key.
 
 ## Sources spot-check
 
@@ -266,5 +374,7 @@ set Status: BLOCKED. -->
 4. RULE — `mas/04_REFERENCE_RESULTS.md` tolerance rules, R-3, R-5; `mas/05_PITFALLS.md` PF-01/02/04/06/10/11/12/14 (opened in this run).
 5. HANDOFF — `mas/state/decisions.md` P04–P05 rows; `03_changes_ml-engineer.md`; `04_tests.md` (opened in this run).
 6. DATA — `.venv/bin/python -m pytest tests/ -p no:warnings -o addopts=""` and `--durations=8`, HEAD f43d8b6, this run.
+7. DATA — `reports/flagship_S0{1..5}.csv`, `reports/feature_space_benchmark_S03.csv` (+ `.meta.txt`), `reports/sklearn_suite_S03.csv`, `reports/classification_report_evaluate_confusion_matrix_S03_smoothed_{mod5,noreset}.txt`, `reports/classification_report_benchmark_harmonic_fbcca_S03.txt`, `reports/logs/P05/evaluate_confusion_matrix_S03_r2_20261025T024450.log`; produced by the Round 2 commands of `05_run.md` at edcc177 (opened in this run, results review).
+8. HANDOFF — `06_verify.md` "Round 2" (971171d); `03_changes_ml-engineer.md` "Round 2" R11 table (69873ea:130 quoted there, not opened by me).
 
 ## Questions
