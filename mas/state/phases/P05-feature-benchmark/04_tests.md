@@ -76,3 +76,32 @@ None. The original repository snapshot was not opened.
 3. Closed forms derived analytically: boxcar periodogram density A^2 N/(2 fs); Chebyshev-I ripple level 10^(-ripple/20); CSP eigenvalues 16/17, 1/17 for S = I + 15 uu^T; checked by running scipy/sklearn in `.venv`.
 
 ## Questions
+
+## Round 2
+
+Status: READY
+Tests commit: eb613db. NEW `tests/test_p05_round2_known_answer.py` (10 tests, ~12 s). Expected values from the definitions in the last three P05 rows of `mas/state/decisions.md`; synthetic data only; mutants defined in the test file.
+
+| Test id (`tests/test_p05_round2_known_answer.py::`) | Simulates | Expected | Source | Catches (mutant) | Result |
+|---|---|---|---|---|---|
+| `test_accuracies_uses_trial_reset_at_i_mod_5` | 10 windows, two trials; row 5 weakly correct [0.45, 0.55] | `le.accuracies` 2.0 s = 1.0 (i%5); no-reset would give 0.9 | decision (1) | no-reset reported | PASS |
+| `test_accuracies_mutant_no_reset_fails` | `smooth_reported` monkeypatched to the no-reset helper | returns 0.9, so the exact-1.0 check fails | decision (1) | no-reset reported | PASS |
+| `test_trial_reset_is_on_clean_array_index_not_trial_ids` | 12 rows | output [0, .5, 1.5, 2.5, 3.5, 5, 5.5, 6.5, 7.5, 8.5, 10, 10.5] | decision (1) | reset at wrong index | PASS |
+| `test_reported_flagship_csv_uses_i_mod_5` | flagship script on a noisy synthetic tree, spy on out-of-fold scores | CSV 2.0 s = independent i%5 accuracy (2 dp); i%5 and no-reset values differ on this tree; labels | decision (1) | CSV written with no-reset | PASS |
+| `test_argmax_baseline_row_is_smoothed_with_i_mod_5` | benchmark FBCCA argmax row | equals independent i%5 on row-normalised FBCCA scores | decision (1) | argmax row left on no-reset | PASS |
+| `test_mask_limits_are_0p5_120_and_0p1_35` | constant | exact dict | decision (2) | old 5/1 | PASS |
+| `test_window_with_vpp2_std0p5_is_kept_by_default_gate_and_rejected_by_old_limits` | window vpp 2 / std 0.5 on all channels | kept by gate, PSD, FBCCA and block builder; rejected under 5/1 (check fails on that mutant); vpp 0.4, vpp 0.1 and vpp 130 rejected | decision (2) | old limits | PASS |
+| `test_fbcca_block_uses_named_cluster_channels_in_cluster_order` | three channel-name orders | FBCCA block = extractor on PO8, O1, Oz, O2 columns with the shared mask (1e-9); differs from all-channel and from POz set | decision (3), PF-06 | positional/wrong set | PASS |
+| `test_mask_stays_shared_when_only_a_non_cluster_channel_is_bad` | artefact on PO3 only | window removed from psd, harmonic, fbcca, subbands, y (n-1); own 4-channel gate keeps it (length mismatch) | decision (3), PF-10 | FBCCA gated separately | PASS |
+| `test_harmonic_script_requests_the_visual_cluster` | script run with spy on `prepare_subject` | called with `fbcca_channels` = PO8, O1, Oz, O2; names in console and report | decision (3) | script still all-channel | PASS |
+
+Round 1 tests: none edited. Each Round 1 test that touches the changed definitions still holds under the new decisions and was left as is: the PF-10 single-mask test passes explicit strict (5/1/std_max 25) thresholds and its planted window (std ~30, vpp 60) passes the new default too; `test_legacy_smoothing_hand_example_crosses_trials` and the CV test pin the helper functions (no-reset and mod-5 as functions), which are unchanged; the FBCCA, CSP, PSD and layout tests use `valid_mask` or clean windows. The builder's own tests that pinned old definitions were updated by the builder (see its Round 2 section), not by me.
+
+Command and result (verbatim summary line):
+
+```bash
+.venv/bin/python -m pytest tests/ -o addopts="" -q
+```
+`426 passed, 10 warnings in 106.25s (0:01:46)`
+
+No bugs found in Round 2. Coverage gap: the real-data effect (197/3 count under the new limits, R-3 2.0 s) is for the verifier.
