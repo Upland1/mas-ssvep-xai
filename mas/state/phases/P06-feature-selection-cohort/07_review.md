@@ -217,6 +217,27 @@ No other change is needed. Tables, title, note, methods, references and infograp
 
 Verdict: REJECT
 
+### Results review — report v1 Round 2
+
+Re-reviewed at a124e49 (`git diff 9473718..HEAD -- docs/report/v1/report.md`: 7 changed lines; the infographic is unchanged; `03_changes_scribe.md` has a Round 2 section).
+
+| Fix | Result | Evidence |
+|---|---|---|
+| 1. Rejected windows (R9) | DONE | `report.md:143`: "S02 and S03 have three rejected windows each and S04 one, so the `i % 5` resets of these three subjects, including every S03 ablation row, are misaligned after their rejections". Matches Table 3 (3 / 3 / 1) |
+| 2. Reproduction claims (D-1 (a)) | DONE | `:13` "reproduces the cohort table and four of the five ablation rows; the sequential forward selection row is ours, not reproduced (deviation D-1)"; `:137` "four of the five ablation rows reproduce … the SFS row does not (D-1)"; `:149` "four of the five rows … the sequential forward selection row is ours (deviation D-1)". The remaining "reproduc" hits (`grep -noi`) refer to the protocol (`:9`, `:15`), the D-1 conditions (`:53`, `:141`), a section heading (`:59`) and the Mean arithmetic (`:102`). None claims the SFS row was reproduced |
+| 3. Interpretation | DONE | The "clearest effect" sentence was removed. `:139` now reads "Every reduced set is at or below the full baseline at 1.0 s, by 0.51–4.07 pp (1–8 windows; shown script); … no reduction is singled out". Re-derived (shown command `round(90.36-v,2), round((90.36-v)*1.97,2)`): SFS 0.51 / 1.0, MI 2.54 / 5.0, pruning 3.05 / 6.01, ANOVA 4.07 / 8.02. Range and window counts are correct. §6 (`:153`) now lists the ANOVA and MI differences |
+| 4. Traceability | DONE | `:153` points to `mas/state/phases/P06-feature-selection-cohort/03_changes_scribe.md`, "Part C" (the script is there). Reference [8] (`:164`) now includes "results review part 1 (D-1, commit 637dad6)" |
+| Table equality (re-run) | PASS | Same command as Round 1: `reports/feature_selection_ablation_S03.csv header eq True cells eq True`, `reports/five_subjects_benchmark.csv header eq True cells eq True`, `diag table eq True` |
+| Title / note / leakage-free | PASS | Hits unchanged at `:1`, `:3`, `:9`, `:145`, each stating the claim is wrong |
+| Names | PASS | Fragment-built pattern over `docs/report/v1/*` and the last two commit messages: 0 hits (the internal word from fix 4 is gone) |
+
+No new problem was introduced. Checks (a)–(h) of the pre-run audit and D-1 conditions (a)–(b) are now all met. Combined with part 1, the P06 results are approved:
+- Four R-4 rows and all of R-5 are exact.
+- The SFS row is accepted deviation D-1, with the open question for Sebastian.
+- Report v1 and infographic v1 exist as labelled history.
+
+Verdict: APPROVE
+
 ### Decisions for decisions.md
 
 From the results review (part 1):
