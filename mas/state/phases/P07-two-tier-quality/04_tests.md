@@ -59,3 +59,19 @@ None.
 1. `mas/state/phases/P07-two-tier-quality/02_plan.md` Tests required; `mas/03_ROADMAP.md` P07 tasks 1-6; `mas/02_REQUIREMENTS.md` section 6; `mas/05_PITFALLS.md` PF-05..PF-10 (opened in this run).
 
 ## Questions
+
+## Round 1
+
+Status: READY
+
+NEW `tests/test_p07_round1_known_answer.py` (5 tests, about 2 s). Expected values from the review's fix text (legacy = P02 layout, PO7 excluded by name, tier 1 off, no channels.json; legacy folders untouched without the switch or the overwrite flag; P04 positions (1, 4, 5, 6) must be POz, O1, Oz, O2).
+
+| Test id | Simulates | Expected | Catches (mutant run on a throw-away copy) | Result |
+|---|---|---|---|---|
+| `test_legacy_switch_reproduces_p02_arrays` | clean synthetic recording, `--legacy-p02` vs 8-channel `--no-channel-drop` | X_time (n,7,256) array_equal to the 8-channel run minus PO7; X_psd (n,217) equals the 5-35 Hz periodogram of X_time; same y; no channels.json | PO7 kept: fails | PASS |
+| `test_legacy_switch_has_no_tier1` | POz chronically noisy, `--legacy-p02` | no 6-channel arrays, no channels.json | tier 1 left on: fails | PASS |
+| `test_refuses_to_touch_legacy_arrays_and_flag_lifts_it` | legacy folder (S03, root copy) plus a skipped subject S02 with arrays; run without the switch | exit 1 "Refusing", tree byte-identical (sha256); with `--overwrite-legacy-arrays` exit 0, channels.json written, S02 stale arrays removed | no refusal: fails | PASS |
+| `test_makefile_preprocess_uses_legacy_switch` | Makefile `preprocess` recipe | calls run_preprocessing with `--legacy-p02` | switch removed: fails | PASS |
+| `test_p04_scripts_refuse_subject_whose_positions_shifted` | 7-channel folder with channels.json kept = PO7, PO3, POz, PO4, O1, Oz, O2 | train_models and batch_run_subjects skip S02 (no outputs); train_final_model and run_xai exit 1 | config-only check (4 call sites removed): fails | PASS |
+
+Full suite, verbatim: `503 passed, 20 warnings in 199.89s (0:03:19)`. Addition about 2 s. No bugs found.
