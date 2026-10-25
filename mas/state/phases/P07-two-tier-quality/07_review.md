@@ -196,6 +196,32 @@ and `.meta.txt`. Runtime ≈ 10 s per preprocessing run, ≈ 1 min benchmark.
   listed by a labelled mask-only diagnostic. No reference target in P07 (roadmap: "Record
   numbers").
 
+## Pre-run audit — Round 2
+
+Audited `git diff 5be728b..cacb9bd` (fixes 1083862, 5bc3fba, a3870b1; tests e7b48cf).
+Re-run here: `.venv/bin/python -m pytest tests/test_p07_round1_known_answer.py tests/test_p07_known_answer.py tests/test_p07_quality_signal.py tests/test_p07_ml_engineer.py -o addopts="" -q -p no:cacheprovider`
+→ `45 passed, 10 warnings in 22.41s`. Full suite per 04_tests.md Round 1: `503 passed, 20 warnings in 199.89s` (< 5 min).
+
+Verdict: PASS
+
+| Item | Result | Evidence |
+|---|---|---|
+| Fix 1 — legacy P02 path reachable (golden rule 3) | PASS | `--legacy-p02` sets `scalp = legacy_scalp(...)` (PO7 removed by name) and `channel_drop = False` (`run_preprocessing.py` main, after `resolve_params`); writes no `channels.json` and removes a stale one beside the 7-channel arrays. Test `test_legacy_switch_reproduces_p02_arrays`: `X_time` (n, 7, 256) `array_equal` to the 8-channel `--no-channel-drop` run with PO7 deleted, `y` equal, PSD (n, 217) equal to the 5–35 Hz periodogram. Equality is the right known answer: the band-pass is applied per channel, so dropping PO7 cannot change the other rows |
+| Fix 1 — default path cannot overwrite the R-6 inputs | PASS | `holds_legacy_arrays` (7-channel `X_time_windows.npy`, no `channels.json`) checked for every target folder (and the S03 root copy) **before** the subject loop, so neither `save_arrays` nor `_drop_stale` runs: exit 1 with a printed reason unless `--legacy-p02` or `--overwrite-legacy-arrays`. Test `test_refuses_to_touch_legacy_arrays_and_flag_lifts_it`: byte-identical tree after the refusal (skipped subject's arrays and root copy included) |
+| Fix 1 — Makefile | PASS | `Makefile:12,27` `make preprocess` → `--all --legacy-p02`, help text true; test `test_makefile_preprocess_uses_legacy_switch` |
+| Fix 2 — P04 positions checked against the subject's arrays (R6/PF-06) | PASS | `check_subject_keep_channels` (`src/features/ssvep/harmonic_psd.py:45-59`) takes names from `channels.json` or the array channel count (`subject_channel_names`) and raises unless positions (1,4,5,6) name POz/O1/Oz/O2; called per subject before loading in `train_models.py` (skip), `batch_run_subjects.py` (skip, inside the existing `except (ValueError, RuntimeError)`), `train_final_model.py` and `run_xai.py` (exit 1). Those four are the only users of `KEEP_CHANNELS` (grep, Round 1). Test `test_p04_scripts_refuse_subject_whose_positions_shifted` (PO8 dropped → PO3 would be selected): every script skips or refuses and writes no S02 output; the legacy 7-channel folder passes. An 8-channel folder also fails the check (positions give PO3/PO8/O1/Oz) |
+| Planned run commands never write `data/processed` | PASS | unchanged commands: three preprocessing runs with `--processed-dir data/processed_p07_demo/...` (those folders get 8-channel arrays + `channels.json`, so the refusal does not trigger there), benchmark reads `--data-root data/processed` and writes only `reports/`. Even a mistyped default target is now refused. `sha256sum` of the 18 legacy files re-checked here: prefixes identical to D0's |
+| Tests | PASS (note) | 5 new tests, 5 mutants fail (04_tests.md Round 1). Note: `test_legacy_switch_has_no_tier1` also passes when no arrays are written (`not x.exists() or ...`); the tier-1-on mutant is still caught (it writes 6-channel arrays and `channels.json`), and the equality test above pins the switch, so not blocking |
+| Privacy | PASS | fragment-built vendor/assistant pattern: 0 files at HEAD, 0 hits in `main..HEAD` messages; no `data/`, `reports/`, `outputs/`, `baselines/` or local tooling path in `git diff main...HEAD --name-only`; 0 added lines with the answer-key path; no reference-access log entry after the P06 consultations |
+| R1–R11 rows of Round 1 | unchanged | the fixes touch no CV, fitting, filtering, statistics or smoothing code |
+
+Non-blocking: with `--legacy-p02`, a subject that is skipped still has its arrays removed
+(PF-09 fix, by design since P02). `make preprocess` should therefore not be run before P11
+unless the R-6 inputs are meant to be regenerated. If it is run, the output must hash to D0.
+
+The results-review checks committed in Round 1 (D0, P1, P2, P3, D1, D2, D3) stand
+unchanged. D0 now has a second baseline: the hashes re-checked in this round.
+
 ## Results review
 
 Verdict: APPROVE / REJECT
