@@ -71,3 +71,29 @@ Full report: `mas/state/reports/P02.md`. Date of all steps: 2026-10-24.
 **Deviations and legacy.** PO7 excluded (config v1) and the per-script gate (R5 LEGACY by design) are the legacy behaviours; builder deviations accepted (extra kwargs and record keys, extra figure and CLI flags). `team.yaml` P02 flags corrected to `[]`.
 
 **Findings for later phases.** P03: S01 101 (24 Hz) shows a 10 Hz peak and S01/S02 show no clear SSVEP peaks. P07: `summarize_window_quality` must see ungated windows, stale outputs on skipped subjects need handling, PF-07 is reproduced with `--vpp-min 5.0`. P16: check S03 first-trial PO8 rejections for a filter start-up transient. No reference consultation was made (the two access-log lines are privacy greps from earlier phases). Next: P03.
+
+## P03 — Exploration and signal verification
+
+Full report: `mas/state/reports/P03.md`. Date of all steps: 2026-10-24.
+
+**Aim.** Before any model, show per subject and per class whether the legacy stimulus windows carry spectral peaks at the stimulation frequencies (roadmap P03): occipital (`O1, Oz, O2`, by name) `|rfft|²` per class, 5–35 Hz, and a PSD/quality-mask exploration script. Data source: legacy, `data/processed/<S>/` from P02, session `OO`.
+
+**Build.** `scripts/exploration/diagnose_occipital_spectra.py`, `scripts/exploration/visualize_data.py`, `src/features/ssvep/spectral_power.py`, two plot functions and a `make explore` target (`03_changes_signal-processing.md`). Legacy fs 250 is the default and labelled; `--fs 256` gives the header axis.
+
+**Tests and review.** Final suite `311 passed in 20.72s` (`04_tests.md`), verifier `311 passed in 22.46s` on a clean checkout (`06_verify.md`). The pre-run audit Round 1 returned FAIL: the printed target-bin power read the bin nearest f0 on the relabelled fs-250 axis, which is the wrong bin for 24 Hz (bin 25 instead of 24), 2·15 Hz (31 vs 30) and 2·8.57 Hz (18 vs 17). It would have recorded a false "no 24 Hz response" (S03 101 ×0.52 median at the nearest-labelled bin vs ×6.09 at the response bin, `reports/logs/P03/diagnose_occipital_spectra_fs250_20261024T180123.log`). Fix: response bins plus a specificity ratio (power at the class's own bin over the median of the other classes); Round 2 returned PASS (`07_review.md`).
+
+**Run.** Four commands at `8adcb4d2f99cdafe8abe119d464cadc6e7b441fb`, 3, 3, 5 and 4 s (`05_run.md`; logs `reports/logs/P03/*.log`). The runner did not capture the Python exit codes; the verifier re-ran all four from a clean checkout, exit 0 each, numeric lines identical. Legacy fs 250 only relabels the axis (band-maximum bin equal at 250 and 256 and label = bin × 250/256 in 25 of 25 subject × class rows). The quality mask rejected 0 windows (kept 1592); this is a consistency check on windows already gated in P02, not a rejection rate. The recomputed PSD equals the saved `X_psd_features`, `max |computed - saved| = 0`, for S01–S05.
+
+**Which subjects show clear SSVEP peaks (P03.3).** Criterion fixed by the reviewer before the run (clear: band maximum at the response bin, ≥ 2× band median, specificity ≥ 1.5), figures `outputs/figures/exploration/S0{1..5}/occipital_spectra_header.png`, numbers from `reports/logs/P03/diagnose_occipital_spectra_header_20261024T180126.log`:
+
+| Subject | Fundamentals at 24 / 20 / 15 / 10.91 / 8.57 Hz | Reading |
+|---|---|---|
+| S03 | 5/5 clear (×5.97, ×12.93, ×14.32, ×6.94, ×4.63 median) | strong responder |
+| S04 | 5/5 clear (×9.59, ×14.68, ×29.56, ×31.47, ×9.55) | strongest responder |
+| S05 | 3 clear (24, 20, 15 Hz) + 2 visible (10.91, 8.57 Hz) | 104 and 105 are carried by the second harmonic: band maximum at 22 Hz (2f0 ×11.11) and 17 Hz (2f0 ×13.50) |
+| S01 | 1 clear by the rule (104, ×4.28, specificity ×1.78), 2 partial, 2 absent | no clear fundamental at 24 or 20 Hz (×0.88, ×1.41); 104 is alpha-adjacent, a weak response at best |
+| S02 | 0 clear or visible, 3 partial (alpha-confounded), 2 absent | no SSVEP peak |
+
+S01 and S02 are dominated by non-stimulus activity in every class: S01 band maxima at 8–11 Hz (101 at 10 Hz, as seen in P02), S02 at 6 Hz with a second peak at 9 Hz. The P02 partial S03 8.57 Hz target (plateau in the 7-channel mean) is clear in the O1/Oz/O2 mean (bin 9, ×4.63, specificity ×2.43); the channel set, not the data, explains it. This is spectral evidence only: no accuracy was computed, and the statements are descriptive means without uncertainty.
+
+**Findings for later phases.** Expect S01 and S02 to stay low under any classifier; an accuracy far above R-6 (61.00 % and 56.12 % at 1.0 s) is a leakage suspect. S05 104 and 105 should gain from harmonic features (FBCCA, P05). In P05 the loader of `visualize_data.py` moves to `src/`. The effect of PF-04 appears where 250 Hz enters filters and reference sinusoids (P04/P05), not in these spectra. No reference consultation was made. Next: P04.

@@ -1,0 +1,21 @@
+# P03 · Run log  (written by: orchestrator)
+
+| Step | Agent | Date | Outcome | Round | Sources cited | Reference consultations (R11) | Notes (cost, loops, what was caught) |
+|------|-------|------|---------|-------|---------------|-------------------------------|--------------------------------------|
+| 0 Preflight | orchestrator | 2026-10-24 | OK; P02 merged by Sebastian (main df229bd, tag p02-done) | — | — | none | |
+| 1 Open | orchestrator | 2026-10-24 | P03 in_progress | — | — | none | |
+| 2 Assignment | orchestrator | 2026-10-24 | 00_assignment.md READY | — | 03_ROADMAP P03, 02_REQ §5.4, PF-04/06/09, decisions.md P02 | none | fs250 shifts: 24→23.438, 20→19.531, 15→14.648, 10.909→10.653, 8.571→8.371 (`.venv/bin/python` f*250/256) |
+| 3 Brief | orchestrator | 2026-10-24 | skipped (no new method) | — | — | none | |
+| 4 Plan | orchestrator | 2026-10-24 | 02_plan.md READY; STOP for approval | — | as above | none | Q1 fs 250 default + 256 comparison; Q2 mask thresholds |
+| 4 Plan approval | Sebastian | 2026-10-24 | Approved [x]; Q1, Q2 defaults kept | — | — | none | decisions.md rows |
+| 5 Build | signal-processing | 2026-10-24 | 03_changes READY; branch phase/P03-exploration 44e87e7…df39c06; suite `291 passed in 13.21s` | 1 | 03_ROADMAP P03, PF-04/06/09 | none | NEW src helper spectral_power.py + plot additions (outside work split); at fs 250 the bin nearest 24 Hz is bin 25 while a real 24 Hz response sits in bin 24 → target-bin power misses under the legacy axis (PF-04, documented) |
+| 6 Test | synthetic-tester | 2026-10-24 | 04_tests.md READY (745649e, 01be576); suite `303 passed in 20.02s`; no bugs | 1 | DFT, 01_DATA_SPEC §6, PF-04/06/09 | none | 6 buggy-variant checks (positional channels, ignored --fs, inherited vpp_min, root-array loader, 201/202 classes, wrong FFT axis); observation: format_peaks crashes on a class without f0 (unreachable today) |
+| 7 Pre-run audit | scientific-reviewer | 2026-10-24 | FAIL (Round 1, b4bc757): printed target-bin power reads the nearest-labelled bin on the fs-250 axis; wrong for 1f0 24 Hz, 2·15 and 2·8.57 Hz; would put a false "no 24 Hz response" into the record | 1 | PF-04, R9 | none | fix 3 (4th run command) done by orchestrator as plan amendment; criterion for results review pre-committed in 07_review.md |
+| 5 Build (Round 2) | signal-processing | 2026-10-24 | READY; 1869c0a response bin + specificity + format_peaks fix, 78ea210 smoke; suite `305 passed in 20.59s` | 2 | 07_review.md | none | |
+| 6 Test (Round 2) | synthetic-tester | 2026-10-24 | READY; d7a7cac +6 tests (response vs nearest-labelled bins with mutant, header-fs coincidence, analytic specificity 656.36, shared rhythm ≈1, format_peaks rest codes); suite `311 passed in 20.72s` | 2 | DFT, 07_review.md | none | no builder bugs |
+| 7 Pre-run audit (Round 2) | scientific-reviewer | 2026-10-24 | PASS (daa75c6); suite `311 passed in 20.51s`; privacy clean | 2 | 07_review.md | none | reviewer edited its own 07_review.md line refs via sed (own file only, disclosed) |
+| 8 Run | runner | 2026-10-24 | 05_run.md READY (7405cd1); 4 commands, 3–5 s each; mask rejected 0 (kept 1592); PSD at fs 256 `max |computed - saved| = 0` all 5 subjects; 4 figures per subject | 2 | — | none | CAVEAT: python exit codes not captured (wrapper recorded echo status); logs end with cohort line, no Traceback → verifier must capture exit codes |
+| 9 Verify | verifier | 2026-10-24 | PASS (e9c9ae6): clean-worktree pytest `311 passed in 22.46s`; all 4 re-runs exit 0 (subprocess returncode), numeric lines identical to runner logs; 20 PNGs; legacy identity 25/25; mask 0; PSD diff 0 | 2 | — | none | runner exit-code gap closed; no guard workaround reported; tab.py helper cited in 06 was deleted with scratch |
+| 10 Results review | scientific-reviewer | 2026-10-24 | APPROVE (3a02934); S03/S04 5/5 clear, S05 5/5 (2 via 2f0); S01 1 weak clear, S02 none | 2 | figures, logs | none | session limit interrupted the agent after its commit; resumed only for a summary |
+| 11 Report | scribe | 2026-10-24 | P03.md, RESEARCH_LOG (P03.3), CHANGELOG (819c5fd) | 2 | logs, 07_review.md | none | |
+| 12 Gate | orchestrator | 2026-10-24 | PASS: all handoffs READY, both verdicts, suite `311 passed in 24.60s`, 0 vendor/tool hits, clean tree; `set P03 passed --commit 819c5fd`; MERGE_POLICY human | 2 | — | none | |
