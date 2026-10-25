@@ -84,27 +84,108 @@ exist; otherwise recordings were re-read and the arrays may differ — anomaly).
 
 ## Results review
 
-Verdict: APPROVE / REJECT
+Verdict: APPROVE
+
+Opened in this run: `05_run.md`, `06_verify.md` (PASS, run at 552029a, CPU, 140 epochs),
+`outputs/reports/batch_run_subjects.csv`, `outputs/reports/S0{1..5}_model_evaluation.csv`
+(first rows), `reports/logs/P04/batch_run_subjects_all_20261024T222829.log`,
+`train_final_model_S0{1,4}_*.log`, the three XAI figures, the Shrinkage-LDA confusion
+matrices of S01, S02 and S03, and the coefficients of `outputs/models/{S01,S04}_shrinkage_lda.joblib`.
+All arithmetic below comes from shown `.venv/bin/python` commands over these CSVs and joblib files.
+
+**Acceptance note (verbatim criterion "The Reviewer notes … leaky … ignores trial
+boundaries").** Every P04 accuracy (six classifiers, fusion CNN, 1.0 s and smoothed) is
+computed with the legacy window-level `StratifiedKFold(5, shuffle, 42)`: windows of one
+5 s trial sit in both train and test (R1/PF-01, **leaky**). The smoothed numbers use the
+legacy 2-window average **without trial reset** (R8/PF-02), over arrays ordered by
+condition, so they are not 2 s decisions within a trial. Both are fixed in P11; no P04
+number may be compared with R-6 or later phases as an equal. FBCCA uses fs 250 on 256 Hz
+data (PF-04) and per-window sub-band filtering (PF-14), fixed in P16. Data source: legacy
+folders `data/processed/<S>/` (P02, OO session), stimulus windows only, chance 20 %.
 
 ### Deviations from references
 
+R-2 has no numeric targets; R-8 is the only exact reference. R-6 is used only diagnostically
+(different features: FBCSP + FBCCA, leak-free), never as a target.
+
 | Ref | Expected | Obtained (log) | Δ | Within tolerance? | Explanation | Accepted? |
 |---|---|---|---|---|---|---|
-| | | | | | | |
+| R-8 | DualBranchFusionCNN 10,005 | `10005` (`param_count_20261024T223559.log`); both `.pt` report `n_parameters` 10005 (06_verify §4) | 0 | yes (exact) | — | yes |
+| R-2 | CSV `Subject, Classifier, Accuracy, Recall per Class`; cm for LDA, linear SVM, RBF SVM, RF, MLP; XAI heatmaps; S01/S04 models | all present; CSV has extra trailing columns; 6th cm (Logistic Regression); file `S01_model_evaluation.csv` vs original `s01_…` | — | n/a | pre-run notes 2–3 | yes |
+| R-1 | stimulus windows 200/199/200/198/200 | `n_windows` 200/199/200/198/200 (`batch_run_subjects.csv`) | 0 | yes (exact) | — | yes |
+| R-6 (diagnostic only) | LDA 1.0 s S01–S05 61.00/56.12/86.80/97.46/95.00 % | leaky LDA 50.00/51.26/83.00/97.98/95.50 % | −11.00/−4.86/−3.80/+0.52/+0.50 pts | n/a | different feature set (no FBCSP) and fs-250 FBCCA; leaky CV did **not** lift the weak responders above the leak-free flagship | not a target |
 
 ### Interpretation check
 
-<!-- Per-subject reading; inconclusive results stated as such; leakage in
-fitted objects, normalization, validation sets; statistics unit and
-multiple comparisons. -->
+1. **S01/S02 against R-6 (leakage signs).** The P03 carry-forward warned that S01/S02 far
+   above R-6 would be a leakage suspect. That did not happen: leaky LDA is 11.00 and 4.86
+   pts below R-6 at 1.0 s (S01 50.00 %, S02 51.26 %), and the confusion matrices are
+   diffuse (S01 LDA diagonal 18/24/24/19/15 of 40, i.e. 100/200 = 50.00 %, matching the
+   CSV; S02 errors concentrate in 104↔105 and 102→104). With this hybrid, trial leakage
+   does not create a strong signal for the linear models; that is consistent with PF-01
+   ("much more for CNNs than for LDA"). The size of the leak itself is **not measured
+   here**; it is measured in P11 (grouped CV on the same features).
+2. **Train vs test (PF-30).** Fusion CNN, mean fold train acc (eval mode) vs pooled test:
+   S01 95.38 vs 51.50 % (gap 43.88 pts), S02 98.12 vs 53.77 % (44.35), S03 98.75 vs 89.00 %
+   (9.75), S04 100.00 vs 99.49 % (0.51), S05 100.00 vs 100.00 % (0.00). High train with
+   near-LDA test on S01/S02 = generalization problem, not optimization; the CNN beats LDA
+   by only 1.50/2.51 pts there. S05 CNN 100.00 % (5.00 pts above R-6 LDA) and S03 CNN +6.00
+   pts over LDA are where leakage would show for a CNN; **inconclusive** until P11. The
+   full-data `.pt` accuracies (S01 93.50 %, S04 100.00 %, logs `train_final_model_S0{1,4}_*.log`)
+   are labelled fitted-window accuracies and are not test scores.
+3. **Smoothed gains.** LDA: +5.50/+12.56/+12.00/+0.00/+2.00 pts; CNN: +11.50/+10.55/+6.00/
+   −1.52/−1.50 pts (S01–S05). Arrays are condition-ordered, so the no-reset average pairs
+   each first window of a trial with the last window of the previous same-class trial
+   except at 4 class changes. Consistent with this, S04 and S05 CNN smoothing *lose*
+   exactly 3 windows each (−0.01515 × 198, −0.015 × 200), within the at most 4 class-change
+   boundaries where averaging mixes two classes. The large S02/S03 gains cannot be split
+   here into within-trial and cross-trial (same-class, label-order) contributions;
+   **inconclusive**, not a 2 s decision gain. P11 (reset per trial) gives the honest number.
+4. **Classifier spread.** Within a subject the six classifiers differ by up to 10.5 pts
+   (S01 LDA 50.0 vs Linear SVM 39.5 %), with no repeat or seed variation; single CV run,
+   no ranking claim is supported. Shrinkage-LDA is best or tied-best at 1.0 s only on S01.
+5. **FBCCA under fs 250 (PF-04).** S04 full-data LDA FBCCA diagonal weights
+   101–105 = 3.63/6.45/6.84/4.97/4.51; 101 is the weakest, 102 is not, although its
+   references drift almost as much (0.48 Hz at h = 1, 0.96 Hz at h = 2). The PSD weights,
+   which do not depend on the fs assumption, show the same 101 weakness (max 3.10 vs
+   4.71–6.01 for 102–104). So the weak 101 term is at least partly the subject's response,
+   not the fs error; the pre-committed expectation (weaker 101/102) is **not supported** in
+   this descriptive reading. PF-04's effect is quantified in P16, not here.
+6. **XAI (descriptive, full-data fit).** S04: for 5/5 classes the largest positive
+   spatial-spectral weight is on the class's own f0 bin, all on Oz (101 24 Hz, 102 20 Hz,
+   103 15 Hz, 104 11 Hz, 105 9 Hz); FBCCA matrix strongly diagonal (diagonal 3.63–6.84,
+   every off-diagonal ≤ −0.23). S01: weights about an order of magnitude smaller (spatial
+   max 0.15–0.63, FBCCA diagonal 0.36–1.52); 4/5 classes peak on their own f0 bin, 105 peaks
+   at 22 Hz (not its own); 103 has the largest FBCCA weight (1.52), in line with P03's S01
+   reading (103 partial, alpha-adjacent 104). S03 LDA errors flow into 104/105 (alpha-band
+   classes: 3+6, 5+4, 4+2 of 40 for 101–103), consistent with the P03 alpha caution. These
+   are weights of a fit on all windows; they describe the fit, not generalization.
+7. **Figure defect (non-blocking).** In `compare_S01_S04.png` the spatial colourbar overlaps
+   the S01 FBCCA panel's class tick labels (101–105 partly hidden). Readable with the S04
+   row; ml-engineer fixes the layout (and the docstring of pre-run note 4) when the script
+   is next touched.
+8. **Fitted objects / leakage audit.** No validation set, no early stopping, no test-time
+   normalization; scalers in-fold (pre-run R2). The only full-data fits are the exported
+   models and XAI, labelled. No permutation statistics (R7 N/A).
+9. **Run deviation.** The batch command omitted `--paradigm` (guard blocks the session file
+   name in command text); the default is the same session and the CSV `Data source` reads
+   OO. Equivalent run; accepted.
 
 ### Decisions for decisions.md
 
-<!-- Accepted deviations, one line each; the orchestrator copies them. -->
+- P04 | R-8 met exactly (10005); R-1 window counts reproduced (200/199/200/198/200); batch LDA == train_models LDA exactly for S01–S05 | `06_verify.md` §4, §6
+- P04 | All P04 accuracies are legacy leaky window-level CV with no-reset smoothing over condition-ordered arrays (PF-01/PF-02); never compared with R-6 as equals; fixed in P11 | `07_review.md` results review
+- P04 | Leaky LDA on S01/S02 is below R-6 (−11.00/−4.86 pts at 1.0 s); no leakage-driven inflation seen for LDA with this hybrid; leak size measured in P11 | `07_review.md` interp. 1
+- P04 | Fusion CNN train/test gap S01 43.88, S02 44.35 pts (generalization problem, PF-30); S03/S05 CNN gains over LDA (+6.00/+4.50 pts) inconclusive until P11 | interp. 2
+- P04 | Smoothed gains not interpretable as 2 s decisions; S04/S05 CNN smoothing −3 windows each at class-change boundaries | interp. 3
+- P04 | PF-04 expectation (weaker 101/102 FBCCA) not supported descriptively: S04 101 weak in PSD weights too, 102 strong; quantify in P16 | interp. 5
+- P04 | XAI S04 5/5 classes peak at own f0 on Oz; S01 weights ~10× smaller, 105 off-target | interp. 6
+- P04 | Accepted deviations: extra CSV columns and bundle keys, 6th cm (LR), `S01_` file-name case, batch run without `--paradigm` (default = OO); open cosmetic items for ml-engineer: compare-figure colourbar overlap and docstring "shared scale"; src→scripts lazy imports to move into src in P05/P11 | pre-run notes, interp. 7, 9
 
 ## Sources spot-check
 
-<!-- Fix rounds: append "## Pre-run audit — Round N". After two failed rounds,
-set Status: BLOCKED. -->
+- `mas/04_REFERENCE_RESULTS.md` R-8: 10,005 with both fusion convs `bias=False` — matches the log.
+- `mas/RULES.md` R-6 table: 61.00/56.12/86.80/97.46/95.00 % at 1.0 s — the values used above.
+- `mas/05_PITFALLS.md` PF-30: train acc on the training fold, high train + low test = generalization problem — applied as stated.
 
 ## Questions
