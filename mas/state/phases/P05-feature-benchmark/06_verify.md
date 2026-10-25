@@ -193,7 +193,8 @@ All ten R-5 values (1.0 s and 2.0 s, five subjects) are reproduced exactly. Data
 
 ## Verdict restatement (after results review)
 
-Verdict: PASS (with one accepted deviation, D-1)
+Verdict: PASS
+Accepted deviation: D-1 (see 07_review.md results review and decisions.md).
 
 Basis, against the acceptance criteria as written above:
 
