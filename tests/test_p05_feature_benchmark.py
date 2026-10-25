@@ -397,6 +397,9 @@ def test_flagship_and_harmonic_scripts(tree):
             "cm_harmonic_fbcca_cv_S03.png", "cm_harmonic_fbcca_cv.png"):
     assert (cm / n).is_file(), n
   assert (tree / "reports" / "classification_report_evaluate_confusion_matrix_S03.txt").is_file()
+  for rule in ("noreset", "mod5"):                       # Round 2 labelled diagnostics
+    t = (tree / "reports" / f"classification_report_evaluate_confusion_matrix_S03_smoothed_{rule}.txt").read_text()
+    assert "DIAGNOSTIC" in t and "confusion counts" in t
   assert (tree / "reports" / "classification_report_benchmark_harmonic_fbcca_S03.txt").is_file()
 
 

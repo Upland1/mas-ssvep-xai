@@ -13,6 +13,9 @@ out-of-fold probabilities in array order (legacy R8/PF-02, no trial reset). The 
 Legacy (labelled): R1/PF-01 StratifiedKFold(5, shuffle, 42) over windows (leaky; the leak-free
 reference is R-6, not this); R3/PF-14 and PF-04 per-window filtering, fs 250.
 
+DIAGNOSTIC outputs (Round 2, labelled; reported definitions unchanged): confusion counts and classification report
+of the 2.0 s smoothed predictions under the no-reset and j%5 rules, *_smoothed_{noreset,mod5}.txt.
+
 Output: <reports-dir>/flagship_<S>.csv (Subject, Clean Windows, Rejected, m, 1.0s Acc (%),
 2.0s Smoothed (%); one row per m, rewritten on rerun), the classification report
 <reports-dir>/classification_report_evaluate_confusion_matrix_<S>[_m<m>].txt and the confusion
@@ -44,6 +47,7 @@ if str(ROOT) not in sys.path:
   sys.path.insert(0, str(ROOT))
 
 from src.features.ssvep.spectral_power import LEGACY_FS_HZ  # noqa: E402
+from src.preprocessing.dataset.legacy_windows import CLASS_CODES  # noqa: E402
 from src.models.classical.benchmark_runner import (  # noqa: E402
   DEFAULT_SUBJECT, figure_paths, legacy_header_lines, load_config, plot_confusion, prepare_subject,
   save_classification_report)
@@ -51,7 +55,10 @@ from src.models.classical.feature_spaces import benchmark_spaces  # noqa: E402
 from src.models.classical.legacy_eval import (  # noqa: E402
   CV_LABEL, SEED, SMOOTH_LABEL, accuracies, oof_space, space_width)
 from src.models.classical.sklearn_models import get_sklearn_model_suite  # noqa: E402
-from src.preprocessing.dataset.smoothing import smooth_probabilities_mod5  # noqa: E402
+from sklearn.metrics import confusion_matrix  # noqa: E402
+from src.models.classical.benchmark_runner import CLASS_NAMES  # noqa: E402
+from src.preprocessing.dataset.smoothing import (  # noqa: E402
+  smooth_probabilities_legacy, smooth_probabilities_mod5)
 
 DEFAULT_CONFIG = ROOT / "configs" / "pipeline_config.yaml"
 MODEL = "Shrinkage-LDA lsqr"
@@ -78,6 +85,26 @@ def _rel(path: Path) -> str:
     return str(Path(path).resolve().relative_to(ROOT))
   except ValueError:
     return str(path)
+
+
+def smoothed_diagnostics(y: np.ndarray, scores: np.ndarray, reports: Path, subject: str, tag: str) -> dict:
+  """DIAGNOSTIC (R-3 investigation, not the reported numbers): confusion counts and classification report of the
+  2.0 s smoothed predictions under both rules; written to
+  <reports>/classification_report_evaluate_confusion_matrix_<S><tag>_smoothed_{noreset,mod5}.txt and printed.
+  Returns {rule: accuracy}."""
+  classes = np.array(CLASS_CODES)
+  accs = {}
+  for rule, fn in (("noreset", smooth_probabilities_legacy), ("mod5", smooth_probabilities_mod5)):
+    pred = classes[np.argmax(fn(scores), axis=1)]
+    cm = confusion_matrix(y, pred, labels=list(classes))
+    accs[rule] = float(np.mean(pred == y))
+    title = (f"DIAGNOSTIC {subject} 2.0 s smoothed predictions, rule {rule} "
+             f"({'legacy no-reset R8/PF-02, the reported definition' if rule == 'noreset' else 'trial-aware j%5 approximation'}); "
+             f"accuracy {100 * accs[rule]:.2f}%\nconfusion counts (rows true, columns predicted, order {list(classes)}):\n"
+             + "\n".join(" ".join(f"{v:4d}" for v in row) for row in cm))
+    rep = save_classification_report(y, pred, reports / f"classification_report_evaluate_confusion_matrix_{subject}{tag}_smoothed_{rule}.txt", title)
+    print(f"  DIAGNOSTIC smoothed {rule}: accuracy {100 * accs[rule]:.2f}%\n" + title.split("\n", 1)[1] + "\n" + rep)
+  return accs
 
 
 def update_flagship_csv(path: Path, row: dict) -> pd.DataFrame:
@@ -124,6 +151,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
   print(f"  {MODEL}: 1.0 s {100 * a1:.2f}%  2.0 s smoothed {100 * a2:.2f}% (legacy no-reset)")
   print(f"  DIAGNOSTIC only (not the reported number): trial-aware j%5 smoothing {100 * diag:.2f}%")
   tag = "" if args.m == 1 else f"_m{args.m}"
+  smoothed_diagnostics(y, r["scores"], reports, args.subject, tag)
   txt = reports / f"classification_report_evaluate_confusion_matrix_{args.subject}{tag}.txt"
   title = (f"{args.subject} {SPACE} m={args.m} -> {MODEL}; {CV_LABEL}; out-of-fold 1.0 s accuracy "
            f"{100 * a1:.2f}%, 2.0 s smoothed {100 * a2:.2f}%; clean windows {b['n_clean']}, rejected {b['n_rejected']}")
