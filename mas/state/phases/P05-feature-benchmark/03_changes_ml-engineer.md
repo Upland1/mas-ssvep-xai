@@ -112,3 +112,34 @@ None. `reference/ssvep-eeg-xai/` was not opened.
 ## Questions
 
 ACK 02_plan.md ml-engineer 2026-10-24
+
+## Round 2 (investigation round after 06_verify.md FAIL)
+
+Status: READY. Commit `1e85c17` (diagnostics + smoke); this section is committed after it. Full suite: `413 passed, 10 warnings in 117.23s`. No real-data run; the definitions of the reported numbers are unchanged.
+
+### Diagnostic outputs added (`scripts/evaluation/evaluate_confusion_matrix.py`)
+`smoothed_diagnostics()` runs on every call (no new flag). For each rule it prints the confusion counts (rows true, columns predicted, order 101..105) and the classification report of the 2.0 s smoothed predictions, labelled DIAGNOSTIC, and writes
+`reports/classification_report_evaluate_confusion_matrix_<S>[_m<m>]_smoothed_noreset.txt` (legacy no-reset, the reported definition) and `..._smoothed_mod5.txt` (j%5 rule). Smoke: `test_flagship_and_harmonic_scripts` asserts both files exist and contain `DIAGNOSTIC` and `confusion counts`.
+
+### Reference consultations (R11)
+Trigger: implementation and tests exist; S03 2.0 s 95.94 % vs R-3 95.43 % and class-101 precision 0.8537 vs "perfect precision on 24 Hz" (06_verify.md). Read-only, through `git -C` on the answer-key clone; all are in `mas/state/scratch/reference_access.log` (agent ml-engineer, 2026-10-24 23:4x).
+
+| # | Trigger | Files and lines @ commit | What I learned | What changed in my code |
+|---|---|---|---|---|
+| 1 | R-3 miss | `scripts/evaluation/evaluate_confusion_matrix.py` @ main (5d6d1c2) and its `log --follow` | main is the post-fix version (grouped CV); history gives the P05-stage commit 69873ea ("95.43% smoothed CV") | none |
+| 2 | R-3 miss | `scripts/evaluate_confusion_matrix.py` @ 69873ea lines 57-61, 97-109, 124-130 | see (a), (b) | none (evidence only) |
+| 3 | R-3 miss | `src/features/fbcca_extraction.py` 20-30, 33-94; `src/features/fbcsp_extraction.py` 29-75, 78-112; `src/preprocessing/quality_check.py` 6-21 @ 69873ea | see (c) | none |
+| 4 | R-3 miss | `scripts/benchmark_cross_validation.py` (grep only), `scripts/benchmark_harmonic_fbcca.py` 24-60, `src/features/psd_extraction.py` 8-39 @ 69873ea | see (a), (c) | none |
+
+### Evidence
+(a) Smoothing rule at the P05 stage: trial-aware `i % 5` reset. `evaluate_confusion_matrix.py` @ 69873ea:97-109: `trial_len = 5`, `pos = i % trial_len`, `pos == 0` keeps `oof_probs[i]`, else the mean of rows `i-1, i`, over the clean array in order; printed as "2.0s Trial Smoothed" (113). No-reset smoothing does not appear. `benchmark_cross_validation.py` and `benchmark_harmonic_fbcca.py` @ 69873ea contain no smoothing (grep for smooth, `% 5`, trial_len: no hits), so the only 2.0 s number at that stage is the j%5 one. This agrees with the verifier: the j%5 diagnostic reproduces R-3 and all five R-5 values exactly. R-3/R-5 "2.0 s smoothed" are therefore j%5 values; our no-reset definition (decisions.md P05 row, "legacy no-reset" for P04-P10) is not what produced the reference.
+(b) Predictions behind the confusion matrix: the figure is computed from the SMOOTHED predictions (`cm = confusion_matrix(y_clean, preds_smoothed)`, line 130; title "2.0s Smoothed", 143-146). Two classification reports are printed, 1.0 s from `preds_1s` (124) and smoothed from `preds_smoothed` (127). The "perfect precision on 24 Hz" statement is thus most plausibly from the j%5 smoothed matrix/report; the 1.0 s report is the other candidate, but our 1.0 s accuracy equals R-3's exactly and our 1.0 s class-101 precision is 0.8537, so a perfect value cannot come from the 1.0 s predictions. The new `_smoothed_mod5.txt` shows the j%5 smoothed precision on real data (verifier to read it).
+(c) Differences, original @ 69873ea vs ours:
+ 1. Mask limits: the original extractors default to `vpp_limits=(0.5, 120.0)`, `std_limits=(0.1, 35.0)` (`fbcca_extraction.py:39-40`, `fbcsp_extraction.py:84-85`, `psd_extraction.py:14-15`, `quality_check.py:6-12`). Ours (decisions.md P05): vpp 5-120, std 1-35. S03 gives 197/3 under ours, so the count is not affected there, but the set of 3 rejected windows could differ and so could the fold composition. Second, untested candidate for the class-101 precision difference. Not changed.
+ 2. FBCCA, CSP, LDA: no deviation found. FBCCA: 3 harmonics (`fbcca_extraction.py:38`), cheby1(4, 3, [low, min(90, nyq-1)]) with `filtfilt` per window (20-30, 82), weights `n**-1.25 + 0.25` (63), CCA(1) on all channels, r = 0 on exception (83-88; the original does not zero a NaN r, ours does). CSP: trace-normalised covariance, `eigh(cov_target, cov_target + cov_rest + 1e-6 I)` (53-54), m largest then m smallest (58-60), features `log10(var / sum(var))` over each class's 2m projections with floor 1e-12 (71-72): my per-class normalisation is the original's. LDA lsqr auto, in-fold scaler, `StratifiedKFold(5, True, 42)` (`evaluate_confusion_matrix.py:58, 79-84`), band filtering of train and test windows separately per fold (equivalent to per-window filtering).
+ 3. Harmonic+FBCCA script (not the flagship): the original selects visual channels positionally `[3, 4, 5, 6]` and gives FBCCA only those four (`benchmark_harmonic_fbcca.py:25, 34`); its harmonic PSD is an unmasked `rfft` power at the nearest bins of `linspace(0, 125, T//2+1)` (27-31) on all windows while FBCCA applies its own gate on the same windows (PF-10 double gating in the original). Ours: PO8/O1/Oz/O2 by name, all 7 channels in FBCCA, one mask, periodogram grid. Affects only the harmonic+FBCCA numbers.
+Conclusion: the only flagship-relevant deviation is the smoothing rule (a); the mask limits (c1) are a second candidate. I changed no definition.
+
+### Sources (Round 2)
+9. Original repository (answer key) @ 69873ea and main 5d6d1c2, files and lines in the table (opened in this run, R11 after-attempt).
+10. `mas/state/phases/P05-feature-benchmark/06_verify.md` facts as relayed by the coordinator (not re-derived here).
