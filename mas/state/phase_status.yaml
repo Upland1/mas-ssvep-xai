@@ -41,12 +41,12 @@ phases:
     passed: '2026-10-24'
   P05:
     slug: feature-benchmark
-    status: in_progress
+    status: passed
     owner: orchestrator
     branch: phase/P05-feature-benchmark
-    commit: null
+    commit: e444893
     opened: '2026-10-24'
-    passed: null
+    passed: '2026-10-25'
   P06:
     slug: feature-selection-cohort
     status: pending
