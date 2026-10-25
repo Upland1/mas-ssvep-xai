@@ -57,3 +57,22 @@ Result and scope
 - Run: exit 0, 5 s; `Cohort: 5 subjects processed, 0 skipped (none); 1592 windows; gated 1600, accepted 1592, rejected 8, skipped segments 0`. Window counts equal R-1 exactly (320 / 318 / 317 / 317 / 320; stimulus 200 / 199 / 200 / 198 / 200).
 - Figure criterion: S04 and S05 5/5, S03 4/5 (8.57 Hz partial).
 - On real data 178 of 199 legacy 202 windows are bit-identical to a 201 window and 21 are shifted by 8 samples; 201 and 202 are never to be used together.
+
+## P03 — Exploration and signal verification
+
+2026-10-24, branch `phase/P03-exploration`. Report: `mas/state/reports/P03.md`.
+
+Added
+- `scripts/exploration/diagnose_occipital_spectra.py` (`--subject`, `--subjects`, `--all`, `--fs`, `--out-suffix`, `--processed-dir`, `--figures-dir`, `--config`, `--no-figures`): occipital `O1, Oz, O2` (by name) spectra per class, response-bin power and specificity ratio.
+- `scripts/exploration/visualize_data.py`: legacy quality mask with explicit thresholds, per-class PSD plots, check of the recomputed PSD against the saved one; marked extension points for FBCCA/FBCSP (P05).
+- `src/features/ssvep/spectral_power.py` (`response_bin`, `spectrum_peaks`, `fft_power`, `psd_features`, `select_channels_by_name`); `LEGACY_FS_HZ = 250`.
+- `tests/test_p03_exploration_smoke.py` (10) and `tests/test_p03_exploration_known_answer.py` (18); suite `311 passed`.
+
+Changed
+- `src/visualization/signal_plots.py`: + `plot_class_spectra_panels`, `plot_psd_by_class_per_channel`.
+- `Makefile`: target `explore`.
+
+Result and scope
+- Four runs, 3 to 5 s each; the verifier re-ran them with exit 0. Mask `rejected 0` (kept 1592, consistency check); `max |computed - saved| = 0` at fs 256; legacy fs 250 relabels the axis only (25 of 25 rows).
+- Clear fundamentals: S03 5/5, S04 5/5, S05 5/5 (104 and 105 via the second harmonic); S01 only a weak 10.91 Hz response; S02 none.
+- The pre-run audit Round 1 failed on the nearest-labelled target bin at the legacy axis (wrong for 24, 2·15, 2·8.57 Hz); fixed with response bins and a specificity ratio.
