@@ -8,3 +8,4 @@
 | 3 Research | orchestrator | 2026-10-26 | skipped (the roadmap specifies the estimators and the test exactly) | 1 | | none | |
 | 4 Plan | orchestrator | 2026-10-26 | 02_plan.md READY (auto) | 1 | R-12, PF-17–20, §6 | none | runtime to be measured by the builder; over budget → human run |
 | 5 Build | connectivity-stats | 2026-10-26 | 03_changes READY (6b03ae8…781759d); suite `750 passed, 21 warnings in 366.32s`; runtime ~16 min total at 16 cores (no human run); S03 smoke close to R-12 (coherence FDR 64 vs 65, wPLI 42 vs 38); demos: MVAR strided 6.6 % vs contiguous 129.7 % (roadmap ~150–200 %), CSD PLV 1.0000→0.9999 (roadmap 0.998) | 1 | R-12, PF-17–20 | none | aligned-coherence diagnostic differs at 10.91/8.57 Hz (estimator-dependent cells) |
+| 6 Test | synthetic-tester | 2026-10-26 | 04_tests.md READY (389d1a0, 4fffc70); +37 tests; 11 mutants killed (one equivalent mutant replaced); suite `787 passed, 21 warnings in 368.21s` | 1 | PF-03, PF-17–20 | none | |
