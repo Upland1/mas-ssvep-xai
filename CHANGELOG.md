@@ -239,3 +239,27 @@ Result (legacy folders, 7 channels, CPU, seed 42; not comparable with later phas
 - Augmentation A/B vs R-9b: 13 of 14 out-of-band cells explained by training-seed variance (D-4). Compact-CNN S03 2.0 s ON not reproduced within tolerance (129 / 127 / 129 of 197 windows; smallest in-band count 131), accepted as a documented deviation by Sebastian (D-8, B006).
 - Reference consultation: one, under R11 (deep-learning, Round 2; no code copied; RNG stream not adopted).
 - Frozen P10 CSVs (`reports/legacy_leaky/`) are the "before" side. Next phase: P12, after the orchestrator's gate.
+
+## P12 — Functional connectivity v1: coherence, bias fix, matched baseline
+
+2026-10-26, branch `phase/P12-coherence`. Code and runs at `cb446b0`; results review at `66f3346`. Phase report: `mas/state/reports/P12.md`.
+
+Added
+- `src/features/connectivity/connectivity_extraction.py`: coherence estimators (per-window DIAGNOSTIC; concatenated, reported), the same-window matched baseline, difference matrices, the 5–35 Hz baseline statistic and the window-aligned junction diagnostic.
+- `src/visualization/connectivity_plots.py`: circle plots, raw and difference panels (`RdBu_r`, symmetric per subject).
+- `scripts/connectivity/diagnostics/demo_coherence_bias.py` (PF-15 and PF-16, synthetic and real) and `scripts/connectivity/analysis/analyze_connectivity.py --subject --method coherence`.
+- `tests/test_p12_coherence.py` and `tests/test_p12_known_answer.py`; suite `723 passed, 21 warnings` (`reports/logs/P12/pytest_20261026_151109.log`).
+
+Result (S03 and S04, legacy 7-channel folders, raw windows, descriptive; `reports/connectivity/`)
+- PF-15 reproduced: independent noise 0.3373 per-window averaged against 0.0180 concatenated (`reports/connectivity/coherence_bias_demo.csv`). Fixed on the reported path.
+- Baseline coherence (201, 5–35 Hz, R-11): S03 0.6836 → 0.5871, S04 0.7291 → 0.6589 (before → after). Per-band matched baseline falls in 10 of 10 cells.
+- Differences, prescribed estimator: 24/20 Hz positive in both subjects (S03 +0.2494 / +0.2511; S04 +0.1281 / +0.1105). 10.91/8.57 Hz: S03 −0.0366 / +0.0414; S04 +0.1934 / +0.1286.
+- PF-16 changes conclusions: S03 105 +0.1934 broadband against +0.0414 matched; S04 103 sign flip (−0.0048 against +0.0554).
+- Junction diagnostic: S03 105 estimator-sensitive (|Δ| = 0.0565, sign opposite to the junction prediction); no other band flagged.
+- Alpha-band ceiling and alpha-desynchronisation hypotheses recorded for P13; no p-values in P12.
+
+Review
+- Pre-run audit Round 1 FAIL (`84406bc`), amended settled point 2, Round 2 PASS (`35a1f29`). Verifier PASS (`b68f5eb`). Results review APPROVE (`66f3346`), D-1 to D-4. No reference consultation.
+- Suite runtime about 6 min against "about a minute" (noted, not blocking).
+
+Next phase: P13, after the orchestrator's gate.
