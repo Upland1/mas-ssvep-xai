@@ -367,6 +367,9 @@ def tree(tmp_path_factory):
   return root
 
 
+LEG = ["--cv", "legacy", "--smoothing", "mod5"]   # P11: these tests pin the P05-P10 legacy protocol (outputs under legacy_leaky/)
+
+
 def _flags(root, *extra):
   return ["--subject", "S03", "--processed-dir", str(root / "processed"), "--reports-dir", str(root / "reports"),
           *extra]
@@ -374,33 +377,33 @@ def _flags(root, *extra):
 
 def test_benchmark_cross_validation_script(tree):
   """Smoke: 6 spaces x 9 models (no QDA, PF-12) + argmax = 55 rows with the specified columns; mask counts printed."""
-  assert bcv.main(_flags(tree)) == 0
-  df = pd.read_csv(tree / "reports" / "feature_space_benchmark_S03.csv")
+  assert bcv.main(_flags(tree, *LEG)) == 0
+  df = pd.read_csv(tree / "reports" / "legacy_leaky" / "feature_space_benchmark_S03.csv")
   assert list(df.columns) == bcv.COLUMNS and len(df) == 55
   assert "QDA" not in set(df["Model"])
   assert df.groupby("Feature space")["p"].first().to_dict()["FBCSP + FBCCA (in-fold)"] == 55
   assert set(df["Clean Windows"]) == {100} and set(df["Rejected"]) == {0}
-  assert (tree / "reports" / "feature_space_benchmark_S03.meta.txt").read_text().count("legacy") >= 3
+  assert (tree / "reports" / "legacy_leaky" / "feature_space_benchmark_S03.meta.txt").read_text().count("legacy") >= 3
 
 
 def test_flagship_and_harmonic_scripts(tree):
   fig = tree / "fig"
-  assert ecm.main(_flags(tree, "--figures-dir", str(fig))) == 0
-  assert ecm.main(_flags(tree, "--figures-dir", str(fig), "--m", "2")) == 0
-  df = pd.read_csv(tree / "reports" / "flagship_S03.csv")
+  assert ecm.main(_flags(tree, *LEG, "--figures-dir", str(fig))) == 0
+  assert ecm.main(_flags(tree, *LEG, "--figures-dir", str(fig), "--m", "2")) == 0
+  df = pd.read_csv(tree / "reports" / "legacy_leaky" / "flagship_S03.csv")
   assert list(df.columns) == ecm.COLUMNS and df["m"].tolist() == [1, 2]
-  assert ecm.main(_flags(tree, "--figures-dir", str(fig))) == 0           # rerun replaces the m = 1 row
-  assert pd.read_csv(tree / "reports" / "flagship_S03.csv")["m"].tolist() == [2, 1]
-  assert bhf.main(_flags(tree, "--figures-dir", str(fig))) == 0
-  cm = fig / "confusion_matrices"
+  assert ecm.main(_flags(tree, *LEG, "--figures-dir", str(fig))) == 0           # rerun replaces the m = 1 row
+  assert pd.read_csv(tree / "reports" / "legacy_leaky" / "flagship_S03.csv")["m"].tolist() == [2, 1]
+  assert bhf.main(_flags(tree, *LEG, "--figures-dir", str(fig))) == 0
+  cm = fig / "legacy_leaky" / "confusion_matrices"
   for n in ("cm_fbcsp_m1_fbcca_cv_S03.png", "cm_fbcsp_m1_fbcca_cv.png", "cm_fbcsp_m2_fbcca_cv.png",
             "cm_harmonic_fbcca_cv_S03.png", "cm_harmonic_fbcca_cv.png"):
     assert (cm / n).is_file(), n
-  assert (tree / "reports" / "classification_report_evaluate_confusion_matrix_S03.txt").is_file()
+  assert (tree / "reports" / "legacy_leaky" / "classification_report_evaluate_confusion_matrix_S03.txt").is_file()
   for rule, kind in (("noreset", "DIAGNOSTIC"), ("mod5", "REPORTED (legacy i%5")):   # Round 2 labels
-    t = (tree / "reports" / f"classification_report_evaluate_confusion_matrix_S03_smoothed_{rule}.txt").read_text()
+    t = (tree / "reports" / "legacy_leaky" / f"classification_report_evaluate_confusion_matrix_S03_smoothed_{rule}.txt").read_text()
     assert t.startswith(kind) and "confusion counts" in t
-  t = (tree / "reports" / "classification_report_benchmark_harmonic_fbcca_S03.txt").read_text()
+  t = (tree / "reports" / "legacy_leaky" / "classification_report_benchmark_harmonic_fbcca_S03.txt").read_text()
   assert "FBCCA on PO8, O1, Oz, O2" in t                 # Round 2: visual-cluster FBCCA
 
 

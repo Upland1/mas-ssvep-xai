@@ -229,11 +229,11 @@ def test_n_subjects_schema_channels_and_parallel_equals_serial(tree, capsys):
   stimulus windows; the per-subject channel report (`-> DROPPED`) is printed; the S01 accuracies equal the flagship
   script's on the same tree (same code path); `--n-jobs 2` writes the same CSV as `--n-jobs 1`; meta file labels the
   legacy behaviours."""
-  args = ["--data-root", str(tree / "processed")]
+  args = ["--data-root", str(tree / "processed"), "--cv", "legacy", "--smoothing", "mod5"]
   assert bns.main(args + ["--reports-dir", str(tree / "rn1"), "--n-jobs", "1"]) == 0
   out = capsys.readouterr().out
   assert "PO7: fail 100.0%" in out and "-> DROPPED" in out and "[-] Skipping" not in out
-  df = pd.read_csv(tree / "rn1" / "n_subjects_benchmark.csv")
+  df = pd.read_csv(tree / "rn1" / "legacy_leaky" / "n_subjects_benchmark.csv")
   assert list(df.columns) == ["Subject", "Channels Kept", "Channels Dropped", "Clean Windows", "Rejected Windows",
                               "1.0s Acc (%)", "2.0s Smoothed (%)"]
   assert df["Subject"].tolist() == ["S01", "S02", "S05", "Mean"]
@@ -242,13 +242,13 @@ def test_n_subjects_schema_channels_and_parallel_equals_serial(tree, capsys):
   assert (df["Clean Windows"].iloc[:3] + df["Rejected Windows"].iloc[:3]).tolist() == [75, 75, 75]
   for c in ("1.0s Acc (%)", "2.0s Smoothed (%)"):
     assert df[c].iloc[3] == pytest.approx(round(df[c].iloc[:3].mean(), 2), abs=1e-9)
-  assert ecm.main(_flags(tree, "S01", "--no-figures", "--figures-dir", str(tree / "fig"))) == 0
-  fl = pd.read_csv(tree / "reports" / "flagship_S01.csv").iloc[0]
+  assert ecm.main(_flags(tree, "S01", "--no-figures", "--cv", "legacy", "--smoothing", "mod5", "--figures-dir", str(tree / "fig"))) == 0
+  fl = pd.read_csv(tree / "reports" / "legacy_leaky" / "flagship_S01.csv").iloc[0]
   assert df.iloc[0]["1.0s Acc (%)"] == fl["1.0s Acc (%)"] and df.iloc[0]["2.0s Smoothed (%)"] == fl["2.0s Smoothed (%)"]
-  meta = (tree / "rn1" / "n_subjects_benchmark.meta.txt").read_text()
+  meta = (tree / "rn1" / "legacy_leaky" / "n_subjects_benchmark.meta.txt").read_text()
   assert "StratifiedKFold" in meta and "legacy" in meta and "S02: kept" in meta and "dropped PO7" in meta
   assert bns.main(args + ["--reports-dir", str(tree / "rn2"), "--n-jobs", "2"]) == 0
-  pd.testing.assert_frame_equal(df, pd.read_csv(tree / "rn2" / "n_subjects_benchmark.csv"))
+  pd.testing.assert_frame_equal(df, pd.read_csv(tree / "rn2" / "legacy_leaky" / "n_subjects_benchmark.csv"))
 
 
 def test_n_subjects_subjects_flag_skip_and_exit_codes(tree, capsys):

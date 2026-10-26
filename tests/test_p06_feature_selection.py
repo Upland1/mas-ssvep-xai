@@ -69,7 +69,7 @@ def test_ablation_selection_sees_training_rows_only(monkeypatch):
   from tests.p05_synth import SCALP
   blocks = build_feature_blocks(X, y, SCALP)
   blocks.update(n_stimulus=len(y), n_clean=len(blocks["y"]), n_rejected=len(y) - len(blocks["y"]))
-  bfs.run_ablation(blocks, "S03", k=6, sfs_k=2, verbose=False)
+  bfs.run_ablation(blocks, "S03", k=6, sfs_k=2, verbose=False, cv="legacy", smoothing="mod5")
   assert len(seen) == 5 * 3 and set(seen) == {40}   # ANOVA, MI, SFS x 5 folds
 
 
@@ -126,11 +126,14 @@ def tree(tmp_path_factory):
 def ablation_plain(tree):
   """One ablation run (k = 20, SFS 2 FBCSP columns) shared by the script test and the diagnostics test."""
   assert bfs.main(_flags(tree, "S03", "--k-features", "20", "--sfs-features", "2")) == 0
-  return pd.read_csv(tree / "reports" / "feature_selection_ablation_S03.csv")
+  return pd.read_csv(tree / "reports" / "legacy_leaky" / "feature_selection_ablation_S03.csv")
+
+
+LEG = ["--cv", "legacy", "--smoothing", "mod5"]   # P11: these tests pin the P05-P10 legacy protocol (outputs under legacy_leaky/)
 
 
 def _flags(root, subject="S03", *extra):
-  return ["--subject", subject, "--processed-dir", str(root / "processed"), "--reports-dir", str(root / "reports"), *extra]
+  return ["--subject", subject, "--processed-dir", str(root / "processed"), "--reports-dir", str(root / "reports"), *LEG, *extra]
 
 
 def test_ablation_script_rows_and_flagship_equivalence(tree, ablation_plain):
@@ -141,9 +144,9 @@ def test_ablation_script_rows_and_flagship_equivalence(tree, ablation_plain):
   assert df["Method"].tolist() == list(bfs.METHODS)
   assert set(df["Clean Windows"]) == {50} and set(df["Rejected"]) == {0}
   assert ecm.main(_flags(tree, "S03", "--figures-dir", str(tree / "fig"), "--no-figures")) == 0
-  fl = pd.read_csv(tree / "reports" / "flagship_S03.csv").iloc[0]
+  fl = pd.read_csv(tree / "reports" / "legacy_leaky" / "flagship_S03.csv").iloc[0]
   assert df.iloc[0]["1.0s Acc (%)"] == fl["1.0s Acc (%)"] and df.iloc[0]["2.0s Smoothed (%)"] == fl["2.0s Smoothed (%)"]
-  meta = (tree / "reports" / "feature_selection_ablation_S03.meta.txt").read_text()
+  meta = (tree / "reports" / "legacy_leaky" / "feature_selection_ablation_S03.meta.txt").read_text()
   assert "FBCCA channels (7)" in meta and "legacy" in meta
 
 
@@ -155,7 +158,7 @@ def test_cohort_script_schema_and_mean_row(tree, ablation_plain):
   assert df["Subject"].tolist() == ["S03", "S04", "Mean"]
   for c in ("1.0s Acc (%)", "2.0s Smoothed (%)"):
     assert df[c].iloc[2] == pytest.approx(round(df[c].iloc[:2].mean(), 2), abs=1e-9)
-  fl = pd.read_csv(tree / "reports" / "flagship_S03.csv").iloc[0]
+  fl = pd.read_csv(tree / "reports" / "legacy_leaky" / "flagship_S03.csv").iloc[0]
   assert df.iloc[0]["1.0s Acc (%)"] == fl["1.0s Acc (%)"]          # same code path as the flagship
 
 
@@ -189,14 +192,14 @@ def test_sfs_diagnostics_script_leaves_reported_rows_and_audits(tree, ablation_p
   monkeypatch.setattr(bfs, "sfs_variants", lambda k=15: small)
   capsys.readouterr()
   assert bfs.main(_flags(tree, "S03", "--k-features", "20", "--sfs-features", "2", "--sfs-diagnostics")) == 0
-  with_diag = pd.read_csv(tree / "reports" / "feature_selection_ablation_S03.csv")
+  with_diag = pd.read_csv(tree / "reports" / "legacy_leaky" / "feature_selection_ablation_S03.csv")
   assert ablation_plain.equals(with_diag)
-  d = pd.read_csv(tree / "reports" / "feature_selection_sfs_diagnostics_S03.csv")
+  d = pd.read_csv(tree / "reports" / "legacy_leaky" / "feature_selection_sfs_diagnostics_S03.csv")
   assert list(d.columns) == bfs.DIAG_COLUMNS and len(d) == 1 and set(d["Label"]) == {bfs.DIAG_LABEL}
   rep = d[d["Variant"] == "reported"].iloc[0]
   sfs_row = with_diag[with_diag["Method"] == bfs.SFS].iloc[0]
   assert rep["1.0s Acc (%)"] == sfs_row["1.0s Acc (%)"] and rep["p"] == sfs_row["p"] == 7
-  a = pd.read_csv(tree / "reports" / "feature_selection_sfs_audit_S03.csv")
+  a = pd.read_csv(tree / "reports" / "legacy_leaky" / "feature_selection_sfs_audit_S03.csv")
   assert list(a.columns) == bfs.AUDIT_COLUMNS and a["Fold"].tolist() == [1, 2, 3, 4, 5]
   assert a["Train rows"].tolist() == [40] * 5 and a["Test rows"].tolist() == [10] * 5
   assert a["Disjoint indices"].all() and (a["Test rows found in SFS input"] == 0).all()
