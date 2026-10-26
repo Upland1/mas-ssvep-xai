@@ -81,11 +81,11 @@ phases:
     passed: '2026-10-26'
   P10:
     slug: augmentation-ab
-    status: pending
+    status: in_progress
     owner: orchestrator
-    branch: null
+    branch: phase/P10-augmentation-ab
     commit: null
-    opened: null
+    opened: '2026-10-26'
     passed: null
   P11:
     slug: trial-leakage-fix

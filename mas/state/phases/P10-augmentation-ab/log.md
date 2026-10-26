@@ -1,0 +1,9 @@
+# P10 · Run log  (written by: orchestrator)
+
+| Step | Agent | Date | Outcome | Round | Sources cited | Reference consultations (R11) | Notes (cost, loops, what was caught) |
+|------|-------|------|---------|-------|---------------|-------------------------------|--------------------------------------|
+| 0 Preflight | orchestrator | 2026-10-26 | OK; P09 merged (8430cb9, tag p09-done); P09 report privacy line corrected in the working tree (committed with the P10 bookkeeping) | — | — | none | Sebastian: stop after P10 for a push |
+| 1 Open | orchestrator | 2026-10-26 | P10 in_progress | — | — | none | |
+| 2 Assignment | orchestrator | 2026-10-26 | 00_assignment.md READY | — | 03_ROADMAP P10, R-9, PF-28–31 | none | |
+| 3 Brief | orchestrator | 2026-10-26 | skipped | — | — | none | |
+| 4 Plan | orchestrator | 2026-10-26 | 02_plan.md READY (auto) | — | as above | none | est. 25–45 min CPU run |
