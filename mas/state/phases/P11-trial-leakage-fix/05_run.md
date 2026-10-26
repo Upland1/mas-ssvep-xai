@@ -44,3 +44,17 @@ None.
 - Demo 1 printed three "network section: ... skipped (splitter labels: legacy_leaky file leaky, reports file leaky; need leaky and grouped)" lines, as the audit expected (`reports/logs/P11/demo1_20261026_111102.log` lines 22-24). The network table is read from demo 2.
 - Window counts 200/196/197/197/200 clean, 0/3/3/1/0 rejected, 7 channels kept and none dropped for every subject, in `reports/n_subjects_benchmark.csv`; A/B CSVs `Clean Windows` the same.
 - Acceptance outcome (misses of R-9b, see 06_verify.md P4) is not a run anomaly; no command failed.
+
+## Round 2b (seed-spread diagnostic)
+
+Branch / commit: `phase/P11-trial-leakage-fix` @ `0b96524e6afe59fd70f6a3941d61b57bcf660fe6` (clean porcelain in every log header). `git diff --stat aedf8a8 HEAD -- src scripts`: `scripts/diagnostics/network_seed_spread.py` (NEW, 154 insertions) and `src/models/cnn/eegnet_cv.py` (9 lines changed); nothing else. Same machine and Python as above (CPU only).
+
+| # | Command (`.venv/bin/python ...`) | Start (-06:00) | Runtime | Exit | Log (`reports/logs/P11/`) |
+|---|---|---|---|---|---|
+| 0 | `-m pytest tests -o addopts="" -q` (clean worktree, removed afterwards) | 12:42:31 | 549.27 s | 0 (`687 passed, 21 warnings`) | `pytest_2b_20261026_124231.log` |
+| 1 | `-m scripts.diagnostics.network_seed_spread --model eegnet --seed-bases 1042 2042 --epochs 150 --device cpu` | 12:51:43 | 1920 s | 0 | `seed_spread_eegnet_20261026_125143.log` |
+| 2 | `-m scripts.diagnostics.network_seed_spread --model compact_cnn --seed-bases 1042 2042 --epochs 150 --device cpu` | 13:23:43 | 1163 s | 0 | `seed_spread_compact_cnn_20261026_132343.log` |
+
+Each command ran once. Total about 61 min wall, inside `LOCAL_RUN_BUDGET_MIN` 120 (the 50 min estimate was low for EEGNet). Human run requests: none.
+
+Produced: `reports/diagnostics/p11_seed_spread_eegnet.csv`, `reports/diagnostics/p11_seed_spread_compact_cnn.csv` (+ `.meta.txt`). Byte check: `sha256sum -c mas/state/scratch/pre2b.txt` (taken before the run) reports OK for all 28 files: `reports/augmentation_ab_*.csv`, `reports/legacy_leaky/*.csv`, `reports/n_subjects_benchmark.csv`, the legacy arrays. Anomalies: none (no failed command; the run wrote only under `reports/diagnostics/` and `reports/logs/`).
