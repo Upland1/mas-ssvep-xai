@@ -97,12 +97,12 @@ phases:
     passed: '2026-10-26'
   P12:
     slug: coherence
-    status: in_progress
+    status: passed
     owner: orchestrator
     branch: phase/P12-coherence
-    commit: null
+    commit: b496d22
     opened: '2026-10-26'
-    passed: null
+    passed: '2026-10-26'
   P13:
     slug: phase-pdc-permutations
     status: pending
