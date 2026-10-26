@@ -8,3 +8,4 @@
 | 3 Brief | orchestrator | 2026-10-26 | skipped | — | — | none | |
 | 4 Plan | orchestrator | 2026-10-26 | 02_plan.md READY (auto) | — | as above | none | est. 25–45 min CPU run |
 | 5 Build | deep-learning | 2026-10-26 | 03_changes_deep-learning.md READY; 8d872f0…7a82360 (8d872f0 includes the P09 report privacy fix); suite `588 passed, 21 warnings in 214.34s` | 1 | 03_ROADMAP P10, PF-28/29/30 | none | ON single-network CSVs named *_aug_benchmark_*; P08/P09 `--augment on` rejection tests changed to an invalid value; est. ~25 min for the three A/B runs |
+| 6 Test | synthetic-tester | 2026-10-26 | 04_tests.md READY (be94233, e6d512b); +16 tests, 15 mutants fail; suite `604 passed, 21 warnings in 212.06s` | 1 | 03_ROADMAP P10, PF-28/29/30 | none | |
