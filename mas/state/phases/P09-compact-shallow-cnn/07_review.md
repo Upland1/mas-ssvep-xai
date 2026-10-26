@@ -77,27 +77,66 @@ None.
 
 ## Results review
 
-Verdict: APPROVE / REJECT
+Read: `05_run.md`, `06_verify.md` (7ced253, PASS), `reports/network_parameter_counts.csv`, `reports/{compact_cnn,shallow_convnet}_benchmark_cpu.{csv,meta.txt}`, `reports/logs/P09/` (count, run-1 benchmark logs, pytest log tail). Runs were made at `edd476e`; `git diff --stat 15aaa5d edd476e -- src scripts tests configs` is empty, so the audited code is the code that ran. `cmp` of the run-1 CSV copies against the final CSVs: identical (run 2 = run 1 for both networks; the verifier also checked meta and fold lines).
+
+### Acceptance (verbatim: "parameter counts equal R-8 exactly; benchmarks run")
+
+Met. `count_parameters_run1_20261026T003236.log`: `eegnet 2,349 … OK`, `shallow_convnet 14,485 … OK`, `compact_cnn 56,021 … OK`, `exit=0`; benchmark CSV `Params` 56021 and 14485. Both benchmarks `exit=0` in both runs. Pytest on the clean checkout `573 passed, 21 warnings in 219.21s` (`reports/logs/P09/pytest_20261026T002847.log`, saved per decisions.md P09+).
+
+### Pre-committed checks 1–7
+
+| # | Check | Obtained (source) | Result |
+|---|---|---|---|
+| 1 | Counts exit 0, 2349/14485/56021; CSV Params | as above | met |
+| 2 | Gate S03 200/197/3, 7 kept, none dropped | both run-1 logs: `S03: 200 stimulus, 197 clean, 3 rejected; channels kept 7 [PO3, POz, PO4, PO8, O1, Oz, O2]; dropped [none]` | met (= R-3, = P08) |
+| 3 | Percentages = k/197 | `python3 -c` → 107 → 54.31, 124 → 62.94, 171 → 86.8, 183 → 92.89; per-fold k (fold sizes 40/40/39/39/39): compact 22, 21, 19, 22, 23 (sum 107), shallow 34, 35, 35, 31, 36 (sum 171) | met |
+| 4 | PF-30 train next to test, per fold | train 100.00 % in all 10 folds; test compact 48.72–58.97 %, shallow 79.49–92.31 % (logs) | met; reading below |
+| 5 | Diagnostic comparisons only | table below | met |
+| 6 | Noise rule | binomial SE (`python3 -c`, sqrt(p(1−p)/197)): compact 3.55 / 3.44 pp, shallow 2.41 / 1.83 pp; per-fold test SD compact 3.91 pp, shallow 4.90 pp | applied below |
+| 7 | Labels | both `.meta.txt`: leaky CV (R1/PF-01), i%5 smoothing (R8/PF-02), per-script gate, data source line, `n_channels (after the gate): S03=7`; compact: `fs 250 Hz legacy label (sets the temporal kernel K = 29, PF-04 legacy)`, file name `compact_cnn` (PF-31) | met |
 
 ### Deviations from references
 
 | Ref | Expected | Obtained (log) | Δ | Within tolerance? | Explanation | Accepted? |
 |---|---|---|---|---|---|---|
-| | | | | | | |
+| R-8 EEGNet / ShallowConvNet / Compact-CNN | 2,349 / 14,485 / 56,021 | 2,349 / 14,485 / 56,021 (`count_parameters_run1_…log`) | 0 | exact | — | n/a (no deviation) |
+| R-3 S03 clean / rejected | 197 / 3 | 197 / 3, 7 channels (both logs) | 0 | exact | — | n/a |
+
+No accuracy target exists for P09 (acceptance has none); the accuracies below are diagnostics, not deviations.
+
+### Diagnostic comparisons (S03, CPU, windows of 197, 1.0 s / 2.0 s; `python3 -c` differences shown in the review session)
+
+| Comparison | Reference | compact_cnn 107 / 124 | shallow_convnet 171 / 183 | Reading (pre-committed rule) |
+|---|---|---|---|---|
+| Leaky flagship (same leak, gate, folds) | 178 / 188 | −71 / −64 | −7 / −5 | both leaky; not a model ranking (PF-01); never R-6 |
+| EEGNet P08 CPU (same driver, device) | 149 / 169 | −42 / −45 | +22 / +14 | same protocol; see noise reading |
+| R-9b OFF, leak-free, no augmentation | compact 84 / 92; shallow 169 / 180 | +23 / +32 | +2 / +3 | leaky above leak-free: inconclusive (inflation not separable from model/seed/device/implementation in one subject); no "unexpected under PF-01" case occurs |
+| R-7, leak-free, augmentation ON (1.0 s only) | compact 124; shallow 176 | −17 | −5 | different condition (augmentation ON, P10/P11); quoted only as later numbers. The compact 2.0 s value 124 equals R-7 compact 1.0 s 124 by coincidence — different quantities, not a reproduction |
 
 ### Interpretation check
 
-<!-- Per-subject reading; inconclusive results stated as such; leakage in
-fitted objects, normalization, validation sets; statistics unit and
-multiple comparisons. -->
+- **PF-30.** Train 100.00 % in every fold for both networks (eval mode, un-augmented training fold) with test 48.72–58.97 % (compact) and 79.49–92.31 % (shallow): a generalization gap, not an optimization failure. Compact-CNN fits 56,021 parameters on ~157 training windows per fold (`python3 -c "print(56021/157.4)"` → ≈356 per window; ShallowConvNet ≈92). 40,965 of its 56,021 parameters (73.1 %, `python3 -c`) sit in the Linear head on the unpooled 32 × 256 = 8,192 features (no pooling in the roadmap architecture), against 2,205 (15.2 %) in ShallowConvNet's head. Over-parameterisation of the head is a plausible reading of the larger gap; it is **not tested** here (no ablation), and S01/S02-type near-chance generalization (R-9 text) is not assessable on S03.
+- **Noise and ranking.** ShallowConvNet − Compact-CNN = 64 windows at 1.0 s (171 vs 107), with non-overlapping per-fold ranges (79.49–92.31 vs 48.72–58.97 %); ShallowConvNet − EEGNet P08 CPU = 22 windows; Compact-CNN − EEGNet = −42. Each is well beyond the pre-committed few-window band (~9/197, the P08 device gap) and ~2–3 binomial SE. The allowed statement is: **on S03, under the legacy leaky protocol on CPU, ShallowConvNet scored above EEGNet, which scored above Compact-CNN.** It is one subject, one device, one seed set and leaky CV; no cohort ranking and no "best network" claim. The same ordering on S03 appears in the original's later leak-free R-9b OFF (169 > 145 > 84), quoted only as consistent, not as validation. ShallowConvNet vs R-9b OFF (+2 / +3) is within noise.
+- **Leak (PF-01).** Compact-CNN is 23 / 32 windows above its leak-free R-9b OFF value. That is in the direction PF-01 predicts, but with K = 29 (fs 250 label), a different implementation and device, it cannot be attributed to the window-level leak from one subject: inconclusive. P11 measures the leak with grouped CV. Not "the leak inflates Compact-CNN by 12–16 pp".
+- **Smoothing.** The 2.0 s gains (+17 compact, +12 shallow windows) are legacy i%5 smoothing on the clean array (R8/PF-02), not a clean 2 s decision; no claim about 2 s windows.
+- **No other leak path.** Fixed 150 epochs, no early stopping, no validation split, per-window z-score, seeds 42+fold (meta lines; code audited pre-run). Test folds were used only for prediction.
+- **R9.** Only S03 was prescribed; the data source (legacy windows, `data/processed/S03/`, P02 OO session) and device are stated in every meta file; the report must state both and that 1.0 s and 2.0 s are given for S03 only.
+
+### Legacy caveats the report must carry
+
+R1/PF-01 window-level StratifiedKFold (leaky); R8/PF-02 i%5 smoothing; R5 per-script P07 gate; PF-04 fs-250 label setting Compact-CNN's K = 29 (56,021; K = 30 and 56,693 at the true 256 Hz); PF-31 `compact_cnn` ≠ the P20 `compact_eegnet`; CPU only (CUDA numbers would differ, P08); not comparable with R-6.
 
 ### Decisions for decisions.md
 
-<!-- Accepted deviations, one line each; the orchestrator copies them. -->
+- P09 | R-8 met exactly (2,349 / 14,485 / 56,021, `count_parameters` exit 0); S03 gate 197/3 (= R-3); benchmarks deterministic on CPU (run 1 = run 2). | results review | `reports/logs/P09/`
+- P09 | Diagnostic only (S03, CPU, leaky): compact_cnn 107/124, shallow_convnet 171/183 of 197; ordering ShallowConvNet > EEGNet (P08 CPU 149/169) > Compact-CNN is beyond the few-window noise band on S03 but is not a cohort ranking. vs leak-free R-9b OFF: shallow +2/+3 (noise), compact +23/+32 (inconclusive; PF-01 attribution not supported from one subject). The compact 2.0 s value equal to R-7's 124 is a coincidence. | results review | same
+- P09 | PF-30: train 100 % in all folds for both networks — generalization gap; Compact-CNN's head holds 73 % of its parameters (8,192 unpooled features); over-parameterisation is a hypothesis, not tested. | results review | same
+- P09 | Carry-forward (non-blocking, pre-run N1–N3): z-score spy in the mirror test if a script leaves the shared driver; gate-equality test could compare X values; `count_parameters` writes its CSV before the R-8 check. | pre-run notes | `07_review.md`
 
 ## Sources spot-check
 
-<!-- Fix rounds: append "## Pre-run audit — Round N". After two failed rounds,
-set Status: BLOCKED. -->
+Opened in this review: `mas/04_REFERENCE_RESULTS.md` R-7, R-8, R-9b (S03 rows used above), `mas/05_PITFALLS.md` PF-28/30/31, `mas/state/reports/P08.md` §4 (EEGNet CPU 149/169, device gap 9), decisions.md P08 row (leaky flagship 178/188). Numbers in 06_verify.md (table, per-fold lines, differences −71/−64, −7/−5, −42/−45, +22/+14, +2/+3, R-9b compact 107/124 vs 84/92) re-derived from the logs and match.
+
+Verdict: APPROVE
 
 ## Questions
