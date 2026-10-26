@@ -73,3 +73,24 @@ Output (full suite, CPU, synthetic data only): `787 passed, 21 warnings in 368.2
 ## Questions
 
 None.
+
+## Round 1
+
+Status: READY. Scope: audit fix in b8e5ccc, 643f0f9, 628759d. Four tests appended to `tests/test_p13_known_answer.py` (41 tests in the file now, `41 passed in 3.38s`).
+
+| Test | Simulates | Expected | Catches |
+|---|---|---|---|
+| `test_compare_writes_distinct_files_in_both_orders_with_hand_flips` | three hand-made summaries (trial100, final, window200), 3 cells each | (trial100, "") writes `connectivity_cohort_flips.csv` with S01 only, printed "3 cells compared, 1 flip"; (window200, "") writes `..._flips_window200_vs_final.csv` with 3 hand-predicted flips and does not overwrite the required file; ("", trial100) writes `..._flips_final_vs_trial100.csv` with S01 and p values swapped; ("", window200) writes its own file | R1 |
+| `test_compare_raises_on_missing_row_in_either_direction` | summary lacking one row | `ValueError` from `compare_runs` in both argument orders and from `main` | R2 |
+| `test_lower_and_upper_tail_p_against_hand_counts_with_ties` | controlled 10-value null with ties (-0.5 ... 1.5), observed 0.3, 2.0, -2.0 | p_one 6/11, p_lower 9/11, p_two 7/11 (hand counts); 1 - p_one is not the lower tail; extremes 1/11 and 1.0 | R3 |
+| `test_alpha_diagnostic_carries_p_lower_tailed` | synthetic tree, plv, 7 permutations | `p_lower_tailed` column in the alpha CSV, within [1/8, 1] | missing column |
+
+Mutants (applied then `git checkout`; `git status` shows only the test file modified):
+
+| Mutant | Result |
+|---|---|
+| R1 every pair writes the same file (`flips_path` always the required name) | KILLED |
+| R2 inner merge with the row-set check disabled | KILLED |
+| R3 lower tail computed as `1 - p_one` | KILLED |
+
+Full suite: `796 passed, 21 warnings in 361.15s (0:06:01)`.
