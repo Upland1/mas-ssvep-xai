@@ -173,11 +173,11 @@ def test_marker_augmentation_reaches_training_batches_only(monkeypatch):
 
   monkeypatch.setattr(eegnet_cv, "DataLoader", dl)
   monkeypatch.setattr(eegnet_cv, "predict_proba", pred)
-  train_and_eval_cv(X, y, epochs=1, device="cpu", augment=False)
+  train_and_eval_cv(X, y, epochs=1, device="cpu", augment=False, cv="legacy")
   assert max(seen["batch_max"]) < 50 and len(seen["eval_max"]) == 10
   seen["batch_max"].clear(), seen["eval_max"].clear()
   monkeypatch.setattr(eegnet_cv, "SSVEPAugmentedDataset", _Marker)
-  train_and_eval_cv(X, y, epochs=1, device="cpu", augment=True)
+  train_and_eval_cv(X, y, epochs=1, device="cpu", augment=True, cv="legacy")
   assert min(seen["batch_max"]) > 900 and len(seen["batch_max"]) >= 5
   assert len(seen["eval_max"]) == 10 and max(seen["eval_max"]) < 50
 
@@ -196,7 +196,7 @@ def test_augment_seed_is_42_plus_fold_and_train_model_seeds_torch_first(monkeypa
     seeds.append(k.get("seed", a[4] if len(a) > 4 else None))
 
   monkeypatch.setattr(SSVEPAugmentedDataset, "__init__", init)
-  train_and_eval_cv(X, y, epochs=1, device="cpu", augment=True)
+  train_and_eval_cv(X, y, epochs=1, device="cpu", augment=True, cv="legacy")
   assert seeds == [42, 43, 44, 45, 46]
   assert all(torch.equal(states[2 * i], states[2 * i + 1]) for i in range(5))
 
@@ -209,14 +209,14 @@ def _tree(tmp_path, subjects):
   cfg = tmp_path / "cfg.yaml"
   cfg.write_text("paths:\n  data_processed_dir: data/processed\n")
   return ["--epochs", "1", "--device", "cpu", "--data-root", str(tmp_path / "proc"),
-          "--reports-dir", str(tmp_path / "rep"), "--config", str(cfg)]
+          "--reports-dir", str(tmp_path / "rep"), "--config", str(cfg), "--cv", "legacy", "--smoothing", "mod5"]
 
 
 def _stub(monkeypatch, table):
   """table[(call_index)] -> (acc, smoothed, train); calls are S01 OFF, S01 ON, S02 OFF, S02 ON, ..."""
   calls = []
 
-  def fake(X, y, build, epochs, bs, lr, dev, seed, verbose=False, augment=False):
+  def fake(X, y, build, epochs, bs, lr, dev, seed, verbose=False, augment=False, groups=None, cv="grouped", smoothing="mod5"):
     i = len(calls)
     calls.append({"augment": augment, "seed": seed, "X": X, "y": y, "epochs": epochs})
     a, s, t = table[i]
@@ -240,7 +240,7 @@ def test_ab_script_values_deltas_arm_order_columns_and_freeze(tmp_path, monkeypa
   assert [c["augment"] for c in calls] == [False, True, False, True]
   assert all(np.array_equal(calls[2 * i]["X"], calls[2 * i + 1]["X"]) and calls[2 * i]["seed"] == calls[2 * i + 1]["seed"]
              for i in range(2))
-  csv = tmp_path / "rep" / "augmentation_ab_eegnet.csv"
+  csv = tmp_path / "rep" / "legacy_leaky" / "augmentation_ab_eegnet.csv"
   df = pd.read_csv(csv)
   s1 = df.iloc[0]
   assert (s1["1.0s OFF (%)"], s1["1.0s ON (%)"], s1["1.0s Delta"]) == (50.0, 40.0, -10.0)
@@ -252,7 +252,7 @@ def test_ab_script_values_deltas_arm_order_columns_and_freeze(tmp_path, monkeypa
   assert df.iloc[2]["Train Acc OFF (%)"] == pytest.approx(62.5)
   assert list(df.columns) == ["Subject", "Clean Windows", "1.0s OFF (%)", "1.0s ON (%)", "1.0s Delta", "2.0s OFF (%)",
                               "2.0s ON (%)", "2.0s Delta", "Train Acc OFF (%)", "Train Acc ON (%)"]
-  frozen = tmp_path / "rep" / "legacy_leaky" / csv.name
+  frozen = csv  # P11: legacy outputs are written under legacy_leaky/ directly
   assert frozen.read_bytes() == csv.read_bytes()
   assert frozen.with_suffix(".meta.txt").read_bytes() == csv.with_suffix(".meta.txt").read_bytes()
   assert "WARNING S02" in out and "WARNING S01" not in out
@@ -262,8 +262,8 @@ def test_ab_script_no_freeze_without_flag_and_alias_name(tmp_path, monkeypatch):
   argv = _tree(tmp_path, ("S01",))
   _stub(monkeypatch, TABLE)
   assert ab.main(["--model", "shallow_convnet", *argv]) == 0
-  assert (tmp_path / "rep" / "augmentation_ab_shallow_conv_net.csv").is_file()
-  assert not (tmp_path / "rep" / "legacy_leaky").exists()
+  assert (tmp_path / "rep" / "legacy_leaky" / "augmentation_ab_shallow_conv_net.csv").is_file()
+  assert not (tmp_path / "rep" / "augmentation_ab_shallow_conv_net.csv").exists()
 
 
 @pytest.mark.parametrize("off_train,warns", [(0.3999, True), (0.40, False), (0.0, True), (0.41, False)])

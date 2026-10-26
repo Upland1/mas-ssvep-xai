@@ -4,11 +4,13 @@
 subject) appears on both sides. Every splitter of the repository is registered below with its
 era status:
 
-- `legacy`: window-level `StratifiedKFold` (P04-P10, R1 enforced from P11). The test documents the
-  leak (trials DO straddle train/test) so the legacy number is never mistaken for a clean one; when
-  P11 replaces a splitter, move its entry to `LEAK_FREE` and the same helper must pass.
-- `LEAK_FREE`: `StratifiedGroupKFold(5, shuffle, 42)` over trial ids (the R1 target), whose first
-  entry also proves the helper detects a leak (a mutated split fails it).
+- `legacy`: window-level `StratifiedKFold` (P04-P10; from P11 reachable only with `--cv legacy`). The test
+  documents the leak (trials DO straddle train/test) so the legacy number is never mistaken for a clean one.
+- `LEAK_FREE`: `StratifiedGroupKFold(5, shuffle, 42)` over trial ids (the R1 target; P11: `cv_utils`
+  `grouped_cv` / `make_splits("grouped")` / `legacy_eval.splits_for("grouped")` and the grouped SFS inner CV
+  of `benchmark_feature_selection`), whose first entry also proves the helper detects a leak (a mutated
+  split fails it). `tests/test_p11_cv.py` runs the five classical scripts' own split code on a synthetic
+  tree and applies the same check.
 
 `test_every_splitter_in_the_repo_is_registered` scans src/ and scripts/ for sklearn splitter
 imports: adding an unregistered splitter fails until it is listed with its status here.
@@ -22,7 +24,9 @@ import pytest
 from sklearn.model_selection import StratifiedGroupKFold
 
 from scripts.training import train_models as tm
+from scripts.benchmarks.feature_based import benchmark_feature_selection as bfs
 from src.models.classical import legacy_eval as le
+from src.preprocessing.dataset import cv_utils
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -53,14 +57,21 @@ def assert_no_shared_groups(splits, groups) -> None:
 LEGACY = {
   "scripts.training.train_models.legacy_cv": lambda y, g: list(tm.legacy_cv().split(np.zeros(len(y)), y)),
   "src.models.classical.legacy_eval.legacy_cv": lambda y, g: list(le.legacy_cv().split(np.zeros(len(y)), y)),
+  "src.models.classical.legacy_eval.splits_for('legacy')": lambda y, g: le.splits_for("legacy", y, g),
+  "src.preprocessing.dataset.cv_utils.make_splits('legacy')": lambda y, g: cv_utils.make_splits("legacy", y, g),
 }
 LEAK_FREE = {
   "StratifiedGroupKFold(5, shuffle, 42) over trial ids (R1 target)":
     lambda y, g: list(StratifiedGroupKFold(5, shuffle=True, random_state=42).split(np.zeros(len(y)), y, g)),
+  "src.preprocessing.dataset.cv_utils.grouped_cv": lambda y, g: list(cv_utils.grouped_cv().split(np.zeros(len(y)), y, g)),
+  "src.preprocessing.dataset.cv_utils.make_splits('grouped')": lambda y, g: cv_utils.make_splits("grouped", y, g),
+  "src.models.classical.legacy_eval.splits_for('grouped')": lambda y, g: le.splits_for("grouped", y, g),
+  "benchmark_feature_selection.inner_sfs_splits (SFS inner CV, PF-01)": lambda y, g: bfs.inner_sfs_splits(y, g),
 }
 # Files that import an sklearn splitter, with their era status (update when a phase changes it).
 KNOWN_SPLITTER_FILES = {
-  "scripts/benchmarks/feature_based/benchmark_feature_selection.py": "legacy",   # P06 DIAGNOSTIC inner SFS CV, training rows only
+  "scripts/benchmarks/feature_based/benchmark_feature_selection.py": "legacy",   # DIAGNOSTIC SFS variants only (P06); reported SFS inner CV is grouped (P11)
+  "src/preprocessing/dataset/cv_utils.py": "leak-free",
   "scripts/training/train_models.py": "legacy",
   "src/models/cnn/spatial_spectral_cnn.py": "legacy",
   "src/models/classical/legacy_eval.py": "legacy",

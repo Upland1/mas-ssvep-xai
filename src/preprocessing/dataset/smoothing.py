@@ -36,3 +36,20 @@ def smooth_probabilities_mod5(proba: np.ndarray, block: int = 5) -> np.ndarray:
     if j % block != 0:
       out[j] = (p[j - 1] + p[j]) / 2.0
   return out
+
+
+def smooth_probabilities_by_trial(proba: np.ndarray, trial_ids: np.ndarray) -> np.ndarray:
+  """R8 (P11): 2-tap causal smoothing that only averages a window with the previous row of the SAME trial.
+
+  Row `j` is `(p_{j-1} + p_j) / 2` when `trial_ids[j] == trial_ids[j-1]`, else unchanged (first window
+  of a trial). Rows must be in (trial, offset) order, e.g. the clean array of a legacy folder indexed
+  with `ids[valid_mask]` (PF-03); the result never mixes two ids, whatever was rejected before.
+  """
+  p = np.asarray(proba, dtype=float)
+  ids = np.asarray(trial_ids)
+  if len(ids) != len(p):
+    raise ValueError(f"trial_ids ({len(ids)}) and proba ({len(p)}) differ in length")
+  out = p.copy()
+  same = ids[1:] == ids[:-1]
+  out[1:][same] = (p[:-1][same] + p[1:][same]) / 2.0
+  return out

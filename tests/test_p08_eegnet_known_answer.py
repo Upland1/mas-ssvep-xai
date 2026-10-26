@@ -119,7 +119,7 @@ def _spy_cv(monkeypatch, X, y, **kw):
 
   monkeypatch.setattr(eegnet_cv, "train_model", train)
   monkeypatch.setattr(eegnet_cv, "predict_proba", pred)
-  res = train_and_eval_eegnet_cv(X, y, epochs=1, device="cpu", **kw)
+  res = train_and_eval_eegnet_cv(X, y, epochs=1, device="cpu", **kw, cv="legacy")
   return res, calls
 
 

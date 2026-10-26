@@ -201,7 +201,7 @@ Result and scope
 
 ## P10 — Data augmentation and the A/B protocol
 
-2026-10-26, branch `phase/P10-augmentation-ab`. Code, tests and runs at `5f2d5eb`; results review at `2080b68`. Phase report: `mas/state/reports/P10.md` (to be filed by the orchestrator from the scribe's hand-back).
+2026-10-26, branch `phase/P10-augmentation-ab`. Code, tests and runs at `5f2d5eb`; results review at `2080b68`. Phase report: `mas/state/reports/P10.md` (on main with the P10 merge, `829602c`).
 
 Added
 - `src/preprocessing/dataset/augmentation.py`: noise, scale, shift and same-class mixup; `SSVEPAugmentedDataset` (training fold only, order mixup, scale, shift, noise; p = 0.5 each).
@@ -217,3 +217,25 @@ Result and scope (legacy leaky CV, CPU, `reports/augmentation_ab_<model>.csv`; n
 - EEGNet S03 OFF 75.63 / 85.79 % equals P08 (regression check). S01 and S02 OFF test 28.00 / 27.04 % with train 83.25 / 81.38 % (PF-30 generalization failure reproduced).
 - Compact-CNN Δ +14.12 / +11.39 pp and ShallowConvNet Δ +2.01 / +2.72 pp, diagnostics only.
 - Frozen CSVs byte-identical to the main outputs. Next phase: P11.
+
+## P11 — Discover and fix trial leakage
+
+2026-10-26, branch `phase/P11-trial-leakage-fix`. Code and runs at `aedf8a8`; Round 2b diagnostic at `0b96524`; results review at `50d9d01`. Phase report: `mas/state/reports/P11.md`.
+
+Added
+- `src/preprocessing/dataset/cv_utils.py`: `build_trial_ids` (pre-gate labels, then the valid mask), `make_splits` (`grouped` / `legacy`), `assert_no_shared_trials`.
+- `scripts/diagnostics/demo_cv_leakage.py` (before/after table, classical and network) and `scripts/diagnostics/network_seed_spread.py` (DIAGNOSTIC; outputs only under `reports/diagnostics/`).
+- `tests/test_p11_cv.py`, `tests/test_p11_known_answer.py`, `tests/test_p11_networks.py`, `tests/test_p11_seed_spread.py`; suite `678 passed` (`reports/logs/P11/pytest_20261026_110219.log`) and `687 passed` at `0b96524` (`reports/logs/P11/pytest_2b_20261026_124231.log`).
+
+Changed
+- All nine benchmark scripts: `--cv {grouped,legacy}` (default grouped) and `--smoothing {trial,mod5}` (default mod5 on legacy folders); `--cv legacy` writes under `reports/legacy_leaky/` and reproduces R-5, R-4 and R-3.
+- `src/models/classical/legacy_eval.py`, `benchmark_runner.py`, `smoothing.py`, `src/models/cnn/eegnet_cv.py` (the seed-spread argument `model_seed` defaults to the reported path); the saga LogReg models are seeded.
+- Legacy-pinned tests (P05–P10) now name their protocol explicitly.
+
+Result (legacy folders, 7 channels, CPU, seed 42; not comparable with later phases)
+- Flagship R-6 reproduced exactly: 79.28 % (1.0 s) and 82.61 % (2.0 s, legacy `i % 5`; `reports/n_subjects_benchmark.csv`). Trial-reset 2.0 s diagnostic 81.39 % (`reports/cv_leakage_demo.csv`).
+- Classical leak −4.06 pp (1.0 s) and −4.96 pp (2.0 s) on the mean; S02 −10.21 pp (approximate ids, residual leak possible until P16).
+- Networks, seed 42 versus the frozen P10 run (`reports/cv_leakage_demo_networks.csv`): EEGNet OFF −5.57 pp, Compact-CNN OFF −5.56 pp, ShallowConvNet OFF −3.04 pp at 1.0 s. The EEGNet S03 training-seed range (16.75 pp, DIAGNOSTIC) is of the same order as its seed-42 drop (−20.81 pp).
+- Augmentation A/B vs R-9b: 13 of 14 out-of-band cells explained by training-seed variance (D-4). Compact-CNN S03 2.0 s ON not reproduced within tolerance (129 / 127 / 129 of 197 windows; smallest in-band count 131), accepted as a documented deviation by Sebastian (D-8, B006).
+- Reference consultation: one, under R11 (deep-learning, Round 2; no code copied; RNG stream not adopted).
+- Frozen P10 CSVs (`reports/legacy_leaky/`) are the "before" side. Next phase: P12, after the orchestrator's gate.

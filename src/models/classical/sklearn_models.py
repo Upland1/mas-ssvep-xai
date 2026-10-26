@@ -19,15 +19,15 @@ MODEL_NAMES = ("Ridge", "LogReg L2", "LogReg L1", "LogReg ElasticNet", "SGD log-
 
 
 def get_sklearn_model_suite(seed: int = 42) -> dict:
-  """Name -> unfitted estimator, in `MODEL_NAMES` order (`seed` for the SGD models)."""
+  """Name -> unfitted estimator, in `MODEL_NAMES` order (`seed` for the SGD and saga models; P11: saga was unseeded, hence not reproducible)."""
   return {
     "Ridge": RidgeClassifier(alpha=1.0, class_weight="balanced"),
     "LogReg L2": LogisticRegression(l1_ratio=0.0, solver="lbfgs", C=1.0, max_iter=1000,
                                     class_weight="balanced"),
-    "LogReg L1": LogisticRegression(l1_ratio=1.0, solver="saga", C=1.0, max_iter=3000, tol=1e-3,
+    "LogReg L1": LogisticRegression(l1_ratio=1.0, solver="saga", C=1.0, max_iter=3000, tol=1e-3, random_state=seed,
                                     class_weight="balanced"),
     "LogReg ElasticNet": LogisticRegression(l1_ratio=0.5, solver="saga", C=1.0, max_iter=3000,
-                                            tol=1e-3, class_weight="balanced"),
+                                            tol=1e-3, class_weight="balanced", random_state=seed),
     "SGD log-loss": SGDClassifier(loss="log_loss", penalty="elasticnet", l1_ratio=0.5, alpha=1e-3,
                                   max_iter=2000, class_weight="balanced", random_state=seed),
     "SGD PA": SGDClassifier(loss="hinge", penalty=None, learning_rate="pa1", eta0=1.0,

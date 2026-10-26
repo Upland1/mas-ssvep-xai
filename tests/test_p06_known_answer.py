@@ -19,6 +19,9 @@ from src.models.classical.feature_spaces import build_feature_blocks
 from tests.p05_synth import SCALP, make_windows, write_subject
 
 
+LEGACY = {"cv": "legacy", "smoothing": "mod5"}   # P11: the P06 tests pin the legacy protocol
+
+
 def _blocks(snr=1.0, seed=5, n_trials=2):
   X, y = make_windows(n_trials=n_trials, snr=snr, seed=seed)
   b = build_feature_blocks(X, y, SCALP)
@@ -129,18 +132,13 @@ def test_ablation_rejects_selection_on_all_windows(monkeypatch):
   monkeypatch.setattr(bfs, "select_k_best_fbcsp_features", lambda X, y, *a, **k: (seen.append(len(X)), orig_k(X, y, *a, **k))[1])
   # SFS stubbed (slow; its own tests are test_sfs_*): only the rows it is given matter here
   monkeypatch.setattr(bfs, "select_sfs_fbcsp_features", lambda X, y, n, *a, **k: (seen.append(len(X)), np.arange(n))[1])
-  bfs.run_ablation(b, "S03", k=6, sfs_k=2, verbose=False)
+  bfs.run_ablation(b, "S03", k=6, sfs_k=2, verbose=False, **LEGACY)
   assert seen == [n_tr] * 15
   # mutant
-  real_cv = bfs.legacy_cv
-
-  class AllRows:
-    def split(self, X, y):
-      for tr, te in real_cv(42).split(X, y):
-        yield np.arange(len(y)), te
+  real_splits = bfs.splits_for
   seen.clear()
-  monkeypatch.setattr(bfs, "legacy_cv", lambda seed: AllRows())
-  bfs.run_ablation(b, "S03", k=6, sfs_k=2, verbose=False, include_sfs=False)
+  monkeypatch.setattr(bfs, "splits_for", lambda cv, y, ids, seed=42: [(np.arange(len(y)), te) for _, te in real_splits(cv, y, ids, seed)])
+  bfs.run_ablation(b, "S03", k=6, sfs_k=2, verbose=False, include_sfs=False, **LEGACY)
   assert seen != [n_tr] * 10 and set(seen) == {n}
 
 
@@ -186,16 +184,16 @@ def test_p_values_55_45_25_25_20_and_tail_mutant(monkeypatch):
   b = _blocks()
   real = bfs.column_sets
   monkeypatch.setattr(bfs, "select_sfs_fbcsp_features", lambda X, y, n, **k: np.arange(n))
-  rows = bfs.run_ablation(b, "S03", k=20, sfs_k=15, verbose=False)
+  rows = bfs.run_ablation(b, "S03", k=20, sfs_k=15, verbose=False, **LEGACY)
   assert [r["p"] for r in rows] == [55, 45, 25, 25, 20] and [r["Method"] for r in rows] == list(bfs.METHODS)
-  assert [r["p"] for r in bfs.run_ablation(b, "S03", k=4, sfs_k=2, verbose=False)] == [55, 45, 9, 9, 7]
+  assert [r["p"] for r in bfs.run_ablation(b, "S03", k=4, sfs_k=2, verbose=False, **LEGACY)] == [55, 45, 9, 9, 7]
 
   def no_tail(*a, **k):
     s = real(*a, **k)
     s[bfs.ANOVA] = s[bfs.ANOVA][:-5]
     return s
   monkeypatch.setattr(bfs, "column_sets", no_tail)
-  rows = bfs.run_ablation(b, "S03", k=20, sfs_k=2, verbose=False, include_sfs=False)
+  rows = bfs.run_ablation(b, "S03", k=20, sfs_k=2, verbose=False, include_sfs=False, **LEGACY)
   assert [r["p"] for r in rows] != [55, 45, 25, 25]
 
 
@@ -206,14 +204,15 @@ def test_full_row_equals_flagship_on_hard_tree_and_smoothing_is_mod5(tmp_path, m
   reported 2.0 s value equals an independent i % 5 smoothing of the captured out-of-fold scores (row i averaged with
   row i-1 unless i % 5 == 0). Mutant: smoothing without trial reset gives a different accuracy on these scores."""
   write_subject(tmp_path / "processed", "S03", n_trials=6, snr=0.12, seed=21)
-  flags = ["--subject", "S03", "--processed-dir", str(tmp_path / "processed"), "--reports-dir", str(tmp_path / "reports")]
+  flags = ["--subject", "S03", "--processed-dir", str(tmp_path / "processed"), "--reports-dir", str(tmp_path / "reports"),
+           "--cv", "legacy", "--smoothing", "mod5"]
   captured = []
   real = bfs.accuracies
-  monkeypatch.setattr(bfs, "accuracies", lambda y, p, s: (captured.append((y, p, s)), real(y, p, s))[1])
+  monkeypatch.setattr(bfs, "accuracies", lambda y, p, s, *a: (captured.append((y, p, s)), real(y, p, s, *a))[1])
   assert bfs.main(flags + ["--k-features", "20", "--skip-sfs"]) == 0
   assert ecm.main(flags + ["--figures-dir", str(tmp_path / "fig"), "--no-figures"]) == 0
-  df = pd.read_csv(tmp_path / "reports" / "feature_selection_ablation_S03.csv")
-  fl = pd.read_csv(tmp_path / "reports" / "flagship_S03.csv").iloc[0]
+  df = pd.read_csv(tmp_path / "reports" / "legacy_leaky" / "feature_selection_ablation_S03.csv")
+  fl = pd.read_csv(tmp_path / "reports" / "legacy_leaky" / "flagship_S03.csv").iloc[0]
   assert df.iloc[0]["1.0s Acc (%)"] < 95
   assert df.iloc[0]["1.0s Acc (%)"] == fl["1.0s Acc (%)"] and df.iloc[0]["2.0s Smoothed (%)"] == fl["2.0s Smoothed (%)"]
   y, p, s = captured[0]

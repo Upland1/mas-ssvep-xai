@@ -86,9 +86,9 @@ def _data(n_trials=4, seed=0):
 
 def test_cv_deterministic_seed_sensitive_and_protocol():
   X, y = _data()
-  a = train_and_eval_eegnet_cv(X, y, epochs=2, device="cpu")
-  b = train_and_eval_eegnet_cv(X, y, epochs=2, device="cpu")
-  c = train_and_eval_eegnet_cv(X, y, epochs=2, device="cpu", seed=7)
+  a = train_and_eval_eegnet_cv(X, y, epochs=2, device="cpu", cv="legacy")
+  b = train_and_eval_eegnet_cv(X, y, epochs=2, device="cpu", cv="legacy")
+  c = train_and_eval_eegnet_cv(X, y, epochs=2, device="cpu", seed=7, cv="legacy")
   assert np.array_equal(a["proba"], b["proba"]) and not np.allclose(a["proba"], c["proba"])
   assert len(a["fold_test_acc"]) == 5 and 0 <= a["train_accuracy"] <= 1 and a["n_params"] == 2349
   assert a["classes"] == [101, 102, 103, 104, 105]
@@ -107,17 +107,17 @@ def test_fold_models_seeded_by_fold():
 
 def test_learnable_planted_sinusoids():
   X, y = _data(n_trials=8)
-  r = train_and_eval_eegnet_cv(X, y, epochs=25, device="cpu", lr=3e-3)
+  r = train_and_eval_eegnet_cv(X, y, epochs=25, device="cpu", lr=3e-3, cv="legacy")
   assert r["accuracy"] > 0.6, r["accuracy"]
 
 
 def test_script_smoke_and_augment_choices(tmp_path):
   write_subject(tmp_path / "proc", "S03", n_trials=3)
-  rep = tmp_path / "rep"
+  rep = tmp_path / "rep" / "legacy_leaky"  # --cv legacy writes under legacy_leaky/ (P11)
   cfg = tmp_path / "cfg.yaml"
   cfg.write_text("paths:\n  data_processed_dir: data/processed\n")
   args = ["--subject", "S03", "--epochs", "2", "--device", "cpu", "--data-root", str(tmp_path / "proc"),
-          "--reports-dir", str(rep), "--config", str(cfg)]
+          "--reports-dir", str(tmp_path / "rep"), "--config", str(cfg), "--cv", "legacy", "--smoothing", "mod5"]
   assert be.main(args) == 0
   df = pd.read_csv(rep / "eegnet_benchmark_cpu.csv")
   assert list(df.columns) == be.COLUMNS and df.loc[0, "Params"] == 2349 and df.loc[0, "Device"] == "cpu"

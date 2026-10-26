@@ -93,22 +93,22 @@ def test_wrong_layout_rejected_and_channel_order_matters(cls):
 
 def test_eegnet_regression_after_refactor(tmp_path):
   X, y = make_windows(n_trials=4, seed=0)
-  r = train_and_eval_eegnet_cv(X, y, epochs=3, device="cpu")
+  r = train_and_eval_eegnet_cv(X, y, epochs=3, device="cpu", cv="legacy")
   assert hashlib.sha256(r["proba"].tobytes()).hexdigest() == EEGNET_SMOKE_PROBA_SHA256
   write_subject(tmp_path / "proc", "S03", n_trials=3)
   cfg = tmp_path / "cfg.yaml"
   cfg.write_text("paths:\n  data_processed_dir: data/processed\n")
   assert be.main(["--subject", "S03", "--epochs", "2", "--device", "cpu", "--data-root", str(tmp_path / "proc"),
-                  "--reports-dir", str(tmp_path / "rep"), "--config", str(cfg)]) == 0
-  csv = (tmp_path / "rep" / "eegnet_benchmark_cpu.csv").read_bytes()
+                  "--reports-dir", str(tmp_path / "rep"), "--config", str(cfg), "--cv", "legacy", "--smoothing", "mod5"]) == 0
+  csv = (tmp_path / "rep" / "legacy_leaky" / "eegnet_benchmark_cpu.csv").read_bytes()
   assert hashlib.sha256(csv).hexdigest() == EEGNET_SMOKE_CSV_SHA256
 
 
 def test_cv_protocol_and_learnable_for_new_networks():
   X, y = make_windows(n_trials=8, seed=0)
   for build, n in ((lambda c, ch, t: CompactCNN(c, ch, t), 56021), (lambda c, ch, t: ShallowConvNet(c, ch, t), 14485)):
-    a = train_and_eval_cv(X, y, build, epochs=12, device="cpu", lr=3e-3)
-    b = train_and_eval_cv(X, y, build, epochs=12, device="cpu", lr=3e-3)
+    a = train_and_eval_cv(X, y, build, epochs=12, device="cpu", lr=3e-3, cv="legacy")
+    b = train_and_eval_cv(X, y, build, epochs=12, device="cpu", lr=3e-3, cv="legacy")
     assert np.array_equal(a["proba"], b["proba"]) and a["n_params"] == n
     assert len(a["fold_test_acc"]) == 5 and "StratifiedKFold(5, shuffle, 42)" in a["cv"]
     assert a["train_accuracy"] >= a["accuracy"] and a["accuracy"] > 0.4, (a["accuracy"], a["train_accuracy"])
@@ -120,8 +120,8 @@ def _run(mod, tmp_path, tag):
   cfg.write_text("paths:\n  data_processed_dir: data/processed\n")
   rep = tmp_path / f"rep_{tag}"
   assert mod.main(["--subject", "S03", "--epochs", "2", "--device", "cpu", "--data-root", str(tmp_path / "proc"),
-                   "--reports-dir", str(rep), "--config", str(cfg)]) == 0
-  return rep
+                   "--reports-dir", str(rep), "--config", str(cfg), "--cv", "legacy", "--smoothing", "mod5"]) == 0
+  return rep / "legacy_leaky"  # --cv legacy writes under legacy_leaky/ (P11)
 
 
 @pytest.mark.parametrize("mod,name,params", [(bc, "compact_cnn", 56021), (bs, "shallow_convnet", 14485),

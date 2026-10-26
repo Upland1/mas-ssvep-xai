@@ -155,7 +155,7 @@ def _record(mod, tmp_path, tag, monkeypatch, extra=()):
   fold calls made by the shared training code."""
   calls = {"seed": [], "adamw": [], "sched": [], "loss": [], "loader": [], "folds": []}
   Opt, Sch, Loss = torch.optim.AdamW, torch.optim.lr_scheduler.CosineAnnealingLR, torch.nn.CrossEntropyLoss
-  Seed, DL, cv = torch.manual_seed, eegnet_cv.DataLoader, eegnet_cv.legacy_cv
+  Seed, DL, cv = torch.manual_seed, eegnet_cv.DataLoader, eegnet_cv.make_splits
 
   def opt(params, **kw):
     calls["adamw"].append(kw)
@@ -177,23 +177,22 @@ def _record(mod, tmp_path, tag, monkeypatch, extra=()):
     calls["loader"].append({k: v for k, v in kw.items() if k != "generator"})
     return DL(ds, **kw)
 
-  def legacy_cv(s):
-    inner = cv(s)
-    calls["folds"].append(repr(inner))
-    return inner
+  def make_splits(kind, y, ids, s=42):
+    calls["folds"].append(f"{kind} n_splits=5 shuffle=True random_state={s}")
+    return cv(kind, y, ids, s)
 
   monkeypatch.setattr(torch.optim, "AdamW", opt)
   monkeypatch.setattr(torch.optim.lr_scheduler, "CosineAnnealingLR", sch)
   monkeypatch.setattr(torch.nn, "CrossEntropyLoss", loss)
   monkeypatch.setattr(torch, "manual_seed", seed)
   monkeypatch.setattr(eegnet_cv, "DataLoader", dl)
-  monkeypatch.setattr(eegnet_cv, "legacy_cv", legacy_cv)
+  monkeypatch.setattr(eegnet_cv, "make_splits", make_splits)
   if not (tmp_path / "proc").exists():
     write_subject(tmp_path / "proc", "S03", n_trials=3)
   cfg = tmp_path / "cfg.yaml"
   cfg.write_text("paths:\n  data_processed_dir: data/processed\n")
   argv = ["--subject", "S03", "--epochs", "2", "--device", "cpu", "--data-root", str(tmp_path / "proc"),
-          "--reports-dir", str(tmp_path / f"rep_{tag}"), "--config", str(cfg), *extra]
+          "--reports-dir", str(tmp_path / f"rep_{tag}"), "--config", str(cfg), "--cv", "legacy", "--smoothing", "mod5", *extra]
   assert mod.main(argv) == 0
   monkeypatch.undo()
   return calls

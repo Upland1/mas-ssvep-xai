@@ -522,7 +522,7 @@ def test_benchmark_models_exclude_qda(monkeypatch):
     return {}, {}
 
   monkeypatch.setattr(bcv, "oof_space", fake_oof)
-  rows, fails = bcv.run_benchmark(blocks, "S99", verbose=False)
+  rows, fails = bcv.run_benchmark(blocks, "S99", verbose=False, cv="legacy", smoothing="mod5")
   assert len(seen) == 6 and all(len(m) == 9 and "QDA" not in m for m in seen)
   assert [r["Model"] for r in rows] == ["argmax"]
 
