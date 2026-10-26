@@ -107,6 +107,7 @@ Window-level permutations in the first run (R7 first run, labelled `window`); fs
 .venv/bin/python -m scripts.connectivity.analysis.analyze_connectivity_cohort --methods coherence plv wpli pdc --permutations 100 --permutation-unit trial --n-jobs -1 --out-suffix trial100
 .venv/bin/python -m scripts.connectivity.analysis.analyze_connectivity_cohort --methods coherence plv wpli pdc --permutations 200 --permutation-unit trial --n-jobs -1
 .venv/bin/python -m scripts.connectivity.analysis.analyze_connectivity_cohort --compare trial100 ""
+.venv/bin/python -m scripts.connectivity.analysis.analyze_connectivity_cohort --compare window200 ""
 .venv/bin/python -m scripts.connectivity.analysis.analyze_connectivity_cohort --methods coherence --subjects S03 --permutations 200 --permutation-unit trial --coherence-estimator aligned --n-jobs -1 --out-suffix aligned_S03
 ```
 
@@ -124,9 +125,11 @@ The verifier saves the pytest log under `reports/logs/P13/`.
 | 24 Hz the only frequency robust across S03–S05 in both coherence and wPLI | trial200 global p < 0.05 at 24 Hz for S03–S05 in both methods; no other frequency significant in all three for both | R-12 |
 | FDR edge totals per subject coherence 0/0/65/51/15, wPLI 0/3/38/33/18 at 200 trial-level permutations within tolerance | ±25 % or ±5 edges per subject (tolerance table) | R-12 |
 | borderline cells that flip between 100 and 200 permutations are listed as inconclusive | `connectivity_cohort_flips.csv` | R-12 |
-| task 6 | window200 recorded and labelled; window vs trial p-value comparison printed | PF-19 |
+| task 6 | window200 recorded and labelled; window vs trial comparison from `--compare window200 ""` (`connectivity_cohort_flips_window200_vs_final.csv`, after fix 1) | PF-19 |
 
-The reviewer pre-commits the exact windows in the pre-run audit.
+**Binding:** the exact windows are the pre-committed criteria A1–A8, the FDR-total table and
+the estimator rules E1–E5 in 07_review.md ("Pre-run audit — Round 1", 934cc2f). Where they
+are more specific than the rows above, they prevail (amended after the audit, fix 2).
 
 ## Sources
 
