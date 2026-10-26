@@ -13,6 +13,10 @@ from src.features.ssvep.spectral_power import LEGACY_FS_HZ
 from src.features.ssvep.window_mask import CHANNEL_FAIL_FRACTION, MASK_LABEL
 from src.io.channels import subject_channel_names
 from src.models.classical.feature_spaces import build_feature_blocks
+from src.models.classical.legacy_eval import SEED, cv_label, smooth_label
+from src.preprocessing.dataset.cv_utils import (
+  CV_CHOICES, LEGACY_TRIAL_LENGTHS, SMOOTHING_CHOICES, build_trial_ids, format_block_report, output_dir,
+  trial_block_report)
 from src.preprocessing.dataset.legacy_windows import CLASS_CODES, arrays_exist, load_stimulus_windows
 
 DEFAULT_SUBJECT = "S03"   # acceptance subject of P05 (R-3)
@@ -34,6 +38,33 @@ def load_config(path: Path) -> dict:
     return yaml.safe_load(f) or {}
 
 
+def add_protocol_args(parser) -> None:
+  """`--cv {grouped,legacy}` (default grouped, R1) and `--smoothing {trial,mod5}` (default trial, R8); P11."""
+  parser.add_argument("--cv", choices=CV_CHOICES, default="grouped",
+                      help="grouped = StratifiedGroupKFold over trial ids (R1, default); legacy = P05-P10 window-level "
+                           "StratifiedKFold (leaky, outputs under <reports-dir>/legacy_leaky/)")
+  parser.add_argument("--smoothing", choices=SMOOTHING_CHOICES, default="trial",
+                      help="2.0 s rule: trial = reset at each trial id (R8, default); mod5 = legacy i%%5 of the clean array")
+
+
+def protocol_labels(cv: str, smoothing: str) -> tuple:
+  """`(cv label, smoothing label)` for headers and report titles."""
+  return cv_label(cv), smooth_label(smoothing)
+
+
+def trial_ids_header(b: dict) -> str:
+  """Meta line naming the trial-id source and whether the ids are approximate (PF-03)."""
+  return (f"trial ids: contiguous same-label blocks of the pre-gate labels, indexed by the valid mask; "
+          f"trial_ids_approximate={'yes' if b['trial_ids_approximate'] else 'no'}; {b['n_trials']} trials in "
+          f"{b['n_clean']} clean windows")
+
+
+def print_trial_report(subject: str, b: dict) -> None:
+  """Block lengths per condition and the approximate-id verdict of one subject (task 2)."""
+  print(f"Trial blocks of {subject} (stimulus windows before the quality gate):")
+  print(format_block_report(b["trial_block_report"]))
+
+
 def prepare_subject(processed_dir: Path, subject: str, scalp: Optional[Sequence[str]] = None,
                     fs: float = LEGACY_FS_HZ, thresholds: Optional[dict] = None,
                     fbcca_channels: Optional[Sequence[str]] = None,
@@ -48,10 +79,19 @@ def prepare_subject(processed_dir: Path, subject: str, scalp: Optional[Sequence[
   if not arrays_exist(processed_dir, subject):
     raise FileNotFoundError(f"arrays missing in {Path(processed_dir) / subject}")
   _, X_time, y = load_stimulus_windows(processed_dir, subject)
+  # trial ids on the PRE-gate labels (201/202 rows included in the walk), then the stimulus selection (PF-03)
+  y_all = np.load(Path(processed_dir) / subject / "y_labels.npy")
+  ids_all = build_trial_ids(y_all, LEGACY_TRIAL_LENGTHS, warn=False)
+  ids_stim = ids_all[np.isin(y_all, CLASS_CODES)]
   names = subject_channel_names(processed_dir, subject, X_time.shape[1], scalp)
   blocks = build_feature_blocks(X_time, y, names, fs, thresholds, fbcca_channels,
                                 channel_fail_fraction, verbose)
   blocks["channel_names"] = names
+  rep = trial_block_report(y, ids_stim, LEGACY_TRIAL_LENGTHS)
+  blocks["trial_ids"] = ids_stim[np.asarray(blocks["mask"]).astype(bool)]
+  blocks["trial_block_report"] = rep
+  blocks["trial_ids_approximate"] = rep["approximate"]
+  blocks["n_trials"] = int(len(np.unique(blocks["trial_ids"])))
   blocks["n_stimulus"] = int(len(y))
   blocks["n_clean"] = int(len(blocks["y"]))
   blocks["n_rejected"] = blocks["n_stimulus"] - blocks["n_clean"]
@@ -132,5 +172,5 @@ def figure_paths(fig_dir: Path, stem: str, subject: str, default_subject: str = 
   return paths
 
 
-__all__ = ["DEFAULT_SUBJECT", "TARGET_FREQS", "load_config", "prepare_subject", "subject_channel_names", "channel_summary", "discover_subjects", "legacy_header_lines",
+__all__ = ["DEFAULT_SUBJECT", "TARGET_FREQS", "load_config", "prepare_subject", "subject_channel_names", "channel_summary", "discover_subjects", "legacy_header_lines", "add_protocol_args", "protocol_labels", "trial_ids_header", "print_trial_report", "output_dir", "SEED",
            "save_classification_report", "plot_confusion", "figure_paths", "CLASS_NAMES"]

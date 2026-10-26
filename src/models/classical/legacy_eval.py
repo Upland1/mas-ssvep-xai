@@ -22,14 +22,40 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
 from src.features.ssvep.fbcsp_extraction import FBCSPTransformer
-from src.preprocessing.dataset.smoothing import smooth_probabilities_mod5
+from src.preprocessing.dataset.smoothing import smooth_probabilities_by_trial, smooth_probabilities_mod5
 
 N_FOLDS = 5
 SEED = 42
 CV_LABEL = "StratifiedKFold(5, shuffle, 42) over windows (legacy R1/PF-01, leaky)"
 SMOOTH_LABEL = "legacy i%5 trial smoothing (R8 legacy, PF-02): 2-window average, reset at i % 5 == 0 of the clean array"
+GROUPED_CV_LABEL = "StratifiedGroupKFold(5, shuffle, 42) over reconstructed trial ids (R1, leak-free)"
+TRIAL_SMOOTH_LABEL = ("trial-aware 2-window average (R8): resets at each reconstructed trial id "
+                      "(ids built on pre-gate labels, indexed by the valid mask, PF-03)")
 DIAG_SMOOTH_LABEL = "no-reset 2-window average (P04 rule), DIAGNOSTIC only"
 smooth_reported = smooth_probabilities_mod5   # the reported "2.0 s smoothed" rule of P05-P10
+
+
+def cv_label(cv: str) -> str:
+  """Protocol label of `--cv`: "legacy" (P05-P10, leaky) or "grouped" (R1)."""
+  return CV_LABEL if cv == "legacy" else GROUPED_CV_LABEL
+
+
+def smooth_label(rule: str) -> str:
+  """Protocol label of `--smoothing`: "mod5" (legacy i%5) or "trial" (R8)."""
+  return SMOOTH_LABEL if rule == "mod5" else TRIAL_SMOOTH_LABEL
+
+
+def smooth_scores(scores: np.ndarray, trial_ids: Optional[np.ndarray] = None, rule: Optional[str] = None) -> np.ndarray:
+  """Smoothed per-class scores: `rule="trial"` (needs `trial_ids`) or `"mod5"` (legacy i%5).
+  `rule=None` means "trial" when `trial_ids` is given, else "mod5" (the pre-P11 call)."""
+  rule = rule or ("trial" if trial_ids is not None else "mod5")
+  if rule == "trial":
+    if trial_ids is None:
+      raise ValueError("rule='trial' needs trial_ids")
+    return smooth_probabilities_by_trial(scores, trial_ids)
+  if rule == "mod5":
+    return smooth_reported(scores)
+  raise ValueError(f"rule must be 'trial' or 'mod5', got {rule!r}")
 
 
 def legacy_cv(seed: int = SEED) -> StratifiedKFold:
@@ -114,12 +140,22 @@ def oof_space(space: FeatureSpace, subbands: Optional[np.ndarray], y: np.ndarray
   return {n: r for n, r in out.items() if n not in errors}, errors
 
 
-def accuracies(y: np.ndarray, pred: np.ndarray, scores: np.ndarray) -> tuple:
-  """`(1.0 s accuracy, 2.0 s smoothed accuracy)` in [0, 1], smoothing = legacy i%5 trial smoothing
-  (R8 legacy, PF-02); classes = sorted labels of `y`."""
+def accuracies(y: np.ndarray, pred: np.ndarray, scores: np.ndarray,
+               trial_ids: Optional[np.ndarray] = None, rule: Optional[str] = None) -> tuple:
+  """`(1.0 s accuracy, 2.0 s smoothed accuracy)` in [0, 1]; classes = sorted labels of `y`.
+
+  Smoothing: `rule="trial"` (R8, resets at each id of `trial_ids`, row-aligned with `y`) or `"mod5"`
+  (legacy i%5, PF-02); `rule=None` is "trial" when `trial_ids` is given, else "mod5" (pre-P11 call).
+  """
   classes = np.unique(y)
-  sm = classes[np.argmax(smooth_reported(scores), axis=1)]
+  sm = classes[np.argmax(smooth_scores(scores, trial_ids, rule), axis=1)]
   return float(accuracy_score(y, pred)), float(accuracy_score(y, sm))
+
+
+def splits_for(cv: str, y: np.ndarray, trial_ids: Optional[np.ndarray], seed: int = SEED) -> list:
+  """`(train, test)` index list of `--cv {grouped,legacy}` (see `cv_utils.make_splits`); feed to `oof_space(..., splits=)`."""
+  from src.preprocessing.dataset.cv_utils import make_splits
+  return make_splits(cv, y, trial_ids, seed)
 
 
 def fbcca_argmax_baseline(fbcca: np.ndarray, y: np.ndarray, target_codes: Sequence[int]) -> tuple:
