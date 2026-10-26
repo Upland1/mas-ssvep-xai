@@ -7,7 +7,7 @@ z-scored per channel over its own samples; ShallowConvNet is trained from scratc
 
 Legacy behaviours (labelled, fixed in P11): R1/PF-01 StratifiedKFold(5, shuffle, 42) over windows (leaky,
 NOT comparable with the leak-free R-6); R8/PF-02 "2.0 s smoothed" = legacy i%5 trial smoothing. Fixed
-epochs, no validation split, no early stopping, augmentation off (P10). Train accuracy = un-augmented
+epochs, no validation split, no early stopping, augmentation off by default, `--augment on` (P10). Train accuracy = un-augmented
 training fold (PF-30). CPU and CUDA give different but individually deterministic numbers: the device is
 stated with every number and in the CSV name (reports/shallow_convnet_benchmark_<device>.csv; `auto` -> resolved device).
 
