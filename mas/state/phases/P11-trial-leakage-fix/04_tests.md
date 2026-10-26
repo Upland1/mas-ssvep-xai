@@ -51,3 +51,17 @@ Full suite on the final tree: `676 passed, 21 warnings in 337.92s (0:05:37)` (64
 ```bash
 .venv/bin/python -m pytest tests -o addopts="" -q
 ```
+
+## Round 1
+
+Status: READY
+
+Audit fix bb4d2ea (`demo_cv_leakage.network_section` pairs A/B CSVs by the splitter label in `.meta.txt`).
+
+| Test id (`tests/test_p11_known_answer.py::`) | Simulates | Expected | Catches bug | Result |
+|---|---|---|---|---|
+| `test_demo_network_section_skips_leaky_vs_leaky_and_computes_hand_deltas` | synthetic reports tree, two subjects: eegnet = frozen leaky file+meta in both slots; compact_cnn = valid leaky/grouped pair; shallow_conv_net = swapped (grouped in the frozen slot) | eegnet and shallow_conv_net skipped with a printed reason; compact_cnn deltas by hand: OFF S01 -20.0, S02 -10.0; ON S01 -15.0, S02 -18.0; augmentation gain leaky 10.0/10.0, grouped 15.0/2.0 | stale leaky result presented as grouped | PASS |
+
+Mutant M6 (label check removed: `if (so, sn) != ("leaky", "grouped"):` replaced by `if False:`): the new test fails; restored with `git checkout`, tree clean.
+
+Full suite: `678 passed, 21 warnings in 365.55s (0:06:05)`.

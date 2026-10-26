@@ -407,3 +407,38 @@ def test_classical_prepare_subject_ids_follow_the_mask(tmp_path):
   assert len(b["trial_ids"]) == len(b["y"]) == 74
   # ids are in non-decreasing order, as the trial smoothing requires (sorted by trial, not by offset)
   assert np.all(np.diff(b["trial_ids"]) >= 0)
+
+
+# --- 9. demo network section pairs A/B files by splitter label (Round 1) ------------------------------
+
+def test_demo_network_section_skips_leaky_vs_leaky_and_computes_hand_deltas(tmp_path, capsys):
+  from scripts.diagnostics import demo_cv_leakage as demo
+  head = "Subject,Clean Windows,1.0s OFF (%),1.0s ON (%),1.0s Delta,2.0s OFF (%),2.0s ON (%),2.0s Delta\n"
+  frozen = head + "S01,70,80.0,90.0,10.0,85.0,92.0,7.0\nS02,70,50.0,60.0,10.0,55.0,64.0,9.0\n"
+  p11 = head + "S01,70,60.0,75.0,15.0,66.0,78.0,12.0\nS02,70,40.0,42.0,2.0,45.0,47.0,2.0\n"
+  leaky = "cv=StratifiedKFold(5, shuffle, 42) over windows (legacy R1/PF-01, leaky); seed=42\n"
+  grouped = "cv=StratifiedGroupKFold(5, shuffle, 42) over reconstructed trial ids (R1, leak-free); seed=42\n"
+  (tmp_path / "legacy_leaky").mkdir()
+
+  def put(path, csv, meta):
+    path.write_text(csv)
+    path.with_suffix(".meta.txt").write_text(meta)
+
+  # eegnet: the frozen leaky file sits in BOTH slots (stale P10 result in the P11 slot): must be skipped
+  put(tmp_path / "legacy_leaky" / "augmentation_ab_eegnet.csv", frozen, leaky)
+  put(tmp_path / "augmentation_ab_eegnet.csv", frozen, leaky)
+  # compact_cnn: valid pair
+  put(tmp_path / "legacy_leaky" / "augmentation_ab_compact_cnn.csv", frozen, leaky)
+  put(tmp_path / "augmentation_ab_compact_cnn.csv", p11, grouped)
+  # shallow_conv_net: grouped file in the frozen slot (swapped): must be skipped
+  put(tmp_path / "legacy_leaky" / "augmentation_ab_shallow_conv_net.csv", p11, grouped)
+  put(tmp_path / "augmentation_ab_shallow_conv_net.csv", frozen, leaky)
+  net = demo.network_section(tmp_path)
+  out = capsys.readouterr().out
+  assert set(net["Model"]) == {"compact_cnn"}
+  assert "eegnet skipped" in out and "shallow_conv_net skipped" in out
+  r = net.set_index("Subject")
+  assert r.loc["S01", "Delta OFF 1.0"] == -20.0 and r.loc["S01", "Delta ON 1.0"] == -15.0   # 60-80, 75-90
+  assert r.loc["S02", "Delta OFF 1.0"] == -10.0 and r.loc["S02", "Delta ON 1.0"] == -18.0   # 40-50, 42-60
+  assert r.loc["S01", "Augmentation gain 1.0 leaky"] == 10.0 and r.loc["S01", "Augmentation gain 1.0 grouped"] == 15.0
+  assert r.loc["S02", "Augmentation gain 1.0 leaky"] == 10.0 and r.loc["S02", "Augmentation gain 1.0 grouped"] == 2.0
