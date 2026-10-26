@@ -177,3 +177,30 @@ Full report: `mas/state/reports/P05.md`. Round 1 run at `e47e799`, Round 2 code 
 **Interpretation.** Only S03 was preprocessed with 8 channels in this phase; the 8-channel path for S01, S02, S04 and S05 has not been run. On the legacy arrays tier 1 drops nothing (largest channel fail fraction 1.5 %, S02 O2, `reports/logs/P07/benchmark_n_subjects_20261025_133213.log`). The accuracies are leaky and carry no method claim.
 
 **Open.** Carried forward: print the ungated quality summary before a subject is skipped (data-signal, next touch of `run_preprocessing.py`); do not run `make preprocess` or any run over `data/processed/` before P11; the P11 smoothing rule for legacy folders (open since P05). Feature width now depends on the tier-1 drop, so per-subject feature sets must not be pooled before P16. Next phase: P08.
+
+## P08 — EEGNet on raw windows
+
+2026-10-25 to 2026-10-26, branch `phase/P08-eegnet`. Code and reported run at `cf62bb3`; results review at `ef124c1`. Report: `mas/state/reports/P08.md`.
+
+**Aim.** Roadmap P08: the first network of the project, `EEGNetSSVEP` (2,349 parameters at 7 channels × 256 samples, R-8), trained on the S03 raw legacy windows under the classical benchmark's gate and leaky CV, on CPU and on CUDA. Everything stays legacy: window-level `StratifiedKFold(5, shuffle, 42)` (R1, PF-01), `i % 5` smoothing (R8, PF-02), the P07 gate applied per script (R5 legacy), and fs 250 as a label only.
+
+**Build.** `src/models/cnn/eegnet.py` (NEW): four bias-free convolutions, max-norm 1.0 on the depthwise spatial filters, renormed after every optimizer step. `src/models/cnn/eegnet_cv.py` (NEW): per-window z-score, AdamW, cosine schedule, label smoothing 0.05, seed 42 + fold, 150 fixed epochs, train accuracy on the un-augmented training fold (PF-30). `scripts/benchmarks/neural_networks/benchmark_eegnet.py` (NEW): CLI, device-suffixed CSV and `.meta.txt`. Tests: 25 P08 cases in `tests/test_p08_eegnet.py` and `tests/test_p08_eegnet_known_answer.py` (NEW). Suite `528 passed, 21 warnings in 190.59s (0:03:10)` (`mas/state/phases/P08-eegnet/06_verify.md`), up from 518 before the known-answer tests.
+
+**Results (legacy, leaky, S03; not comparable with R-6).** Clean / rejected 197 / 3, 7 channels kept, none dropped, 2,349 parameters on both devices.
+
+| Device | 1.0 s (%) | k/197 | 2.0 s smoothed (%) | k/197 | Train, mean over folds (%) |
+|---|---|---|---|---|---|
+| cpu | 75.63 | 149 | 85.79 | 169 | 98.34 |
+| cuda | 71.07 | 140 | 81.22 | 160 | 98.60 |
+
+Sources: `reports/eegnet_benchmark_cpu.csv`, `reports/eegnet_benchmark_cuda.csv` (and `.meta.txt`); logs `reports/logs/P08/benchmark_eegnet_{cpu,cuda}_run{1,2}_*.log`. Each device repeated itself exactly over two runs.
+
+**CPU–CUDA gap.** 9 windows on both metrics (4.56 pp at 1.0 s, 4.57 pp at 2.0 s). This is a device-associated difference, not nondeterminism within a device and not a model effect. Neither number is "the" P08 result, and they are not averaged. Later A/B comparisons fix the device (CPU) and the seeds, and treat differences of a few windows as noise.
+
+**Diagnostics (not targets).** The leaky classical flagship on S03 is 90.36 / 95.43 (178 / 188 of 197); EEGNet is 19 to 38 windows lower, so no CNN advantage from the leak appears under this protocol. This is not a model ranking. Leak-free R-9b without augmentation is 73.60 / 82.23 (145 / 162); EEGNet is −5 to +4 windows across devices, which is inconclusive. R-7 (79.19, augmentation on) is a later target, quoted as such. R-6 is not compared.
+
+**PF-30 reading.** Train 98.34 % (cpu) and 98.60 % (cuda); test 75.63 % and 71.07 %. This is a generalization gap, not an optimization problem. The test accuracy is leaky, so a leak-free gap would be larger, to be measured in P11.
+
+**Review.** Pre-run audit PASS in Round 1 (`2543a33`), no required fixes, four non-blocking notes. Results review APPROVE (`ef124c1`), no deviations to accept. Verifier PASS (`ac856ad`). The original repository was not consulted (R11).
+
+**Open.** Carried forward: data-source line and `n_channels` in the EEGNet `.meta.txt` (R9); unused `discover_subjects` import; a test that the EEGNet gate matches `prepare_subject` on a tree with a bad channel (P09 or P10); a saved pytest log under `reports/logs/P08/`; the equivalence of the max-norm to the original constraint is not verified. The reviewer's note that quotes R-6 (+7 windows) is not carried here, pending the orchestrator's decision. Next phase: P09.
