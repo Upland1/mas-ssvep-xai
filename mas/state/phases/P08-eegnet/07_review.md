@@ -72,27 +72,74 @@ None.
 
 ## Results review
 
-Verdict: APPROVE / REJECT
+Read: `05_run.md`, `06_verify.md` (ac856ad, PASS), `reports/eegnet_benchmark_{cpu,cuda}.csv` and `.meta.txt`, the four logs `reports/logs/P08/benchmark_eegnet_{cpu,cuda}_run{1,2}_*.log` and the run copies. The code is unchanged since the pre-run audit: `git diff --stat 0ddfa37 cf62bb3` touches only `mas/state/` files. Every log header shows `HEAD cf62bb3…` and `status: []`. Data source: legacy 7-channel arrays `data/processed/S03/` (P02, OO session), stimulus windows only.
+
+Re-checked in this review:
+- The run1 and run2 CSV copies are byte-identical on each device (`cmp`).
+- The per-fold lines and the `[+]` line of run1 and run2 are identical on each device, apart from the wall-time field (`diff`).
+- I derived fold window counts with `.venv/bin/python -c "..."`, using test-fold sizes 40/40/39/39/39 and training-fold sizes 157/157/158/158/158.
+
+### Acceptance (verbatim): "trains on CPU and GPU; numbers recorded (Era-A leaky)"
+
+**Met.**
+- Both devices trained: 4/4 runs ended with `EXIT_CODE=0`. CPU took 32 s and CUDA 20 s (the RTX 3050 Laptop GPU).
+- The numbers are recorded per device in the CSV, the log and `.meta.txt`.
+- Every artefact carries the Era-A labels: `cv=StratifiedKFold(5, shuffle, 42) over windows (legacy R1/PF-01, leaky)`, legacy i%5 smoothing (R8/PF-02) and the per-script gate (R5 legacy).
+
+### Pre-committed checks
+
+| Check (pre-run audit) | Obtained (log/CSV) | Result |
+|---|---|---|
+| Counts 197 / 3, 7 kept, none dropped | `200 stimulus, 197 clean, 3 rejected; channels kept 7 [PO3, POz, PO4, PO8, O1, Oz, O2]; dropped [none]` on both devices | PASS (= R-3/R-5/R-6; confirms that the gate is the flagship's on real data) |
+| Params 2,349 | `params 2349` on both devices | PASS (R-8 exact) |
+| Both exit 0, device labelled | CSV `Device` cpu/cuda, `[+] S03 [cpu]` / `[+] S03 [cuda]`, `.meta.txt` line 1 | PASS |
+| Accuracies are k/197 | CPU 149 / 169, CUDA 140 / 160 (fold sums 31+22+29+31+36 = 149 and 32+21+29+28+30 = 140) | PASS |
+| CPU vs CUDA gap | 9 windows on both 1.0 s and 2.0 s (4.57 pp) | inside the pre-committed "between" band (> 5 and ≤ 10 windows); no CONCERN; read below |
+| Train vs test (PF-30) | train CPU 98.34 %, CUDA 98.60 %; test 75.63 % / 71.07 % | PASS; this is a generalization gap |
+| Determinism per device (recommended repeat) | run1 = run2 on each device | PASS; the `.meta.txt` label is supported |
 
 ### Deviations from references
 
 | Ref | Expected | Obtained (log) | Δ | Within tolerance? | Explanation | Accepted? |
 |---|---|---|---|---|---|---|
-| | | | | | | |
+| R-8 EEGNet params | 2,349 | 2349 (cpu, cuda) | 0 | yes (exact) | — | — |
+| R-3/R-5/R-6 S03 counts | 197 clean / 3 rejected, 7 ch | 197 / 3, 7 kept | 0 | yes (exact) | same gate as the flagship | — |
+| Accuracy | no P08 target (leaky; R-7/R-9 are later leak-free targets) | CPU 75.63 / 85.79; CUDA 71.07 / 81.22 | n/a | n/a | diagnostic comparisons below | — |
+
+There are no deviations to accept.
 
 ### Interpretation check
 
-<!-- Per-subject reading; inconclusive results stated as such; leakage in
-fitted objects, normalization, validation sets; statistics unit and
-multiple comparisons. -->
+1. **CPU vs CUDA, 9 windows.** Each device repeats itself exactly, so the gap is a device effect, not run-to-run nondeterminism (PF-28) and not a model effect. Same seeds and same folds on different floating-point kernels lead to different weights after 150 epochs, and that changes some borderline windows.
+   - The gap is small next to the uncertainty of the estimate. Per-fold test accuracy ranges from 55.00 % to 92.31 % on CPU (fold SD 13.45 pp) and from 52.50 % to 80.00 % on CUDA (SD 10.84 pp). The binomial SE at p ≈ 0.73 with n = 197 is 3.16 pp (computed). The 4.57 pp gap is about 1.4 SE.
+   - Two thirds of the gap comes from one fold: fold 4 differs by 6 windows (36 vs 30). The per-fold differences are −1, +1, 0, +3, +6.
+   - Conclusion: on S03, EEGNet's leaky 1.0 s accuracy lies between 140 and 149 of 197, depending on the device. Neither device's number is "the" P08 result, and they must never be averaged. A seed or device change alone moves this estimate by about 5 pp, so later A/B comparisons (P10 augmentation) must use the same device and seeds (PF-28) and should treat effects of a few windows as noise.
+2. **PF-30, train vs test.** Training accuracy is about 98 % on both devices: CPU folds 95.54–100 %, CUDA 97.45–100 %. Test accuracy is 71–76 %, so the network optimizes and then fails to generalize to part of the held-out windows; this is not an optimization problem. Fold 1 is hard on both devices (55.00 % / 52.50 % test at 96.18 % / 97.45 % train). With 157–158 training windows and 2,349 parameters, a gap of this size is expected. The leak-free reference without augmentation shows the same pattern (R-9b S03 OFF: train 98.86 %, test 73.60 %).
+3. **Diagnostic comparisons, labelled and not targets.**
+   - (a) Leaky classical flagship on S03 (R-3/R-5: 90.36 / 95.43 % = 178 / 188 of 197; same gate, same folds, same leak). EEGNet is 29–38 windows lower at 1.0 s (149 / 140 vs 178) and 19–28 windows lower at 2.0 s (169 / 160 vs 188). PF-01 says leaky window-level CV inflates CNNs more than LDA. Here, though, the leaky CNN is still well below the leaky LDA flagship, so no leak-driven CNN advantage appears on S03. This is not a model ranking: both numbers are leaky, it is one subject, and it is one configuration without augmentation.
+   - (b) Later leak-free numbers: R-7 (augmentation on) 79.19 % = 156/197; R-9b without augmentation 73.60 / 82.23 % = 145 / 162 of 197. CPU (149 / 169) is above the no-augmentation leak-free reference by 4 / 7 windows. CUDA (140 / 160) is below it by 5 / 2 windows. As pre-committed, a leaky number below 145/197 is not a failure; it is noted as unexpected under PF-01, because leaky CV should not score below leak-free CV.
+     - The difference is inside the device spread in point 1, so the leak inflation for EEGNet on S03 is not detectable at this precision. Here EEGNet ranges from −5 to +4 windows against a reference produced by the original's code; LDA shows +7 windows (leaky 178 vs leak-free R-6 171/197).
+     - The comparison is inconclusive. It must not be quoted as "no leakage for CNNs"; P11 measures the leak effect with matched code.
+   - (c) Not compared with R-6 as if comparable.
+4. **Caveats that must accompany every P08 number.**
+   - The CV is legacy and leaky: five 1 s sub-windows of one trial land in train and test (PF-01).
+   - The "2.0 s smoothed" figure is the legacy i%5 average over the condition-ordered clean array (PF-02). S03's 3 rejected windows shift the 5-blocks after each rejection, so some pairs average windows of adjacent trials. Usually the class is the same, so the effect is small, but it is not a clean 2 s decision. The +20-window smoothing gain on both devices (149→169, 140→160) is a legacy-rule figure, not a measured 2 s improvement.
+   - This is not the P04 no-reset rule.
+   - Data are the legacy 7-channel arrays (P02, OO session). fs 250 is a label only (EEGNet does not use it).
+   - Every number is per device.
+5. **Leakage in fitted objects.** This was cleared in the pre-run audit: z-score per window, BN and optimizer on training rows only, fixed epochs, no selection on test folds. The run used the audited code (`git diff --stat 0ddfa37 cf62bb3` touches only `mas/state/`), so nothing new arises.
 
 ### Decisions for decisions.md
 
-<!-- Accepted deviations, one line each; the orchestrator copies them. -->
+- 2026-10-25 | P08 | Results accepted: EEGNet S03 (legacy leaky R1/PF-01, i%5 smoothing R8/PF-02, legacy 7-ch arrays, P07 gate) CPU 75.63 / 85.79 % (149 / 169 of 197), train 98.34 %; CUDA 71.07 / 81.22 % (140 / 160), train 98.60 %; 197/3 and 2,349 params exact on both; each device run-to-run identical | results review | `P08-eegnet/07_review.md`, `reports/eegnet_benchmark_{cpu,cuda}.csv`
+- 2026-10-25 | P08 | The 9-window CPU–CUDA gap (4.57 pp, 6 of it in one fold) is a device effect, not nondeterminism or a model effect; it is about 1.4 binomial SE, and per-fold test accuracy spans 52.5–92.3 %. P09/P10 A/B comparisons use one fixed device and seeds, state it, and treat differences of a few windows as noise | results review | same
+- 2026-10-25 | P08 | Diagnostic only: leaky EEGNet is 29–38 windows below the leaky flagship (178/197), so PF-01's "CNNs inflate more" shows no CNN advantage on S03. EEGNet leaky vs the later leak-free no-augmentation reference (R-9b 145/197) is −5 to +4 windows across devices (inconclusive; never quoted as "no leak for CNNs"; P11 measures it). PF-30 reading: generalization gap (train ~98 %, test 71–76 %) | results review | same
+- 2026-10-25 | P08 | Carry-forward (non-blocking): data-source line and `n_channels` in the EEGNet `.meta.txt`; unused `discover_subjects` import (deep-learning, next touch); gate-equality test `gated_windows` vs `prepare_subject` (synthetic-tester, P09/P10); the report cites roadmap P08 as the specification, with Lawhern et al. 2018 only as the origin named there | pre-run audit notes | same
 
 ## Sources spot-check
 
-<!-- Fix rounds: append "## Pre-run audit — Round N". After two failed rounds,
-set Status: BLOCKED. -->
+Opened in this review: `05_run.md`, `06_verify.md`, both CSVs and both `.meta.txt`, the four P08 logs (run1 grep and run1/run2 diff), and `mas/04_REFERENCE_RESULTS.md` R-7/R-8/R-9b (read in the pre-run audit of this session). The verifier's numbers (counts, k/197, gap 9, determinism) agree with the logs. 06 quotes my pre-committed rule for numbers below 145/197 accurately. Its prose figures (4.56 / 4.57 pp) match the CSV differences 75.63 − 71.07 and 85.79 − 81.22.
+
+Verdict: APPROVE
 
 ## Questions
