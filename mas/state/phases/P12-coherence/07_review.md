@@ -143,17 +143,94 @@ Verdict: PASS
 
 ## Results review
 
-Verdict: APPROVE / REJECT
+Reads: 05_run.md, 06_verify.md (b68f5eb; run at cb446b0), `reports/connectivity/coherence_{S03,S04}_summary.csv` + `.meta.txt`, `coherence_bias_demo_S03.meta.txt`, `coherence_{S03,S04}_matrices.npz`, the four PNGs in `outputs/figures/connectivity/`, logs in `reports/logs/P12/`.
+
+**What ran.** `git diff --stat 35a1f29 cb446b0 -- src scripts tests configs` is empty, so the run used the code audited in Round 2. Commits after that are handoff files only (cb446b0, 9d31662, b68f5eb, 20bc90d). I re-read every number below from the CSVs (`.venv/bin/python -I -c` over `coherence_{S}_summary.csv`), and they equal 06_verify.md. The legacy sha256 values match my pre-run record.
+
+**Data source (R9).** Legacy 7-channel folders `data/processed/S03`, `S04` (P02, OO session). Raw windows: continuous 1–60 Hz filter then cut, no sub-band filtering (R3 era B). fs-250 frequency axis (PF-04, legacy). One P07 two-tier gate over 101–105 plus 201. No channel dropped in either subject.
+
+### Acceptance against A0–A6 (fixed in Round 1)
+
+| # | Obtained | Window | Grade |
+|---|---|---|---|
+| A0 | Clean stimulus windows: S03 39/39/40/40/39 = 197, S04 37/40/40/40/40 = 197. Clean 201 windows: S03 78/78, S04 77/79 | 197 / 197, exact | PASS (exact) |
+| A1 | Independent noise: per-window 0.3373, concatenated 0.0180. Coupled: 0.9814 / 0.9824 | [0.27, 0.40], ≤ 0.07, ≥ 0.93 | PASS. All three are also inside R-11's bare ranges (0.32–0.35, 0.01–0.02, 0.98–0.99) |
+| A2 | Broadband (5–35 Hz) 201 baseline, before → after: S03 0.6836 → 0.5871, S04 0.7291 → 0.6589 | [0.63, 0.78] → [0.54, 0.71], with a drop | PASS. Against R-11's bare edges, only S03 "after" lies outside, 0.0029 below 0.59 (`python3 -c "print(0.59-0.5871)"`). That is well inside ±0.05 |
+| A3 | Per-band before → after: 10/10 drop. S03 0.6433→0.5461, 0.6720→0.5500, 0.6625→0.5256, 0.7152→0.6435, 0.8000→0.7390. S04 0.7371→0.7041, 0.7090→0.6724, 0.7031→0.5986, 0.7106→0.5831, 0.7025→0.6422 | after < before | PASS. The PF-15 bias is positive in every band, as predicted |
+| A4 | Differences for 101 and 102: S03 +0.2494, +0.2511; S04 +0.1281, +0.1105. Aligned estimator: S03 +0.2258, +0.2648; S04 +0.1203, +0.0992 | > 0 and in [0.06, 0.30] | PASS, 4/4, robust: the aligned signs agree. S03 102 lies 0.0011 above R-11's bare +0.25 |
+| A5 | Differences for 104 and 105: S03 −0.0366, +0.0414; S04 +0.1934, +0.1286 | R-11: S03 ≤ +0.05, S04 > 0 | Consistent with R-11 in 4/4 (descriptive) |
+| A6 | Δ (prescribed − aligned): S03 +0.0236, −0.0137, −0.0265, −0.0133, **+0.0565**. S04 +0.0078, +0.0113, −0.0298, −0.0147, +0.0222 | \|Δ\| ≤ 0.05 | One flag: S03 105 is **estimator-sensitive**. It is not "junction-biased": Δ is positive, the opposite of the predicted negative direction. Both estimators put S03 105 within ±0.05 of zero (+0.0414 / −0.0151), so R-11's "near zero/negative in S03" holds under either. Only the sign of this cell is undetermined |
+
+The flagged-band rule from Round 2 applies as written. 8 of the 10 Δ values have \|Δ\| < 0.03, and the signs are mixed (5 positive, 5 negative). This argues against a systematic junction bias on these two subjects; their low-frequency common power appears too weak for the effect simulated in Round 1. The aligned estimator also has about half as many segments, so part of each Δ is estimator variance. The junction concern (F2) is therefore **not material for S03/S04 at P12**. It has to be re-checked wherever P13 re-concatenates permuted windows.
+
+### Alpha-band ceiling hypothesis (recorded for P13, next to A6)
+
+- **Pattern.** The 10.91/8.57 Hz difference is near zero or negative in S03 (−0.0366 / +0.0414) and clearly positive in S04 (+0.1934 / +0.1286). In S04, 104 is the largest difference of all five bands, above both 101 and 102.
+- **Ceiling hypothesis (roadmap).** At 8–12 Hz the no-stimulus fixation already carries strong, spatially coherent occipital alpha. The matched baseline there is high, so a stimulus at 10.91/8.57 Hz has little room to raise coherence.
+  - Supporting: S03's matched baseline at 104/105 (0.6435 / 0.7390) is higher than S04's (0.5831 / 0.6422), and S03 is the subject with no gain.
+  - Against a pure ceiling: S03 105's matched baseline (0.7390) is far below 1, and in S03 104 the stimulus is *below* baseline (0.6069 vs 0.6435). A ceiling predicts "no gain", not a loss.
+- **Competing explanation (recorded, not tested).** Visual stimulation suppresses occipital alpha (alpha desynchronisation), lowering alpha-band coherence under stimulation. This can cancel the SSVEP gain in subjects with strong resting alpha.
+- **Third candidate.** Junction leakage: the A6 diagnostic does not support it here (S03 104 Δ −0.0133, 105 +0.0565 with the wrong sign).
+- **P13 must test** (a) the per-band trial-level permutation significance of 104/105 per subject and (b) whether the matched-baseline level predicts the difference across subjects and bands. Two subjects cannot decide this; the 5-subject P13 cohort is the minimum.
+
+### Figures (inspected)
+
+- **Difference panels** (`coherence_S03_difference_panel.png`, `coherence_S04_difference_panel.png`): RdBu_r, centred on 0, with symmetric limits. The colour bar spans ±0.5084 for S03 and ±0.3807 for S04, equal to the largest \|diff\| over the five conditions (from the npz). The titles are the `CONDITION_LABELS` "24 Hz (101)" to "8.57 Hz (105)". All 21 edges are drawn on 7 named nodes (PO3, POz, PO4, PO8, O1, Oz, O2), the same as `channels` in the npz. Every saved matrix is symmetric. What the panels show agrees with the table: S03 is strongly red at 24/20/15 Hz and faint or blue at 104/105; S04 is red in all bands, darkest at 104, with a few blue 103 edges (min −0.1639).
+- **Raw panel** (`coherence_S03_raw_panel.png`): the sixth circle is titled "No stimulus (201) / 5-35 Hz broadband, not band-matched", as required by fix 2(e). It uses viridis with a shared 0–max scale.
+- **Note for the report:** the limits are shared across conditions *within* a subject, not across subjects. S03 (±0.51) and S04 (±0.38) colours cannot be compared by eye.
+
+### Reports and meta labels
+
+`coherence_S04_summary.meta.txt` and `coherence_bias_demo_S03.meta.txt` were checked:
+- data root and "legacy, raw windows, R3 era B";
+- the gate dict with all five thresholds and the per-condition counts;
+- `channels (7)` taken from the data, dropped = [];
+- the fs-250 axis note, with every band's axis bins and true Hz (101: 24, 25 true Hz … 105: 8, 9);
+- every CSV column labelled REPORTED or DIAGNOSTIC;
+- the 5-band mean labelled "cannot replace the 5-35 Hz baseline, A2". The demo meta header says DIAGNOSTIC.
+
+PASS.
 
 ### Deviations from references
 
-| Ref | Expected | Obtained (log) | Δ | Within tolerance? | Explanation | Accepted? |
+| Ref | Expected | Obtained (CSV) | Δ | Within tolerance? | Explanation | Accepted? |
 |---|---|---|---|---|---|---|
-| | | | | | | |
+| R-11 synthetic | 0.32–0.35 / 0.01–0.02 / 0.98–0.99 | 0.3373 / 0.0180 / 0.9814, 0.9824 | 0 | yes (inside the bare ranges) | — | n/a |
+| R-11 baseline before | ≈0.68–0.73 | S03 0.6836, S04 0.7291 | 0 | yes | — | n/a |
+| R-11 baseline after | ≈0.59–0.66 | S03 0.5871, S04 0.6589 | S03 −0.0029 below the edge | yes (±0.05) | descriptive noise; "≈" in R-11 | yes |
+| R-11 24/20 Hz | +0.11 to +0.25 | +0.2494, +0.2511, +0.1281, +0.1105 | S03 102 +0.0011 above the edge | yes (±0.05) | "≈" in R-11 | yes |
+| R-11 10.91/8.57 Hz | S03 near zero/negative, S04 positive | S03 −0.0366 / +0.0414, S04 +0.1934 / +0.1286 | — | yes (descriptive) | S03 105 sign estimator-sensitive (A6) | yes |
 
 ### Interpretation check
 
+- No fitting and no labels in the estimator, so R1, R2 and R8 have nothing to leak. R7 does not apply: every value is descriptive, and no p-value or significance claim may appear in the P12 report (P13 adds them).
+- The result is reported per subject (R9). Only S03/S04 were run, as the roadmap scopes; the report must not generalise to the cohort.
+- The matched baseline (PF-16) changes conclusions, not only levels:
+  - S03 105: broadband difference +0.1934 vs matched +0.0414;
+  - S04 103: broadband −0.0048 vs matched +0.0554 (sign flip).
+  
+  The report must cite these as the PF-16 demonstration.
+- There is a residual small positive bias from unequal window counts (37–40 stimulus vs 77–78 baseline; about +0.006 in synthetic data, N1). It cannot explain any A4 value but belongs beside A5.
+
+### What the report must say
+
+1. The data source line as above (legacy, 7 ch, OO, raw windows, fs-250 axis labelled PF-04 with the true bins, one P07 gate over 101–105 plus 201, no channel dropped).
+2. PF-15 is reproduced (A1) and fixed (A2/A3). R-11 "baseline coherence" is the 5–35 Hz 201 value per subject (settled point 2 amended after the pre-run audit; the superseded per-band reading named). The per-band values are descriptive.
+3. PF-16 is reproduced, with the two examples above. The difference against the matched baseline is the primary output.
+4. The A4 values per subject and both estimators. A5 values per subject, labelled descriptive.
+5. The alpha-ceiling hypothesis, the alpha-desynchronisation alternative and the A6 junction result, worded as above, with "to be tested in P13 (trial-level permutations)".
+6. The A6 flag: "S03 105 estimator-sensitive (Δ +0.0565); sign opposite to the junction prediction; near zero under both estimators". Never "junction-biased".
+7. Colour scales are per subject. The deviations table above (the two edge overshoots inside ±0.05).
+8. The full suite takes 723 tests in about 6 min (N3/N4), above "about a minute".
+
 ### Decisions for decisions.md
+
+1. P12 R-11 accepted: A0–A5 PASS on the run at cb446b0 (06_verify.md b68f5eb). S03 baseline-after 0.5871 (0.0029 below ≈0.59) and S03 102 +0.2511 (0.0011 above ≈0.25) are accepted under the descriptive ±0.05 row.
+2. A6: S03 105 is recorded as estimator-sensitive, not junction-biased (Δ +0.0565, opposite sign). The junction concern F2 is not material for S03/S04 (8/10 \|Δ\| < 0.03, signs mixed). P13 keeps the aligned diagnostic and re-checks it on permuted re-concatenations.
+3. The alpha-band ceiling hypothesis for 10.91/8.57 Hz is recorded, together with the alpha-desynchronisation alternative (S03 104 stimulus below baseline). P13 tests both with trial-level permutations per band and a baseline-level vs difference check over the five subjects.
+4. Difference-panel colour limits are per subject. Any cross-subject figure in P13 must use one shared limit or say that it does not.
+
+Verdict: APPROVE
 
 ## Sources spot-check
 
