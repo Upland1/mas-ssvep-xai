@@ -89,11 +89,11 @@ phases:
     passed: '2026-10-26'
   P11:
     slug: trial-leakage-fix
-    status: pending
+    status: in_progress
     owner: orchestrator
-    branch: null
+    branch: phase/P11-trial-leakage-fix
     commit: null
-    opened: null
+    opened: '2026-10-26'
     passed: null
   P12:
     slug: coherence
