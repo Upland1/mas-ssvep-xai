@@ -204,3 +204,28 @@ Sources: `reports/eegnet_benchmark_cpu.csv`, `reports/eegnet_benchmark_cuda.csv`
 **Review.** Pre-run audit PASS in Round 1 (`2543a33`), no required fixes, four non-blocking notes. Results review APPROVE (`ef124c1`), no deviations to accept. Verifier PASS (`ac856ad`). The original repository was not consulted (R11).
 
 **Open.** Carried forward: data-source line and `n_channels` in the EEGNet `.meta.txt` (R9); unused `discover_subjects` import; a test that the EEGNet gate matches `prepare_subject` on a tree with a bad channel (P09 or P10); a saved pytest log under `reports/logs/P08/`; the equivalence of the max-norm to the original constraint is not verified. The reviewer's note that quotes R-6 (+7 windows) is not carried here, pending the orchestrator's decision. Next phase: P09.
+
+## P09 — Compact-CNN and ShallowConvNet
+
+2026-10-26, branch `phase/P09-compact-shallow-cnn`. Code and reported runs at `edd476e`; pre-run audit `15aaa5d`; verifier `7ced253`; results review `f20ea80`. Phase report: `mas/state/reports/P09.md` (to be filed).
+
+**Aim.** Roadmap P09: two more networks on the S03 raw legacy windows, `CompactCNN` (named `compact_cnn`, PF-31) and `ShallowConvNet`, with R-8 parameter counts exact (2,349 / 14,485 / 56,021) and benchmarks that mirror the P08 EEGNet protocol. Everything stays legacy: window-level `StratifiedKFold(5, shuffle, 42)` (R1, PF-01), `i % 5` smoothing (R8, PF-02), the P07 gate applied per script (R5 legacy). Compact-CNN's temporal kernel uses the legacy 250 Hz label, K = 29 (PF-04); at 256 Hz it would be K = 30 and 56,693 parameters.
+
+**Build.** `src/models/cnn/compact_cnn.py` and `src/models/cnn/shallow_conv_net.py` (NEW). `src/models/cnn/benchmark_common.py` (NEW) is one shared driver for the three benchmark scripts; `benchmark_eegnet.py` became a thin wrapper and `src/models/cnn/eegnet_cv.py` takes a network builder (both MODIFIED). The P08 carry-forwards are done: data-source line and `n_channels` in `.meta.txt`, unused import removed. `scripts/benchmarks/neural_networks/count_parameters.py` (NEW) exits 1 on any R-8 mismatch. Tests: `tests/test_p09_compact_shallow.py` (25) and `tests/test_p09_known_answer.py` (20), both NEW; full suite `573 passed, 21 warnings` (`reports/logs/P09/pytest_20261026T002847.log`), up from 528 at P08.
+
+**Results (legacy, leaky, S03, CPU; not comparable with R-6).** Clean / rejected 197 / 3, 7 channels kept, none dropped, for both networks.
+
+| Model | Params | 1.0 s (%) | k/197 | 2.0 s smoothed (%) | k/197 | Train, mean over folds (%) |
+|---|---|---|---|---|---|---|
+| compact_cnn | 56,021 | 54.31 | 107 | 62.94 | 124 | 100.00 |
+| shallow_convnet | 14,485 | 86.80 | 171 | 92.89 | 183 | 100.00 |
+
+Sources: `reports/compact_cnn_benchmark_cpu.csv`, `reports/shallow_convnet_benchmark_cpu.csv` (and `.meta.txt`); logs `reports/logs/P09/benchmark_{compact_cnn,shallow_convnet}_run{1,2}_*.log`. Each network repeated itself exactly over two runs (CSV, `.meta.txt`, fold and summary lines).
+
+**Diagnostics (not targets).** Against the leaky classical flagship on S03 (178 / 188): compact −71 / −64, shallow −7 / −5. Against the P08 EEGNet CPU run (149 / 169): compact −42 / −45, shallow +22 / +14. Against leak-free R-9b without augmentation (compact 84 / 92, shallow 169 / 180): compact +23 / +32, inconclusive; shallow +2 / +3, within noise. Against R-7 (augmentation on, 1.0 s: compact 124, shallow 176): compact −17, shallow −5. The compact 2.0 s value (124) equals R-7's compact 1.0 s value by coincidence; they are different quantities.
+
+**Reading.** On S03, under the legacy leaky protocol on CPU, the only accepted ordering is ShallowConvNet > EEGNet > Compact-CNN (`decisions.md` P09 row). It is one subject, one device and one seed set: not a cohort ranking and not a best-network claim. Train accuracy is 100 % in all ten folds for both networks, against test 48.72–58.97 % (compact) and 79.49–92.31 % (shallow): a generalization gap, not an optimization failure (PF-30). The gap is larger for Compact-CNN, whose linear head holds 73 % of its parameters; that is a hypothesis and is not tested here.
+
+**Review.** Pre-run audit PASS in Round 1, no required fixes, three non-blocking notes. Results review APPROVE; acceptance met, no deviations to accept. Verifier PASS. Decisions rows 88–90 in `mas/state/decisions.md`.
+
+**Open.** The EEGNet S03 benchmark was not re-run after the refactor; its identity rests on the synthetic hash pin (`tests/test_p09_compact_shallow.py:23`) and on the reviewer's comparison with the P08 code. Non-blocking notes N1–N3 (z-score spy in the mirror test; gate-equality test does not compare window values; `count_parameters` writes its CSV before the R-8 check). Test suite runtime 219 s against the "about a minute" target. The max-norm equivalence claim from P08 remains unverified.

@@ -177,3 +177,24 @@ Result and scope
 - S03, `reports/eegnet_benchmark_cuda.csv`: 1.0 s 71.07 % (140 / 197), 2.0 s smoothed 81.22 % (160 / 197), train 98.60 %.
 - Each device identical over two runs; CPU–CUDA gap 9 windows, reported per device, not averaged.
 - Legacy throughout (R1, R8, R5 legacy, fs 250 label). Not comparable with R-6; the classical flagship comparison is a labelled diagnostic only.
+
+## P09 — Compact-CNN and ShallowConvNet
+
+2026-10-26, branch `phase/P09-compact-shallow-cnn`. Code and reported runs at `edd476e`; results review at `f20ea80`. Phase report: `mas/state/reports/P09.md` (to be filed).
+
+Added
+- `src/models/cnn/compact_cnn.py`: `CompactCNN` (spatial conv, temporal conv with K = clamp(round(fs / 8.5714), 4, n_samples), legacy fs 250 default, K = 29; 56,021 parameters).
+- `src/models/cnn/shallow_conv_net.py`: `ShallowConvNet` (temporal and spatial convs, square, average pool, log with clamp 1e-6; 14,485 parameters).
+- `src/models/cnn/benchmark_common.py`: shared benchmark driver (gate, legacy folds, training, CSV and `.meta.txt`).
+- `scripts/benchmarks/neural_networks/benchmark_compact_cnn.py`, `benchmark_shallow_convnet.py`, `count_parameters.py` (counts at 7 × 256, exit 1 on an R-8 mismatch; writes `reports/network_parameter_counts.csv`).
+- `tests/test_p09_compact_shallow.py` (25) and `tests/test_p09_known_answer.py` (20); suite `573 passed, 21 warnings`.
+
+Changed
+- `src/models/cnn/eegnet_cv.py`: network-agnostic training; the EEGNet path is unchanged (synthetic hash pin).
+- `scripts/benchmarks/neural_networks/benchmark_eegnet.py`: thin wrapper over the shared driver; `.meta.txt` now has the data-source line and `n_channels` (P08 carry-forward).
+
+Result and scope
+- S03, legacy leaky CV, CPU, `reports/compact_cnn_benchmark_cpu.csv`: 1.0 s 54.31 % (107 / 197), 2.0 s smoothed 62.94 % (124 / 197), train 100.00 %.
+- S03, legacy leaky CV, CPU, `reports/shallow_convnet_benchmark_cpu.csv`: 1.0 s 86.80 % (171 / 197), 2.0 s smoothed 92.89 % (183 / 197), train 100.00 %.
+- Parameter counts equal R-8 (2,349 / 14,485 / 56,021), `reports/network_parameter_counts.csv`.
+- Each network identical over two runs. Legacy throughout (R1, R8, R5 legacy, fs 250 label for Compact-CNN). Not comparable with R-6; the ordering on S03 is not a cohort ranking.
