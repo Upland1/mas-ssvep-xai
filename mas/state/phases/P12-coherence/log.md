@@ -14,3 +14,4 @@
 | 6 Test (Round 1) | synthetic-tester | 2026-10-26 | 0d46099, b9d9d3e: +6 cases (broadband baseline, labels, aligned estimator, junction case); 5 new mutants caught; suite `723 passed, 21 warnings in 354.22s` | 2 | 07_review.md fix 4 | none | |
 | 7 Pre-run audit (Round 2) | scientific-reviewer | 2026-10-26 | PASS (35a1f29); fixes 1–4 verified; A0–A6 unchanged; flagged-band reading rule for the results review | 2 | R-11, PF-15/16 | none | |
 | 8 Run + verify | verifier | 2026-10-26 | PASS (b68f5eb) at cb446b0; suite 723 passed; A0–A5 pass (S03 baseline 0.6836→0.5871, S04 0.7291→0.6589; 101/102 S03 +0.2494/+0.2511, S04 +0.1281/+0.1105); A6 flags S03 105 (gap +0.0565, estimator-sensitive) | 1 | R-11 | none | legacy hashes unchanged |
+| 9 Results review | scientific-reviewer | 2026-10-26 | APPROVE (66f3346); D-1–D-4 recorded | 1 | R-11, CSVs, figures | none | |
