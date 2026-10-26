@@ -22,6 +22,7 @@ from scipy.signal import coherence
 
 from src.features.ssvep.spectral_power import LEGACY_FS_HZ  # legacy label (PF-04)
 from src.io.channels import subject_channel_names
+from src.preprocessing.dataset.cv_utils import LEGACY_TRIAL_LENGTHS, build_trial_ids, trial_block_report
 from src.preprocessing.signal.quality_check import apply_artifact_quality_pipeline
 
 CONDITION_FREQS = {101: 24.0, 102: 20.0, 103: 15.0, 104: 10.9091, 105: 8.5714}
@@ -241,24 +242,46 @@ def meta_lines(rows: list, channels: Sequence[str], dropped: Sequence[str], fs: 
   return out
 
 
-def load_gated_conditions(processed_dir: Path, subject: str, channel_names: Optional[Sequence[str]] = None) -> dict:
-  """Legacy windows of 101-105 and 201 after ONE P07 gate decision over their union (202 excluded).
+def load_legacy_selection(processed_dir: Path, subject: str, channel_names: Optional[Sequence[str]] = None) -> dict:
+  """PRE-gate legacy windows of 101-105 and 201 with trial ids (P13, PF-03).
 
-  Returns `windows (n, C', T)`, `y`, `channels_kept`, `channels_dropped`, `counts` (per condition:
-  total / clean / rejected) and `n_total_windows`. Stimulus and baseline share the same channels.
+  Trial ids come from `build_trial_ids` on the full pre-gate labels (202 included in the walk), then the
+  same condition selection as the windows. Returns `windows`, `y`, `trial_ids`, `channel_names`,
+  `trial_ids_approximate` (True when a pre-gate block is not a multiple of its trial length, P11 D-2).
   """
   d = Path(processed_dir) / subject
   X = np.load(d / "X_time_windows.npy")
-  y = np.load(d / "y_labels.npy").astype(np.int64).reshape(-1)
-  if X.ndim != 3 or len(X) != len(y):
-    raise ValueError(f"{subject}: X_time_windows {X.shape} vs y {y.shape}")
-  keep = np.isin(y, list(CONDITION_FREQS) + [BASELINE_CONDITION])
-  X, y = X[keep], y[keep]
+  y_all = np.load(d / "y_labels.npy").astype(np.int64).reshape(-1)
+  if X.ndim != 3 or len(X) != len(y_all):
+    raise ValueError(f"{subject}: X_time_windows {X.shape} vs y {y_all.shape}")
+  ids_all = build_trial_ids(y_all, LEGACY_TRIAL_LENGTHS, warn=False)
+  approx = trial_block_report(y_all, ids_all, LEGACY_TRIAL_LENGTHS)["approximate"]
+  keep = np.isin(y_all, list(CONDITION_FREQS) + [BASELINE_CONDITION])
   names = list(channel_names) if channel_names is not None else subject_channel_names(processed_dir, subject, X.shape[1])
-  q = apply_artifact_quality_pipeline(X, y, names, verbose=False, **GATE)
+  return dict(windows=X[keep], y=y_all[keep], trial_ids=ids_all[keep], channel_names=names,
+              trial_ids_approximate=bool(approx))
+
+
+def gate_selection(sel: dict) -> dict:
+  """ONE P07 two-tier gate over a `load_legacy_selection` dict, every threshold explicit."""
+  return apply_artifact_quality_pipeline(sel["windows"], sel["y"], sel["channel_names"], verbose=False, **GATE)
+
+
+def load_gated_conditions(processed_dir: Path, subject: str, channel_names: Optional[Sequence[str]] = None) -> dict:
+  """Legacy windows of 101-105 and 201 after ONE P07 gate decision over their union (202 excluded).
+
+  Returns `windows (n, C', T)`, `y`, `trial_ids` (pre-gate ids masked like the windows, PF-03),
+  `trial_ids_approximate`, `channels_kept`, `channels_dropped`, `counts` (per condition:
+  total / clean / rejected) and `n_total_windows`. Stimulus and baseline share the same channels.
+  """
+  sel = load_legacy_selection(processed_dir, subject, channel_names)
+  y = sel["y"]
+  q = gate_selection(sel)
   counts = {}
   for c in list(CONDITION_FREQS) + [BASELINE_CONDITION]:
     n_tot, n_ok = int((y == c).sum()), int((q["y_clean"] == c).sum())
     counts[c] = dict(total=n_tot, clean=n_ok, rejected=n_tot - n_ok)
   return dict(windows=q["windows_clean"], y=q["y_clean"], channels_kept=q["channels_kept"],
-              channels_dropped=q["channels_dropped"], counts=counts, n_total_windows=len(y))
+              channels_dropped=q["channels_dropped"], counts=counts, n_total_windows=len(y),
+              trial_ids=sel["trial_ids"][np.asarray(q["valid_mask"]).astype(bool)],
+              trial_ids_approximate=sel["trial_ids_approximate"])
