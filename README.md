@@ -30,6 +30,16 @@ python mas/tools/mas_status.py show    # phase table (after P00 init)
 
 Open blockers are in `mas/state/blockers/`.
 
+## Results status (P11, trial-leakage fix)
+
+Legacy folders (7 channels, CPU, one training seed 42 for the networks). Full record: `mas/state/reports/P11.md`; numbers from `reports/n_subjects_benchmark.csv`, `reports/cv_leakage_demo.csv`, `reports/cv_leakage_demo_networks.csv`, `reports/augmentation_ab_<model>.csv`.
+
+- **Flagship, trial-grouped CV (R-6 reproduced exactly):** 79.28 % at 1.0 s and 82.61 % at 2.0 s (legacy `i % 5` smoothing; mean over S01–S05).
+- **Size of the classical inflation:** −4.06 pp (1.0 s) and −4.96 pp (2.0 s) on the cohort mean (leaky 83.33 / 87.57 %); S02 −10.21 pp at 1.0 s. S02 and S04 have approximate trial ids, so a small residual leak can remain there until P16.
+- **Networks, seed 42 against the single-seed leaky run:** EEGNet OFF −5.57 pp, Compact-CNN OFF −5.56 pp, ShallowConvNet OFF −3.04 pp at 1.0 s. The training-seed range on EEGNet S03 (16.75 pp) is of the same order as its seed-42 drop (−20.81 pp), so per-subject network differences are not leak sizes; the three-seed EEGNet cohort drop (OFF, 1.0 s) is −2.71 pp.
+- **Augmentation A/B vs R-9b:** 13 of 14 out-of-band cells are explained by training-seed variance. Compact-CNN S03 2.0 s ON is not reproduced within tolerance (accepted as a documented deviation by Sebastian, D-8, B006).
+- The CNN-specific inflation of the original project was not reproduced here; the classical inflation was.
+
 ## Data policy
 
 The recordings are private human-subject data and are never committed.
