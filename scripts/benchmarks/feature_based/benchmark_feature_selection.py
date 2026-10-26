@@ -14,13 +14,16 @@ fitted on the training rows of its fold only (R2/PF-11) and applied to the test 
   ANOVA F-score                      p = k + 5 (SelectKBest(f_classif) on the 50 FBCSP columns, FBCCA kept)
   Mutual information                 p = k + 5 (mutual_info_classif, random_state = seed)
   Sequential forward selection       p = 15 + 5 (SFS of the scaler + Shrinkage-LDA pipeline on the 50
-                                     FBCSP columns, scikit-learn inner 5-fold CV, FBCCA kept)
+                                     FBCSP columns, inner 5-fold CV, FBCCA kept)
 
-Legacy behaviours (labelled, fixed in later phases): R1/PF-01 StratifiedKFold(5, shuffle, 42) over
-windows (leaky); R8/PF-02 "2.0 s smoothed" = legacy i%5 trial smoothing; R3/PF-14 and PF-04
-per-window sub-band filtering at fs 250.
+CV protocol (P11): `--cv grouped` (default) = StratifiedGroupKFold(5, shuffle, 42) over reconstructed
+trial ids for the outer folds AND for the SFS inner CV (grouped over the training-fold trial ids,
+PF-01) and `--smoothing trial` (default, R8). `--cv legacy --smoothing mod5` reproduces P06 (window-level
+outer StratifiedKFold, scikit-learn default inner 5-fold, i%5 smoothing; leaky) and writes under
+<reports-dir>/legacy_leaky/. The `--sfs-diagnostics` variants keep their labelled P06 inner CVs.
+Still legacy (labelled): R3/PF-14 and PF-04 per-window sub-band filtering at fs 250.
 
-Output: <reports-dir>/feature_selection_ablation_<S>.csv (Subject, Method, p, 1.0s Acc (%),
+Output: <reports-dir>[/legacy_leaky]/feature_selection_ablation_<S>.csv (Subject, Method, p, 1.0s Acc (%),
 2.0s Smoothed (%), Clean Windows, Rejected) and a .meta.txt with the protocol labels.
 """
 
@@ -59,10 +62,12 @@ from src.features.ssvep.fbcsp_extraction import DEFAULT_SUBBANDS  # noqa: E402
 from src.features.ssvep.spectral_power import LEGACY_FS_HZ  # noqa: E402
 from src.models.classical.benchmark_runner import channel_summary  # noqa: E402
 from src.models.classical.benchmark_runner import (  # noqa: E402
-  DEFAULT_SUBJECT, legacy_header_lines, load_config, prepare_subject)
+  DEFAULT_SUBJECT, add_protocol_args, legacy_header_lines, load_config, output_dir, prepare_subject,
+  print_trial_report, protocol_labels, trial_ids_header)
 from src.models.classical.feature_spaces import benchmark_spaces  # noqa: E402
 from src.models.classical.legacy_eval import (  # noqa: E402
-  CV_LABEL, SEED, SMOOTH_LABEL, accuracies, class_scores, fold_matrices, legacy_cv, space_width)
+  SEED, accuracies, class_scores, fold_matrices, space_width, splits_for)
+from src.preprocessing.dataset.cv_utils import grouped_cv  # noqa: E402
 from src.preprocessing.dataset.legacy_windows import CLASS_CODES  # noqa: E402
 
 DEFAULT_CONFIG = ROOT / "configs" / "pipeline_config.yaml"
@@ -89,6 +94,7 @@ def build_parser() -> argparse.ArgumentParser:
   p.add_argument("--sfs-diagnostics", action="store_true",
                  help="DIAGNOSTIC only: also run labelled SFS variants and a leak audit (reported rows unchanged)")
   p.add_argument("--skip-sfs", action="store_true", help="omit the SFS row (smoke runs only)")
+  add_protocol_args(p)
   return p
 
 
@@ -103,9 +109,18 @@ def _model() -> Pipeline:
   return Pipeline([("scaler", StandardScaler()), ("clf", LinearDiscriminantAnalysis(solver="lsqr", shrinkage="auto"))])
 
 
+def inner_sfs_splits(ytr: np.ndarray, ids_tr: Optional[np.ndarray], seed: int = SEED) -> Optional[list]:
+  """PF-01: grouped inner splits of the SFS over the training-fold trial ids (`StratifiedGroupKFold(5,
+  shuffle, seed)`); None (legacy: scikit-learn default inner 5-fold over windows) when `ids_tr` is None."""
+  if ids_tr is None:
+    return None
+  return list(grouped_cv(seed).split(np.zeros((len(ytr), 1)), ytr, np.asarray(ids_tr)))
+
+
 def column_sets(Xtr: np.ndarray, ytr: np.ndarray, n_fbcsp: int, k: int, sfs_k: int, seed: int,
-                n_jobs: Optional[int] = 1, include_sfs: bool = True) -> dict:
-  """Column indices (into the 55-column fold matrix) of every method, computed from the TRAINING rows only (R2/PF-11)."""
+                n_jobs: Optional[int] = 1, include_sfs: bool = True, ids_tr: Optional[np.ndarray] = None) -> dict:
+  """Column indices (into the 55-column fold matrix) of every method, computed from the TRAINING rows only (R2/PF-11).
+  `ids_tr` (trial ids of the training rows) makes the SFS inner CV trial-grouped (PF-01)."""
   n_cols = Xtr.shape[1]
   fb = Xtr[:, :n_fbcsp]
   tail = np.arange(n_fbcsp, n_cols)
@@ -114,14 +129,16 @@ def column_sets(Xtr: np.ndarray, ytr: np.ndarray, n_fbcsp: int, k: int, sfs_k: i
          ANOVA: np.concatenate([select_k_best_fbcsp_features(fb, ytr, k, "anova", seed), tail]),
          MI: np.concatenate([select_k_best_fbcsp_features(fb, ytr, k, "mutual_info", seed), tail])}
   if include_sfs:
-    sel[SFS] = np.concatenate([select_sfs_fbcsp_features(fb, ytr, sfs_k, n_jobs=n_jobs), tail])
+    sel[SFS] = np.concatenate([select_sfs_fbcsp_features(fb, ytr, sfs_k, n_jobs=n_jobs, cv=inner_sfs_splits(ytr, ids_tr, seed)), tail])
   return sel
 
 
 def run_ablation(blocks: dict, subject: str, k: int = 20, sfs_k: int = 15, m: int = 1, seed: int = SEED,
-                 n_jobs: Optional[int] = 1, include_sfs: bool = True, verbose: bool = True) -> list:
+                 n_jobs: Optional[int] = 1, include_sfs: bool = True, verbose: bool = True,
+                 cv: str = "grouped", smoothing: str = "trial") -> list:
   """Rows of the ablation table; fold matrices (and the CSP) are built once per fold from its training rows."""
   y = blocks["y"]
+  ids = blocks.get("trial_ids")
   space = [s for s in benchmark_spaces(blocks, m) if s.name == SPACE][0]
   n_bands = blocks["subbands"].shape[1]
   n_fbcsp = len(CLASS_CODES) * 2 * m * n_bands
@@ -129,10 +146,11 @@ def run_ablation(blocks: dict, subject: str, k: int = 20, sfs_k: int = 15, m: in
   classes = np.unique(y)
   out = {mm: {"pred": np.zeros(len(y), dtype=y.dtype), "scores": np.zeros((len(y), len(classes)))} for mm in methods}
   widths = {}
-  for f, (tr, te) in enumerate(legacy_cv(seed).split(np.zeros((len(y), 1)), y)):
+  for f, (tr, te) in enumerate(splits_for(cv, y, ids, seed)):
     t0 = time.time()
     Xtr, Xte = fold_matrices(space, blocks["subbands"], y, tr, te)
-    sel = column_sets(Xtr, y[tr], n_fbcsp, k, sfs_k, seed, n_jobs, include_sfs)
+    sel = column_sets(Xtr, y[tr], n_fbcsp, k, sfs_k, seed, n_jobs, include_sfs,
+                      ids[tr] if cv == "grouped" else None)
     for mm in methods:
       cols = sel[mm]
       widths[mm] = len(cols)
@@ -146,7 +164,7 @@ def run_ablation(blocks: dict, subject: str, k: int = 20, sfs_k: int = 15, m: in
   common = {"Subject": subject, "Clean Windows": blocks["n_clean"], "Rejected": blocks["n_rejected"]}
   rows = []
   for mm in methods:
-    a1, a2 = accuracies(y, out[mm]["pred"], out[mm]["scores"])
+    a1, a2 = accuracies(y, out[mm]["pred"], out[mm]["scores"], ids, smoothing)
     rows.append({**common, "Method": mm, "p": widths[mm],
                  "1.0s Acc (%)": round(100 * a1, 2), "2.0s Smoothed (%)": round(100 * a2, 2)})
     if verbose:
@@ -211,7 +229,8 @@ def leak_audit_row(subject: str, f: int, tr: np.ndarray, te: np.ndarray, Xtr: np
 
 
 def run_sfs_diagnostics(blocks: dict, subject: str, sfs_k: int = 15, m: int = 1, seed: int = SEED,
-                        n_jobs: Optional[int] = 1, variants: Optional[list] = None, verbose: bool = True) -> tuple:
+                        n_jobs: Optional[int] = 1, variants: Optional[list] = None, verbose: bool = True,
+                        cv_outer: str = "grouped", smoothing: str = "trial") -> tuple:
   """`(variant rows, audit rows)`. The final classifier of every variant is the reported scaler + Shrinkage-LDA;
   only the SFS configuration changes. Fold matrices (and CSP) are built once per fold from its training rows."""
   y = blocks["y"]
@@ -219,7 +238,8 @@ def run_sfs_diagnostics(blocks: dict, subject: str, sfs_k: int = 15, m: int = 1,
   n_fbcsp = len(CLASS_CODES) * 2 * m * blocks["subbands"].shape[1]
   variants = sfs_variants(sfs_k) if variants is None else variants
   classes = np.unique(y)
-  splits = list(legacy_cv(seed).split(np.zeros((len(y), 1)), y))
+  ids = blocks.get("trial_ids")
+  splits = splits_for(cv_outer, y, ids, seed)
   mats = [fold_matrices(space, blocks["subbands"], y, tr, te) for tr, te in splits]
   audit = []
   rows = []
@@ -236,7 +256,7 @@ def run_sfs_diagnostics(blocks: dict, subject: str, sfs_k: int = 15, m: int = 1,
         warnings.simplefilter("ignore")
         pipe = _model().fit(Xtr[:, cols], y[tr])
         pred[te], sc[te] = pipe.predict(Xte[:, cols]), class_scores(pipe, Xte[:, cols])
-    a1, a2 = accuracies(y, pred, sc)
+    a1, a2 = accuracies(y, pred, sc, ids, smoothing)
     rows.append({"Subject": subject, "Variant": name, "Inner CV": cv, "Inner shuffle": shuffle, "Estimator": est,
                  "Candidates": cand, "n_features": n, "p": width, "1.0s Acc (%)": round(100 * a1, 2),
                  "2.0s Smoothed (%)": round(100 * a2, 2), "Clean Windows": blocks["n_clean"],
@@ -251,30 +271,35 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
   args = build_parser().parse_args(argv)
   cfg = load_config(args.config)
   processed = args.processed_dir or ROOT / cfg["paths"]["data_processed_dir"]
-  reports = Path(args.reports_dir or ROOT / "reports")
+  reports = output_dir(args.reports_dir or ROOT / "reports", args.cv)
   t0 = time.time()
   try:
     b = prepare_subject(processed, args.subject, None, args.fs)
   except (FileNotFoundError, ValueError) as exc:
     print(f"[-] Skipping {args.subject}: {exc}")
     return 1
-  header = legacy_header_lines(args.fs, b["thresholds"], args.seed, CV_LABEL, SMOOTH_LABEL, b["fbcca_channels"])
+  header = legacy_header_lines(args.fs, b["thresholds"], args.seed, *protocol_labels(args.cv, args.smoothing),
+                          b["fbcca_channels"])
+  header.append("SFS inner CV: " + ("StratifiedGroupKFold(5, shuffle, 42) over the training-fold trial ids (PF-01)"
+                                    if args.cv == "grouped" else "scikit-learn default 5-fold over windows (legacy P06, leaky)"))
   header.append(f"selection (R2/PF-11): ANOVA/MI keep {args.k_features} of the FBCSP columns, SFS {args.sfs_features}, "
                 f"FBCCA always kept; all selection fitted on the training rows of each fold")
   print(f"Data source: legacy windows, {_rel(processed)}/{args.subject}/ (P02, OO session), stimulus windows only")
   print("\n".join(header))
+  print_trial_report(args.subject, b)
   print(f"  {channel_summary(b)}")
   print(f"\n[+] {args.subject}: {b['n_stimulus']} stimulus windows, {b['n_clean']} clean, {b['n_rejected']} rejected")
   rows = run_ablation(b, args.subject, args.k_features, args.sfs_features, args.m, args.seed, args.n_jobs,
-                      include_sfs=not args.skip_sfs)
+                      include_sfs=not args.skip_sfs, cv=args.cv, smoothing=args.smoothing)
   df = pd.DataFrame(rows, columns=COLUMNS)
   csv = reports / f"feature_selection_ablation_{args.subject}.csv"
   csv.parent.mkdir(parents=True, exist_ok=True)
   df.to_csv(csv, index=False)
-  csv.with_suffix(".meta.txt").write_text("\n".join(header) + "\n")
+  csv.with_suffix(".meta.txt").write_text("\n".join(header + [trial_ids_header(b)]) + "\n")
   if args.sfs_diagnostics:
     print(f"\n{DIAG_LABEL}: SFS variants (final classifier = reported scaler + Shrinkage-LDA; reported rows above unchanged)")
-    drows, arows = run_sfs_diagnostics(b, args.subject, args.sfs_features, args.m, args.seed, args.n_jobs)
+    drows, arows = run_sfs_diagnostics(b, args.subject, args.sfs_features, args.m, args.seed, args.n_jobs,
+                                   cv_outer=args.cv, smoothing=args.smoothing)
     dcsv = reports / f"feature_selection_sfs_diagnostics_{args.subject}.csv"
     pd.DataFrame(drows, columns=DIAG_COLUMNS).to_csv(dcsv, index=False)
     acsv = reports / f"feature_selection_sfs_audit_{args.subject}.csv"

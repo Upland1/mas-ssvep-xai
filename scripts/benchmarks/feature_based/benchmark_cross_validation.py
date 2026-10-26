@@ -12,13 +12,13 @@ runs in scripts.evaluation.test_sklearn_models), plus the zero-training FBCCA ar
 Every model is a Pipeline(StandardScaler, model) and the CSP is fitted on the training fold
 only (R2/PF-11).
 
-Legacy behaviours (labelled, fixed in later phases):
-- R1 / PF-01: StratifiedKFold(5, shuffle, 42) over windows (leaky; not comparable with R-6).
-- R8 / PF-02: "2.0 s smoothed" = legacy i%5 trial smoothing of the out-of-fold scores (2-window
-  average, reset at i % 5 == 0 of the clean array).
-- R3 / PF-14 and PF-04: per-window sub-band filtering, fs 250 on 256 Hz data.
+CV protocol (P11): `--cv grouped` (default) = StratifiedGroupKFold(5, shuffle, 42) over
+reconstructed trial ids (R1, PF-03) and `--smoothing trial` (default) = 2-window average that resets
+at each trial id (R8). `--cv legacy --smoothing mod5` reproduces P05-P10 (R1/PF-01 window-level
+StratifiedKFold, leaky; R8/PF-02 i%5 reset) and writes under <reports-dir>/legacy_leaky/.
+Still legacy (labelled): R3 / PF-14 and PF-04 per-window sub-band filtering, fs 250 on 256 Hz data.
 
-Output: <reports-dir>/feature_space_benchmark_<S>.csv (Subject, Feature space, p, Model,
+Output: <reports-dir>[/legacy_leaky]/feature_space_benchmark_<S>.csv (Subject, Feature space, p, Model,
 1.0s Acc (%), 2.0s Smoothed (%), Clean Windows, Rejected) and a .meta.txt with the protocol labels.
 """
 
@@ -48,10 +48,11 @@ if str(ROOT) not in sys.path:
 from src.features.ssvep.spectral_power import LEGACY_FS_HZ  # noqa: E402
 from src.models.classical.benchmark_runner import channel_summary  # noqa: E402
 from src.models.classical.benchmark_runner import (  # noqa: E402
-  DEFAULT_SUBJECT, legacy_header_lines, load_config, prepare_subject)
+  DEFAULT_SUBJECT, add_protocol_args, legacy_header_lines, load_config, output_dir, prepare_subject,
+  print_trial_report, protocol_labels, trial_ids_header)
 from src.models.classical.feature_spaces import benchmark_spaces  # noqa: E402
 from src.models.classical.legacy_eval import (  # noqa: E402
-  CV_LABEL, SEED, SMOOTH_LABEL, accuracies, fbcca_argmax_baseline, oof_space, smooth_reported, space_width)
+  SEED, accuracies, fbcca_argmax_baseline, oof_space, smooth_scores, space_width, splits_for)
 from src.models.classical.sklearn_models import QDA_NAME, get_sklearn_model_suite  # noqa: E402
 from src.preprocessing.dataset.legacy_windows import CLASS_CODES  # noqa: E402
 
@@ -70,6 +71,7 @@ def build_parser() -> argparse.ArgumentParser:
   p.add_argument("--fs", type=float, default=LEGACY_FS_HZ, help=f"feature sampling rate (default {LEGACY_FS_HZ:g}, legacy PF-04)")
   p.add_argument("--m", type=int, default=1, help="CSP components per side (default 1)")
   p.add_argument("--seed", type=int, default=SEED, help=f"CV shuffle and SGD seed (default {SEED})")
+  add_protocol_args(p)
   return p
 
 
@@ -80,18 +82,21 @@ def _rel(path: Path) -> str:
     return str(path)
 
 
-def run_benchmark(blocks: dict, subject: str, m: int = 1, seed: int = SEED, verbose: bool = True) -> tuple:
+def run_benchmark(blocks: dict, subject: str, m: int = 1, seed: int = SEED, verbose: bool = True,
+                  cv: str = "grouped", smoothing: str = "trial") -> tuple:
   """Rows of the benchmark table and the model failures `[(space, model, error)]`."""
   y = blocks["y"]
+  ids = blocks.get("trial_ids")
+  splits = splits_for(cv, y, ids, seed)
   models = {k: v for k, v in get_sklearn_model_suite(seed).items() if k != QDA_NAME}   # PF-12
   rows, failures = [], []
   common = {"Subject": subject, "Clean Windows": blocks["n_clean"], "Rejected": blocks["n_rejected"]}
   for space in benchmark_spaces(blocks, m):
     t0 = time.time()
-    res, errs = oof_space(space, blocks["subbands"], y, models, seed)
+    res, errs = oof_space(space, blocks["subbands"], y, models, seed, splits)
     p = space_width(space, n_bands=blocks["subbands"].shape[1], n_classes=len(CLASS_CODES))
     for name, r in res.items():
-      a1, a2 = accuracies(y, r["pred"], r["scores"])
+      a1, a2 = accuracies(y, r["pred"], r["scores"], ids, smoothing)
       rows.append({**common, "Feature space": space.name, "p": p, "Model": name,
                    "1.0s Acc (%)": round(100 * a1, 2), "2.0s Smoothed (%)": round(100 * a2, 2)})
       if verbose:
@@ -103,7 +108,7 @@ def run_benchmark(blocks: dict, subject: str, m: int = 1, seed: int = SEED, verb
       print(f"  ({space.name}: {time.time() - t0:.1f} s)")
   pred, sc = fbcca_argmax_baseline(blocks["fbcca"], y, CLASS_CODES)
   classes = sorted(set(int(v) for v in y))
-  sm = np.asarray(classes)[np.argmax(smooth_reported(sc), axis=1)]
+  sm = np.asarray(classes)[np.argmax(smooth_scores(sc, ids, smoothing), axis=1)]
   a1, a2 = float(np.mean(pred == y)), float(np.mean(sm == y))
   rows.append({**common, "Feature space": ARGMAX_SPACE, "p": blocks["fbcca"].shape[1], "Model": "argmax",
                "1.0s Acc (%)": round(100 * a1, 2), "2.0s Smoothed (%)": round(100 * a2, 2)})
@@ -124,19 +129,20 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
   except (FileNotFoundError, ValueError) as exc:
     print(f"[-] Skipping {args.subject}: {exc}")
     return 1
-  header = legacy_header_lines(args.fs, blocks["thresholds"], args.seed, CV_LABEL, SMOOTH_LABEL,
+  header = legacy_header_lines(args.fs, blocks["thresholds"], args.seed, *protocol_labels(args.cv, args.smoothing),
                          blocks["fbcca_channels"])
   print(f"Data source: legacy windows, {_rel(processed)}/{args.subject}/ (P02, OO session), stimulus windows only")
   print("\n".join(header))
+  print_trial_report(args.subject, blocks)
   print(f"  {channel_summary(blocks)}")
   print(f"\n[+] {args.subject}: {blocks['n_stimulus']} stimulus windows, {blocks['n_clean']} clean, "
         f"{blocks['n_rejected']} rejected")
-  rows, failures = run_benchmark(blocks, args.subject, args.m, args.seed)
+  rows, failures = run_benchmark(blocks, args.subject, args.m, args.seed, cv=args.cv, smoothing=args.smoothing)
   df = pd.DataFrame(rows, columns=COLUMNS)
-  csv = Path(reports) / f"feature_space_benchmark_{args.subject}.csv"
+  csv = output_dir(reports, args.cv) / f"feature_space_benchmark_{args.subject}.csv"
   csv.parent.mkdir(parents=True, exist_ok=True)
   df.to_csv(csv, index=False)
-  csv.with_suffix(".meta.txt").write_text("\n".join(header) + "\n")
+  csv.with_suffix(".meta.txt").write_text("\n".join(header + [trial_ids_header(blocks)]) + "\n")
   best = df[df["Feature space"] != ARGMAX_SPACE].sort_values("1.0s Acc (%)", ascending=False).iloc[0]
   print(f"\nCohort: 1 subject ({args.subject}), {len(df)} rows, {len(failures)} model failures; best "
         f"{best['Feature space']} / {best['Model']} {best['1.0s Acc (%)']:.2f}% / {best['2.0s Smoothed (%)']:.2f}%; "
