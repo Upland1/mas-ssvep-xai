@@ -320,3 +320,50 @@ def test_window_level_null_too_narrow_trial_level_calibrated():
       rej[unit] += r["p_two_tailed"] < 0.05
   assert rej["window"] > rej["trial"]  # PF-19: window-level permutations reject the null too often
   assert rej["window"] >= 4 and rej["trial"] <= 3  # nominal 5 % of 40 is 2
+
+
+def _write_runs(tmp_path, drop_row=False):
+  base = dict(subject="S01", method="m", condition=101, frequency_hz=24.0, permutation_unit="trial")
+  mk = lambda p, n: pd.DataFrame([dict(base, p_one_tailed=p, n_edges_sig_fdr=n),  # noqa: E731
+                                  dict(base, condition=102, frequency_hz=20.0, p_one_tailed=0.5, n_edges_sig_fdr=0)])
+  mk(0.04, 0).to_csv(tmp_path / "connectivity_cohort_summary_trial100.csv", index=False)
+  mk(0.06, 3).to_csv(tmp_path / "connectivity_cohort_summary_window200.csv", index=False)
+  fin = mk(0.05, 1)
+  (fin.iloc[:1] if drop_row else fin).to_csv(tmp_path / "connectivity_cohort_summary.csv", index=False)
+
+
+@pytest.mark.parametrize("order", [("trial100", "window200"), ("window200", "trial100")])
+def test_compare_is_order_independent(tmp_path, order, capsys):
+  _write_runs(tmp_path)
+  for first in order:
+    assert cohort.main(["--compare", first, "", "--reports-dir", str(tmp_path)]) == 0
+  assert (tmp_path / "connectivity_cohort_flips_window200_vs_final.csv").exists()
+  assert (tmp_path / "connectivity_cohort_flips.csv").exists()
+  assert "cells compared" in capsys.readouterr().out
+  df = pd.read_csv(tmp_path / "connectivity_cohort_flips.csv")
+  assert set(df["suffix_a"]) == {"trial100"}  # not overwritten by the other pair
+
+
+def test_compare_raises_on_missing_rows(tmp_path):
+  _write_runs(tmp_path, drop_row=True)
+  with pytest.raises(ValueError):
+    cohort.main(["--compare", "trial100", "", "--reports-dir", str(tmp_path)])
+
+
+def test_lower_tail_p_from_null_counts():
+  stim, base, ids_s, ids_b = _planted(5, 20, 30, c=3, planted=((0, 1),))
+  r = pm.compute_permutation_test(stim, base, BAND, FS, 49, pc.compute_condition_plv, 1, 3,
+                                  stim_trial_ids=ids_s, baseline_trial_ids=ids_b)
+  exp = (1 + np.sum(r["null_distribution"] <= r["obs_diff"])) / 50
+  assert r["p_lower_tailed"] == pytest.approx(exp)
+  assert r["p_one_tailed"] + r["p_lower_tailed"] >= 1.0
+
+
+def test_alpha_csv_has_lower_tail(tmp_path):
+  _tree(tmp_path / "d" if (tmp_path / "d").mkdir() is None else tmp_path)
+  cohort.main(["--methods", "wpli", "--permutations", "9", "--n-jobs", "1", "--data-root", str(tmp_path / "d"),
+               "--reports-dir", str(tmp_path / "r")])
+  a = pd.read_csv(tmp_path / "r" / "connectivity_cohort_summary.csv")
+  al = pd.read_csv(tmp_path / "r" / "connectivity_alpha_diagnostic.csv")
+  assert "p_lower_tailed" in al.columns and (al["p_lower_tailed"] > 0).all()
+  assert len(a) == 5
