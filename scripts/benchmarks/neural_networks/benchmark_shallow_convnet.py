@@ -5,13 +5,14 @@ gated once by the P07 two-tier gate (vpp 5-120 uV, std 1-35 uV, channel dropped 
 windows; R5 per-script gate) exactly as the classical flagship; no preprocessing is run. Each window is
 z-scored per channel over its own samples; ShallowConvNet is trained from scratch per fold.
 
-Legacy behaviours (labelled, fixed in P11): R1/PF-01 StratifiedKFold(5, shuffle, 42) over windows (leaky,
-NOT comparable with the leak-free R-6); R8/PF-02 "2.0 s smoothed" = legacy i%5 trial smoothing. Fixed
+Protocol (P11): `--cv grouped` (default) = StratifiedGroupKFold(5, shuffle, 42) over reconstructed trial ids (R1);
+`--cv legacy` = the P08-P10 window-level StratifiedKFold (R1/PF-01, leaky, outputs under <reports-dir>/legacy_leaky/);
+`--smoothing mod5` (default, R8 legacy-folder clause: i%5 of the clean array) or `trial` (PF-02 diagnostic). Fixed
 epochs, no validation split, no early stopping, augmentation off by default, `--augment on` (P10). Train accuracy = un-augmented
 training fold (PF-30). CPU and CUDA give different but individually deterministic numbers: the device is
 stated with every number and in the CSV name (reports/shallow_convnet_benchmark_<device>.csv; `auto` -> resolved device).
 
-Output: <reports-dir>/shallow_convnet_benchmark_<device>.csv (Subject, Device, Clean Windows, Rejected, 1.0s Acc (%),
+Output: <reports-dir>[/legacy_leaky]/shallow_convnet_benchmark_<device>.csv (Subject, Device, Clean Windows, Rejected, 1.0s Acc (%),
 2.0s Smoothed (%), Train Acc (%), Params) + .meta.txt with the protocol labels, data source and n_channels.
 Shared driver: src/models/cnn/benchmark_common.py (identical protocol for all raw-window networks).
 """

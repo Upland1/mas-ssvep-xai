@@ -1,4 +1,4 @@
-"""Training and legacy leaky CV of EEGNet on raw windows (P08.2, legacy Era A); network-agnostic since P09.
+"""Training and CV of EEGNet on raw windows (P08.2); network-agnostic since P09; trial-grouped CV since P11.
 
 `train_model` / `train_and_eval_cv` take a `build_model(n_classes, n_channels, n_samples)` factory (default
 EEGNet), so Compact-CNN and ShallowConvNet (P09) use the identical protocol and cannot drift. The max-norm
@@ -12,8 +12,10 @@ separate from the torch RNG). Max-norm is applied
 after every optimizer step. Each window is z-scored per channel over its own time samples (R2: uses no
 other window).
 
-Legacy behaviours (labelled, fixed in P11): R1/PF-01 `StratifiedKFold(5, shuffle, 42)` over windows;
-R8/PF-02 `i % 5` smoothing of the out-of-fold probabilities (`legacy_eval.accuracies`).
+Protocol (P11): `cv="grouped"` (default, R1) = `StratifiedGroupKFold(5, shuffle, 42)` over trial ids `groups`
+(`cv_utils.make_splits`), the same fold matrix for the OFF and ON arms; `cv="legacy"` = the P05-P10 window-level
+`StratifiedKFold` (R1/PF-01, leaky, labelled). 2.0 s rule `smoothing="mod5"` (default: R8 legacy-folder clause, `i % 5`
+of the clean array) or `"trial"` (reset at each trial id, PF-02 diagnostic), both via `legacy_eval.accuracies`.
 Training accuracy (PF-30) is measured in eval mode on the un-augmented training fold after the last epoch.
 """
 
@@ -24,10 +26,11 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
-from src.models.classical.legacy_eval import CV_LABEL, SEED, accuracies, legacy_cv
+from src.models.classical.legacy_eval import SEED, accuracies, cv_label, smooth_label
 from src.models.cnn.eegnet import EEGNetSSVEP
 from src.models.cnn.spatial_spectral_cnn import label_maps, resolve_device
 from src.preprocessing.dataset.augmentation import SSVEPAugmentedDataset
+from src.preprocessing.dataset.cv_utils import assert_no_shared_trials, make_splits
 
 EPOCHS = 150
 BATCH_SIZE = 32
@@ -96,11 +99,14 @@ def train_model(X: np.ndarray, yi: np.ndarray, seed: int, device: torch.device, 
 
 def train_and_eval_cv(X: np.ndarray, y: np.ndarray, build_model: Optional[Callable] = None, epochs: int = EPOCHS,
                       batch_size: int = BATCH_SIZE, lr: float = LR, device: str = "auto", seed: int = SEED,
-                      verbose: bool = False, augment: bool = False) -> dict:
-  """Legacy leaky CV (R1/PF-01) of a network (default EEGNet) on raw clean windows `X (n, C, T)` with condition codes `y`.
+                      verbose: bool = False, augment: bool = False, groups: Optional[np.ndarray] = None,
+                      cv: str = "grouped", smoothing: str = "mod5") -> dict:
+  """CV of a network (default EEGNet) on raw clean windows `X (n, C, T)` with condition codes `y`.
 
-  Returns `pred` (codes), `proba` (classes sorted), `accuracy`, `smoothed_accuracy` (i%5, R8 legacy),
-  `train_accuracy` (mean over folds, un-augmented training fold), per-fold lists, `classes`, `n_params`, `cv`.
+  `cv="grouped"` (R1) needs `groups` = trial id per window (`cv_utils.build_trial_ids` on the pre-gate labels, then the
+  valid mask, PF-03) and asserts that no id is on both sides of any fold; `cv="legacy"` is the leaky P05-P10 split.
+  Returns `pred` (codes), `proba` (classes sorted), `accuracy`, `smoothed_accuracy` (`smoothing` rule), `train_accuracy`
+  (mean over folds, un-augmented training fold), per-fold lists, `classes`, `n_params`, `cv`, `smoothing`, `splits`.
   """
   dev = resolve_device(device)
   classes, to_idx = label_maps(y)
@@ -108,7 +114,10 @@ def train_and_eval_cv(X: np.ndarray, y: np.ndarray, build_model: Optional[Callab
   Xz = zscore_windows(X)
   proba = np.zeros((len(y), len(classes)))
   fold_train, fold_test, n_params = [], [], 0
-  for fold, (tr, te) in enumerate(legacy_cv(seed).split(np.zeros((len(y), 1)), yi)):
+  splits = make_splits(cv, yi, groups, seed)
+  if cv == "grouped":
+    assert_no_shared_trials(splits, groups)
+  for fold, (tr, te) in enumerate(splits):
     model = train_model(Xz[tr], yi[tr], seed + fold, dev, epochs, batch_size, lr, build_model,
                         seed + fold if augment else None)
     n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -118,13 +127,15 @@ def train_and_eval_cv(X: np.ndarray, y: np.ndarray, build_model: Optional[Callab
     if verbose:
       print(f"    fold {fold}: train acc {100 * fold_train[-1]:.2f}%  test acc {100 * fold_test[-1]:.2f}%", flush=True)
   pred = np.array(classes)[proba.argmax(1)]
-  a1, a2 = accuracies(np.asarray(y), pred, proba)
+  a1, a2 = accuracies(np.asarray(y), pred, proba, groups, smoothing)
   return {"pred": pred, "proba": proba, "accuracy": a1, "smoothed_accuracy": a2,
           "train_accuracy": float(np.mean(fold_train)), "fold_test_acc": fold_test, "fold_train_acc": fold_train,
-          "classes": classes, "n_params": n_params, "cv": CV_LABEL}
+          "classes": classes, "n_params": n_params, "cv": cv_label(cv), "smoothing": smooth_label(smoothing, cv),
+          "splits": splits}
 
 
 def train_and_eval_eegnet_cv(X: np.ndarray, y: np.ndarray, epochs: int = EPOCHS, batch_size: int = BATCH_SIZE,
-                             lr: float = LR, device: str = "auto", seed: int = SEED, verbose: bool = False) -> dict:
-  """EEGNet entry point of `train_and_eval_cv` (P08 signature, unchanged results)."""
-  return train_and_eval_cv(X, y, build_eegnet, epochs, batch_size, lr, device, seed, verbose)
+                             lr: float = LR, device: str = "auto", seed: int = SEED, verbose: bool = False,
+                             groups: Optional[np.ndarray] = None, cv: str = "grouped", smoothing: str = "mod5") -> dict:
+  """EEGNet entry point of `train_and_eval_cv` (P08 signature plus the P11 protocol arguments)."""
+  return train_and_eval_cv(X, y, build_eegnet, epochs, batch_size, lr, device, seed, verbose, False, groups, cv, smoothing)
