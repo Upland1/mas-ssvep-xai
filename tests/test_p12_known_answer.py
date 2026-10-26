@@ -232,3 +232,127 @@ def test_difference_colour_limits_symmetric(tmp_path):
   lo, hi = cb.get_xlim()
   assert lo == pytest.approx(-hi) and hi == pytest.approx(vmax)
   plt.close("all")
+
+
+# --- Round 1: reported broadband baseline, labels, aligned diagnostic ---------------------------
+
+from scipy.signal import coherence as _sp_coh  # noqa: E402
+
+
+def _direct_mean_coh(sig, nperseg, lo=5.0, hi=35.0, noverlap=None):
+  """Independent hand computation: scipy per pair, mean of the bins in [lo, hi], mean over pairs."""
+  vals = []
+  for i in range(sig.shape[0]):
+    for j in range(i + 1, sig.shape[0]):
+      kw = {} if noverlap is None else {"noverlap": noverlap}
+      f, c = _sp_coh(sig[i], sig[j], fs=FS, nperseg=nperseg, **kw)
+      vals.append(c[(f >= lo) & (f <= hi)].mean())
+  return float(np.mean(vals))
+
+
+def test_r1_broadband_baseline_independent_noise():
+  w = np.random.default_rng(31).standard_normal((50, 5, 256))
+  y = np.array([101] * 20 + [201] * 30)
+  bb = ce.baseline_broadband_stats(w, y, FS)
+  assert 0.27 <= bb["before"] <= 0.40
+  assert bb["after"] <= 0.05
+
+
+def test_r1_broadband_baseline_coupled():
+  rng = np.random.default_rng(32)
+  w = rng.standard_normal((40, 1, 256)) + 0.05 * rng.standard_normal((40, 5, 256))
+  y = np.array([201] * 40)
+  bb = ce.baseline_broadband_stats(w, y, FS)
+  assert bb["before"] >= 0.95 and bb["after"] >= 0.95
+
+
+def test_r1_broadband_baseline_hand_built_uses_only_201():
+  rng = np.random.default_rng(33)
+  w = rng.standard_normal((30, 3, 256))
+  w[:, 1] = 0.7 * w[:, 0] + 0.3 * rng.standard_normal((30, 256))  # known partial coupling
+  y = np.array([201] * 10 + [101] * 10 + [202] * 10)
+  w[10:] = rng.standard_normal((20, 3, 256))  # other conditions carry no coupling
+  bb = ce.baseline_broadband_stats(w, y, FS)
+  cat = np.concatenate(list(w[:10]), axis=1)
+  assert bb["after"] == pytest.approx(_direct_mean_coh(cat, 256), abs=1e-9)
+  per = np.mean([_direct_mean_coh(x, 128) for x in w[:10]])
+  assert bb["before"] == pytest.approx(per, abs=1e-9)
+  assert bb["before"] != pytest.approx(bb["after"], abs=0.02)
+
+
+def test_r1_labels_reported_vs_diagnostic():
+  rng = np.random.default_rng(34)
+  w = rng.standard_normal((30, 4, 256))
+  y = np.array([101] * 10 + [201] * 20)
+  rows = ce.summary_rows(w, y, FS)
+  meta = ce.meta_lines(rows, list("ABCD"), [], FS)
+  labels = {}
+  for line in meta:
+    if line.startswith("  ") and ": " in line:
+      k, v = line.strip().split(": ", 1)
+      labels[k] = v
+  assert set(rows[0]) - {"condition", "f_c", "band_lo", "band_hi", "n_windows", "n_baseline"} <= set(labels)
+  reported = {"mean_raw", "mean_matched_baseline", "mean_difference", "baseline_broadband_after"}
+  diagnostic = {"baseline_broadband_before", "baseline_broadband_after_aligned", "mean_baseline_perwindow",
+                "mean_difference_broadband", "mean_difference_aligned"}
+  for k in reported:
+    assert labels[k].startswith("REPORTED"), k
+  for k in diagnostic:
+    assert labels[k].startswith("DIAGNOSTIC") or "DIAGNOSTIC" in labels[k], k
+    assert not labels[k].startswith("REPORTED"), k
+  assert any("4 " in l or "(4)" in l for l in meta[:1])  # channel count taken from the data
+
+
+def _noise(seed, n, c, t=256):
+  return np.random.default_rng(seed).standard_normal((n, c, t))
+
+
+def _lf_trials(rng, n_trials, n_win, amp=6.0, t=256):
+  """Each trial: common random 1-3 Hz sinusoids (random phase, per trial) + independent noise.
+  Trials are cut independently, so the concatenation has junction discontinuities."""
+  out = []
+  tt = np.arange(n_win * t) / FS
+  for _ in range(n_trials):
+    com = sum(np.sin(2 * np.pi * f * tt + rng.uniform(0, 6.28)) for f in (1.0, 1.7, 2.4, 3.1))
+    x = amp * com[None] + rng.standard_normal((6, n_win * t))
+    out.append(x.reshape(6, n_win, t).transpose(1, 0, 2))
+  return np.concatenate(out)
+
+
+def test_r1_aligned_matches_hand_scipy_and_default_untouched():
+  w = _noise(35, 8, 4)
+  band = ce.band_for_condition(105)
+  cat = np.concatenate(list(w), axis=1)
+  # aligned == scipy with nperseg = T, noverlap = 0
+  al = ce.compute_aligned_condition_coherence(w, FS, band)
+  f, c = _sp_coh(cat[0], cat[2], fs=FS, nperseg=256, noverlap=0)
+  assert al[0, 2] == pytest.approx(c[(f >= band[0]) & (f <= band[1])].mean(), abs=1e-12)
+  # reported == scipy defaults (nperseg 256, 50 % overlap) and does not use noverlap
+  rep = ce.compute_condition_coherence(w, FS, band)
+  f, c = _sp_coh(cat[0], cat[2], fs=FS, nperseg=256)
+  assert rep[0, 2] == pytest.approx(c[(f >= band[0]) & (f <= band[1])].mean(), abs=1e-12)
+  assert not np.isclose(rep[0, 2], al[0, 2])
+  # the new argument left at its default changes nothing
+  f1, c1 = ce.pairwise_coherence(cat, FS, 256)
+  f2, c2 = ce.pairwise_coherence(cat, FS, 256, noverlap=None)
+  assert np.array_equal(np.nan_to_num(c1), np.nan_to_num(c2))
+  # nperseg = T, noverlap = 0: shorter T is used as nperseg
+  w2 = _noise(36, 8, 3, 200)
+  cat2 = np.concatenate(list(w2), axis=1)
+  al2 = ce.compute_aligned_condition_coherence(w2, FS, band)
+  f, c = _sp_coh(cat2[0], cat2[1], fs=FS, nperseg=200, noverlap=0)
+  assert al2[0, 1] == pytest.approx(c[(f >= band[0] - 1e-9) & (f <= band[1] + 1e-9)].mean(), abs=1e-12)
+
+
+def test_r1_junction_aligned_zero_prescribed_negative():
+  band = ce.band_for_condition(105)
+  d_pres, d_al = [], []
+  for seed in range(8):
+    rng = np.random.default_rng(100 + seed)
+    s, b = _lf_trials(rng, 8, 5), _lf_trials(rng, 40, 2)  # same true state, different junction density
+    d_pres.append(ce.mean_offdiag(ce.compute_condition_coherence(s, FS, band))
+                  - ce.mean_offdiag(ce.compute_condition_coherence(b, FS, band)))
+    d_al.append(ce.mean_offdiag(ce.compute_aligned_condition_coherence(s, FS, band))
+                - ce.mean_offdiag(ce.compute_aligned_condition_coherence(b, FS, band)))
+  assert np.mean(d_pres) < -0.15
+  assert abs(np.mean(d_al)) <= 0.03
