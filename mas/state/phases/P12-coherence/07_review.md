@@ -110,6 +110,37 @@ Verdict: FAIL
 3. connectivity-stats: junction-aligned sensitivity diagnostic plus a test (fix 3).
 4. synthetic-tester: independent tests and mutants for fixes 2(a) and 3 (fix 4).
 
+## Pre-run audit, Round 2
+
+Reviewed: `git diff 84406bc..HEAD` (26d0a74, a801952, 45289bf, 6c6a152, dde02b4, 0d46099, b9d9d3e, db83896).
+
+Commands I ran:
+- `.venv/bin/python -m pytest tests/test_p12_coherence.py tests/test_p12_known_answer.py -o addopts="" -q` → `36 passed in 15.22s`.
+- In-memory mutant (no file changed): `baseline_broadband_stats` returns the concatenated value as `before`. Three tests fail: `test_r1_broadband_baseline_hand_built_uses_only_201`, `test_r1_broadband_baseline_independent_noise` and `test_broadband_baseline_before_after_known_answer`. This is the mutant I asked for in fix 4; the tester's M5 is the reverse swap.
+- Privacy scan (fragment-built vendor/trailer pattern) over the diff and commit messages since 84406bc: no hits, and no data or tooling files. `reports/connectivity/` is still absent, so no stale outputs. The reference access log has no entry after the P11 entries (12:05).
+
+| Fix | Finding | Result | Evidence |
+|---|---|---|---|
+| 1 (orchestrator) | F1 | PASS | `02_plan.md` settled point 2 now uses one number per subject (201, 5–35 Hz). The superseded per-band reading is kept. The acceptance table cites A0–A6 with the windows unchanged. The decisions.md P12 Round 1 row records F1/F2 |
+| 2(a) | F1 outputs | PASS | `baseline_broadband_stats` (`connectivity_extraction.py`) uses the same 201 `idx`: before = `per_window_mean_matrix(…, BASELINE_BAND)` (nperseg min(T,128)), after = `compute_condition_coherence` (nperseg 256). It is printed on the console ("R-11 baseline coherence …") and saved on every CSV row of the demo and the analysis |
+| 2(b)–(d) | F3 labels | PASS | `COLUMN_LABELS` marks every column REPORTED/DIAGNOSTIC, and both metas write them through `meta_lines`. The channel count is `len(channels)`. Bands are listed with their fs-250 bins and true Hz via `band_bins` (`f·256/fs`, so bins 24, 25 for 101, matching my Round 1 table). The 5-band mean is labelled "cannot replace the 5–35 Hz baseline, A2" |
+| 2(e) | F3 panel | PASS | `CONDITION_LABELS[201]` = "No stimulus (201) / 5-35 Hz broadband, not band-matched" (`connectivity_plots.py:20`), used as the raw-panel title |
+| 3 | F2 | PASS | `compute_aligned_condition_coherence` uses nperseg = T and noverlap 0. `pairwise_coherence(noverlap=None)` leaves the scipy default unchanged, and M7 (reported estimator switched to aligned) fails 7 tests. `mean_difference_aligned` is the aligned stimulus minus the aligned baseline on the same 201 `idx`, labelled DIAGNOSTIC |
+| 4 (tester) | — | PASS | 6 new cases; mutants M5, M6a–c and M7 are caught, and my in-memory reverse M5 is caught as well |
+
+**Builder notes judged**
+- **Junction-test amplitude.** This is not a discrepancy. My "amp 50" scaled white noise *before* a 4 Hz low-pass, which leaves a standard deviation of about 0.18 × 50 ≈ 9. The builder's "8 × unit-std" is the same regime. The builder's scan is non-monotonic (amp 35 gives −0.036). That fits both sides approaching a coherence ceiling when the common power dominates, so the bias is largest at intermediate low-frequency dominance. The tester's own generator gives −0.31 against +0.011, so the mechanism is confirmed by two independent constructions.
+- **S03 smoke A6 at band 105.**
+  - Δ = prescribed − aligned per band (`python3 -c` on the 03_changes numbers): [0.0236, −0.0137, −0.0266, −0.0133, 0.0565]. The 105 value of 0.0565 exceeds 0.05, so under A6 band 105 will be flagged estimator-sensitive if the verified run confirms it. This is A6 working as designed, not a reason to change it.
+  - Reading note for the results review (it does not move A6): the signs of Δ are mixed. For 105 the prescribed value is higher than the aligned one, which is the opposite of the junction-leakage direction. The aligned estimator also uses about half as many segments (40 vs 79 on the stimulus side), so Δ mixes junction bias with estimator variance.
+  - A flagged band will be called "estimator-sensitive" and must not be described as "junction-biased" unless the sign agrees with the predicted negative direction. The 101/102 signs agree in the smoke, so A4 robustness is not affected there.
+- **A2 in the smoke** (S03 0.6836 before / 0.5871 after) is not a result and is not read here. A0–A6 stay as pre-committed in Round 1.
+
+**Non-blocking**
+- N4: the full-suite counts differ between handoffs: 717 (builder, before the tester's 6 cases) and 723 (tester). This is consistent. The verifier quotes its own clean-checkout count.
+
+Verdict: PASS
+
 ## Results review
 
 Verdict: APPROVE / REJECT
