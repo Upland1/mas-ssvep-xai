@@ -73,12 +73,12 @@ phases:
     passed: '2026-10-26'
   P09:
     slug: compact-shallow-cnn
-    status: in_progress
+    status: passed
     owner: orchestrator
     branch: phase/P09-compact-shallow-cnn
-    commit: null
+    commit: d3e0a09
     opened: '2026-10-26'
-    passed: null
+    passed: '2026-10-26'
   P10:
     slug: augmentation-ab
     status: pending
