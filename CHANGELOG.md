@@ -180,7 +180,7 @@ Result and scope
 
 ## P09 — Compact-CNN and ShallowConvNet
 
-2026-10-26, branch `phase/P09-compact-shallow-cnn`. Code and reported runs at `edd476e`; results review at `f20ea80`. Phase report: `mas/state/reports/P09.md` (to be filed).
+2026-10-26, branch `phase/P09-compact-shallow-cnn`. Code and reported runs at `edd476e`; results review at `f20ea80`. Phase report: `mas/state/reports/P09.md` (on main with the P09 merge, `8430cb9`).
 
 Added
 - `src/models/cnn/compact_cnn.py`: `CompactCNN` (spatial conv, temporal conv with K = clamp(round(fs / 8.5714), 4, n_samples), legacy fs 250 default, K = 29; 56,021 parameters).
@@ -198,3 +198,22 @@ Result and scope
 - S03, legacy leaky CV, CPU, `reports/shallow_convnet_benchmark_cpu.csv`: 1.0 s 86.80 % (171 / 197), 2.0 s smoothed 92.89 % (183 / 197), train 100.00 %.
 - Parameter counts equal R-8 (2,349 / 14,485 / 56,021), `reports/network_parameter_counts.csv`.
 - Each network identical over two runs. Legacy throughout (R1, R8, R5 legacy, fs 250 label for Compact-CNN). Not comparable with R-6; the ordering on S03 is not a cohort ranking.
+
+## P10 — Data augmentation and the A/B protocol
+
+2026-10-26, branch `phase/P10-augmentation-ab`. Code, tests and runs at `5f2d5eb`; results review at `2080b68`. Phase report: `mas/state/reports/P10.md` (to be filed by the orchestrator from the scribe's hand-back).
+
+Added
+- `src/preprocessing/dataset/augmentation.py`: noise, scale, shift and same-class mixup; `SSVEPAugmentedDataset` (training fold only, order mixup, scale, shift, noise; p = 0.5 each).
+- `scripts/benchmarks/neural_networks/benchmark_nn_augmentation.py`: OFF then ON per subject, `--freeze-legacy` writes `reports/legacy_leaky/augmentation_ab_<model>.csv`.
+- `tests/test_p10_augmentation.py` (15) and `tests/test_p10_augmentation_known_answer.py` (16); suite `604 passed, 21 warnings` (`reports/logs/P10/pytest_20261026_011732.log`).
+
+Changed
+- `src/models/cnn/eegnet_cv.py` and `src/models/cnn/benchmark_common.py`: `--augment {off,on}` (default off); the OFF path is unchanged (P09 hash pins pass).
+- The three `benchmark_*.py` wrappers (docstrings only); two P08/P09 tests now check an invalid `--augment` value.
+
+Result and scope (legacy leaky CV, CPU, `reports/augmentation_ab_<model>.csv`; not comparable with R-6)
+- EEGNet cohort 1.0 s 63.93 → 67.04 % (Δ +3.11 pp, inside R-9a's recorded [+3.00, +7.34] at its lower edge); 2.0 s 68.18 → 71.08 % (Δ +2.90 pp). Four of five subjects improved; S02 −3 windows.
+- EEGNet S03 OFF 75.63 / 85.79 % equals P08 (regression check). S01 and S02 OFF test 28.00 / 27.04 % with train 83.25 / 81.38 % (PF-30 generalization failure reproduced).
+- Compact-CNN Δ +14.12 / +11.39 pp and ShallowConvNet Δ +2.01 / +2.72 pp, diagnostics only.
+- Frozen CSVs byte-identical to the main outputs. Next phase: P11.
