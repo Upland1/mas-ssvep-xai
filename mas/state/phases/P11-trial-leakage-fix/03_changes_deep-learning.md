@@ -74,3 +74,49 @@ None. The original repository (answer key) was not opened.
 
 ## Questions
 None.
+
+## Round 2 (post-verify)
+
+Trigger: 06_verify.md FAIL on P4 (R-9b), e85eeda. Question: bug or legitimate variance. Nothing was tuned: no hyperparameter, seed, default or number-producing line changed. Diagnostics and their outputs are in `mas/state/scratch/p11_round2_dl/` (git-ignored): `fold_identity.py` (+`.out`), `classical_folds.py` (+`.out`), `init_only.py`, `run_seeds.sh`, `seeds.log`. All ran with `.venv/bin/python` on CPU at branch HEAD dcc33f0 (plus the new test); nothing was written to `reports/`.
+
+### Findings
+
+1. **Fold identity: no difference.** For S01-S05, the network path (`benchmark_common.gated_windows`, then `make_splits("grouped", yi, ids, 42)` as inside `train_and_eval_cv`) and the classical path (`prepare_subject`, then `splits_for("grouped", y, ids, 42)`, which reproduces R-6 exactly) give the same gate mask, the same labels in the same order, the same trial ids and the same five (train, test) index arrays (`np.array_equal`, all True; `fold_identity.out`, `classical_folds.out`). Kept channels identical (7, none dropped). S03 test-fold sizes 40/39/40/39/39.
+2. **Fold composition, S03: balanced.** Each test fold holds 8 trials, 1 or 2 per class (5 or 9-10 windows per class); each training fold 6 or 7 trials per class (`fold_identity.out`). No fold lacks a class.
+3. **Data path: nothing changed by the grouped switch besides the split.** Read in `src/models/cnn/eegnet_cv.py` and `scripts/benchmarks/neural_networks/benchmark_nn_augmentation.py`: window order is the clean-array order in both modes (sklearn returns sorted indices); z-scoring is per window and channel over its own time axis, so it does not depend on the split; the label map is the sorted-code map and `make_splits` receives `yi` (0-4), an order-preserving encoding, so the split equals the one on the codes (finding 1 confirms it); the train-accuracy pass runs after the test prediction, in eval mode, and draws no random numbers; OFF and ON each call `train_model`, which re-seeds `torch.manual_seed(seed + fold)` and builds a fresh loader generator, so the arms share only the split. The 1.0 s accuracy does not involve the smoothing rule.
+4. **Seed sensitivity (diagnostic only; no seed is proposed).** EEGNet, S03, augmentation OFF, 150 epochs, CPU (`seeds.log`):
+
+| Run | Split seed | Model/loader seed base | 1.0 s | Folds (test acc %) | Train |
+|---|---|---|---|---|---|
+| `benchmark_eegnet --subject S03 --seed 42` | 42 | 42 | 54.82 | 50.00 / 30.77 / 60.00 / 41.03 / 92.31 | 97.46 |
+| same, `--seed 43` | 43 | 43 | 71.57 | 45.00 / 80.00 / 58.97 / 92.31 / 82.05 | 98.85 |
+| same, `--seed 44` | 44 | 44 | 67.01 | 65.12 / 42.50 / 97.50 / 79.49 / 48.57 | 96.24 |
+| `init_only.py` | 42 | 1042 | 71.57 | 50.00 / 71.79 / 72.50 / 87.18 / 76.92 | not measured |
+| `init_only.py` | 42 | 2042 | 71.57 | 60.00 / 69.23 / 75.00 / 66.67 / 87.18 | not measured |
+| `benchmark_eegnet --subject S03 --seed 42 --cv legacy` | 42 (windows) | 42 | 75.63 | 77.50 / 55.00 / 74.36 / 79.49 / 92.31 | 98.34 |
+
+   - The seed-42 run reproduces the verifier's S03 OFF exactly (54.82, same per-fold values), and `--cv legacy` reproduces P10's 75.63 exactly: the run is deterministic and the legacy path is intact.
+   - On the **identical** seed-42 grouped folds, changing only the weight-init and loader seed moves S03 OFF from 54.82 to 71.57 (twice, with different per-fold values): a 16.75 pp range from initialisation alone. Across split+init seeds 42/43/44: mean 64.47, sd 8.66, range 16.75 (`.venv/bin/python -c` with `np.std(ddof=1)` and `np.ptp`). The R-9b gap of the seed-42 run (73.60 - 54.82 = 18.78) is the size of this single-subject spread, and the ±5 pp network tolerance is narrower than the init-only spread of EEGNet on S03 under grouped CV.
+   - The classical flagship on the same grouped folds is also weakest on fold 1 (92.50 / 76.92 / 87.50 / 84.62 / 92.31; trials 86, 110, 112 at 0.4-0.5 window accuracy; `classical_folds.out`); EEGNet seed 42 is lowest on fold 1 (30.77). Whole-trial hold-out exposes trial-to-trial variability that the leaky split hid, and the networks amplify it.
+   - Smoke total: 99 + 87 + 92 + 81 s (logged) plus about 170 s for the two init-only runs, about 9 min.
+5. **R11 consultation** (permitted after findings 1-4 found no bug). Original repository (answer key) at commit `5d6d1c26397a2262e99d9646500030e261a04585` (HEAD; the file's only history entry there is the later folder refactor ce09f1a, so the P11-era text may differ slightly). Every access went through `git -C ... grep/show` and is in `mas/state/scratch/reference_access.log` (12:05:00-12:05:15). No code was copied.
+
+| # | Trigger | Files and lines @ commit | What I learned | What changed in my code |
+|---|---|---|---|---|
+| 1 | R-9b missed beyond tolerance after one investigation round without a bug | `git grep -l` (file names only): `scripts/benchmarks/neural_networks/{benchmark_compact_cnn,benchmark_eegnet,benchmark_nn_augmentation,benchmark_shallow_convnet}.py`, `src/preprocessing/dataset/cv_utils.py` | the network scripts use `StratifiedGroupKFold` and `build_trial_ids` | nothing |
+| 2 | same | `scripts/benchmarks/neural_networks/benchmark_nn_augmentation.py`: grep hits at lines 22, 29, 65, 68, 78, 82, 86-91, 114, 146, 150, 170-173, 183-185, 237-240; then lines 78-135 and 160-180 read in full | Trial ids: `build_trial_ids(y_stim, 5)` on the pre-gate stimulus labels, indexed by the gate's `valid_mask`; groups = those ids; `StratifiedGroupKFold(5, shuffle=True, random_state=42)`. Same partition as ours (we build ids on the full label array, then take the stimulus rows; on legacy folders the stimulus blocks are contiguous, so the groups match up to an order-preserving relabel, which the splitter ignores). Normalisation: per window and channel over time (eps 1e-8; ours 1e-6): the same. RNG differences: the fold index starts at **1** (`enumerate(..., 1)`), so the original seeds `torch.manual_seed(42 + fold_idx)` = 43..47 and the augmentation generator 43..47, where our written convention (06_AGENT_ROLES, PF-28, roadmap P08) gives 42..46; and its `DataLoader` has no generator, so batch order comes from the global torch RNG after the model is built. Its gate at HEAD is `apply_artifact_quality_pipeline` (a later name). | nothing: split and normalisation match; our RNG streams follow the written convention, and replaying the original's would be tuning toward R-9b (golden rule 5) |
+
+### Outcome
+
+- **No bug found.** Folds, ids, windows, labels and normalisation of the network path are identical to the classical path that reproduces R-6 exactly, and the original builds the same groups and the same normalisation. The R-9b misses are explained by single-seed variance: on identical folds EEGNet S03 OFF moves 16.75 pp with the init seed alone, and the original used a different RNG stream (fold seeds 43-47, unseeded loader).
+- **Accepted-deviation request for the reviewer (P4).** Evidence: findings 1-5. Proposed wording: "R-9b network cells (EEGNet S03 all four cells, S05 2.0 OFF, cohort 1.0 OFF / 1.0 ON / 2.0 OFF means, Δ2.0; Compact-CNN S03 ON at 1.0 and 2.0, S05 1.0 ON, mean 1.0 ON, Δ1.0) deviate beyond ±5 / ±3 pp. Cause: variance of single-seed 150-epoch training under trial-grouped CV, measured at 16.75 pp (init seed only, same folds) for EEGNet S03 OFF; the original used a different RNG stream (fold seeds 43-47, unseeded DataLoader). Splits, trial ids and normalisation verified identical to the R-6 path and to the original's construction. The sign rule holds for every model; ShallowConvNet is inside every window." The decision belongs to the reviewer and, through decisions.md, to Sebastian. Whether later phases should report network numbers over several seeds is a planning question, not a change made here.
+- **Test added** (regression guard; there was no bug to fix): `tests/test_p11_networks.py::test_network_folds_equal_classical_flagship_folds`. Synthetic tree with a gate rejection inside a block: `gated_windows` and `prepare_subject` give equal labels and ids (74 clean windows), and the five folds of `train_and_eval_cv` equal `splits_for("grouped", ...)` of the flagship. Mutation check: replacing the network ids by post-gate ids (the PF-03 bug) makes it fail (`1 failed`; via a throw-away pytest plugin in the scratchpad, not committed).
+- Full suite: `679 passed, 21 warnings in 463.23s (0:07:43)` (`.venv/bin/python -m pytest tests -o addopts="" -q`; 678 + 1).
+- R-8 unchanged (params 2349 printed in every EEGNet smoke run).
+
+### Files (Round 2)
+
+| Path | NEW / MODIFIED | Summary |
+|---|---|---|
+| `tests/test_p11_networks.py` | MODIFIED | + `test_network_folds_equal_classical_flagship_folds` |
+| `mas/state/phases/P11-trial-leakage-fix/03_changes_deep-learning.md` | MODIFIED | this section |
