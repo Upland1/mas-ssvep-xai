@@ -120,3 +120,43 @@ Trigger: 06_verify.md FAIL on P4 (R-9b), e85eeda. Question: bug or legitimate va
 |---|---|---|
 | `tests/test_p11_networks.py` | MODIFIED | + `test_network_folds_equal_classical_flagship_folds` |
 | `mas/state/phases/P11-trial-leakage-fix/03_changes_deep-learning.md` | MODIFIED | this section |
+
+## Round 2b (seed-spread diagnostic)
+
+Trigger: results review Round 1 REJECT (07_review.md 3c30c9e), required step 1 (deep-learning part); decisions.md P11 rows D-4 and "Round accounting". This is a DIAGNOSTIC build. No reported number, default or reporting path changes, and no hyperparameter or seed of the reported run changes.
+
+### Files
+
+| Path | NEW / MODIFIED | Summary | Source |
+|---|---|---|---|
+| `src/models/cnn/eegnet_cv.py` | MODIFIED | `train_and_eval_cv(..., model_seed=None)`: seed base for the model init, DataLoader generator and augmentation generator (`model_seed + fold`); the splitter keeps `seed`. `None` (default) uses `seed`, so every existing caller behaves as before (pins below) | review step 1 |
+| `scripts/diagnostics/network_seed_spread.py` | NEW | DIAGNOSTIC in the docstring, console (`[DIAGNOSTIC]` lines) and meta (first line). `--model {eegnet,compact_cnn,shallow_conv_net}`, `--seed-bases` (list), `--epochs` (150), `--device` (cpu), `--subjects` (default: all `S\d+` folders found). It reuses `gated_windows` and `train_and_eval_cv(..., seed=42, cv="grouped", smoothing="mod5", model_seed=b)`, so the seed-42 grouped folds are fixed for every base. OFF and ON run with the same per-fold seeds within a base. Output: `<reports-dir>/diagnostics/p11_seed_spread_<model>.csv` (Subject, Seed base, Clean Windows, 1.0s OFF/ON, 1.0s Delta, 2.0s OFF/ON, 2.0s Delta, Train Acc OFF/ON; a Mean row per base) + `.meta.txt` (folds, random_state 42, bases, seed roles, smoothing rule, data source, approximate-id subjects). Never writes `augmentation_ab_*` | review step 1 |
+| `tests/test_p11_seed_spread.py` | NEW | 8 tests (below) | review step 1 |
+
+### Tests (`tests/test_p11_seed_spread.py`, synthetic trees, 2 epochs, CPU)
+
+- `test_folds_identical_across_seed_bases_and_the_base_changes_training`: bases 42, 1042 and 2042 give identical (train, test) arrays. Control: the probabilities differ between bases, so the base reaches training (ON arm, so the augmentation generator is included).
+- `test_model_seed_42_and_none_reproduce_the_reported_path_exactly`: `model_seed=42` and the default give equal per-window probabilities and per-fold train accuracies, OFF and ON.
+- `test_script_base_42_equals_ab_rows_and_writes_only_diagnostics`: the script with bases 42 and 1042 writes exactly two files, both under `diagnostics/`, and no `augmentation_ab_*`. Its base-42 rows (Mean row included) equal `reports/augmentation_ab_eegnet.csv` of the A/B benchmark on the same tree (`assert_frame_equal`). Columns, row order, base column and the DIAGNOSTIC / `random_state=42` meta text are checked.
+- `test_script_rejects_unknown_model`.
+- `test_ab_legacy_and_grouped_pins_unchanged` (4 cases): sha256 of the A/B CSV on the 2-subject tree for EEGNet and Compact-CNN under `--cv legacy` and `--cv grouped`. The pins were computed with the code **before** `model_seed` was added (scratch driver, same tree) and recomputed after it: equal. The Compact-CNN legacy pin `8f16e9ee…e002` also equals the pre-P11 pin in the table above. This also closes carry-forward N3 (network legacy pins in a test).
+
+Smoke: synthetic data only (the tests above, which run the script end to end). No real-data run was made in Round 2b.
+
+Full suite: `687 passed, 21 warnings in 524.00s (0:08:44)` (`.venv/bin/python -m pytest tests -o addopts="" -q`; 679 + 8).
+
+### Verifier commands (run once each, from a clean checkout, CPU)
+
+```bash
+.venv/bin/python -m scripts.diagnostics.network_seed_spread --model eegnet --seed-bases 1042 2042 --epochs 150 --device cpu
+.venv/bin/python -m scripts.diagnostics.network_seed_spread --model compact_cnn --seed-bases 1042 2042 --epochs 150 --device cpu
+```
+
+- Subjects: all discovered (S01–S05).
+- Outputs: `reports/diagnostics/p11_seed_spread_eegnet.csv` and `reports/diagnostics/p11_seed_spread_compact_cnn.csv`, each with its `.meta.txt`. The seed-42 rows are the existing `reports/augmentation_ab_<model>.csv`, which these commands do not touch. Base 42 is left out because it repeats the reported run (the test above proves the equality).
+- Runtime estimate: one base runs both arms on all five subjects, which is what one A/B run did (EEGNet 833 s, Compact-CNN 668 s; 05_run.md). Two bases come to about 2 × 833 ≈ 28 min for EEGNet and 2 × 668 ≈ 22 min for Compact-CNN, about 50 min in total. That is inside `LOCAL_RUN_BUDGET_MIN` 120. (The review's ≈ 30 min figure is low by about this factor.)
+- Logs: under `reports/logs/P11/`, as in 05_run.md.
+
+### Reference consultations (R11)
+
+None in Round 2b.
