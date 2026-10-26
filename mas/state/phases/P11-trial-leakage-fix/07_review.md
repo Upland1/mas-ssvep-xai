@@ -1,6 +1,6 @@
 # P11 · 07 · Scientific review
 
-Status: READY (pre-run audit, Round 1: FAIL)
+Status: READY (pre-run audit, Round 1: FAIL; Round 2: PASS)
 Author: scientific-reviewer
 Reads: 00, 02, 03_changes_ml-engineer.md (incl. "Round 1 orchestrator change"), 03_changes_deep-learning.md, 04, decisions.md P05/P10/P11 rows, mas/RULES.md, mas/03_ROADMAP.md P11 and "Conventions", mas/02_REQUIREMENTS.md §5.6, mas/01_DATA_SPEC.md §5.1, mas/04_REFERENCE_RESULTS.md (tolerances, R-3–R-9), mas/05_PITFALLS.md PF-01–04, PF-28–31, `git diff 829602c..HEAD -- src scripts tests` (branch head e86ae3f)
 
@@ -147,3 +147,24 @@ Opened in this audit: `mas/RULES.md` (R8 text lines 74-77, era row 28), `mas/02_
 Verdict: FAIL
 
 1. ml-engineer: required fix 1 (demo network section must check the splitter label in each CSV's meta before pairing, plus a test with a leaky file in the P11 slot).
+
+## Pre-run audit, Round 2
+
+Head audited: c414aeb. Changes since Round 1 (32461e2):
+- 40a6d57: C1 decision row.
+- bb4d2ea: fix 1, plus N1/N2 wording.
+- 567a98a: tester test, mutant M6.
+
+| Item | Result | Evidence |
+|---|---|---|
+| Fix 1 (R9, stale-result reuse) | PASS | `scripts/diagnostics/demo_cv_leakage.py` `meta_splitter` reads the `cv=` line of each `.meta.txt`. It checks `StratifiedGroupKFold` first; that name does not contain the substring `StratifiedKFold`, so no false match. `network_section` uses a pair only if the labels are exactly (leaky, grouped), otherwise it prints the reason. I re-ran my Round 1 smoke on scratch copies of the real P10 CSVs and their metas: the leaky files in the P11 slot give 3 "skipped (… legacy_leaky file leaky, reports file leaky …)" lines and `None` (Round 1: an all-zero delta table). With a grouped synthetic A/B meta in the compact slot, only `compact_cnn` is paired. On the real files, `meta_splitter` returns `leaky` for `reports/augmentation_ab_eegnet.csv` and `grouped` for a grouped smoke output. Tests: `test_network_section_skips_pairs_whose_splitter_labels_do_not_match` (builder: leaky/leaky, leaky/no-meta, leaky/grouped) and `test_demo_network_section_skips_leaky_vs_leaky_and_computes_hand_deltas` (tester: hand deltas −20/−15, −10/−18, gains 10/15, 10/2). M6 caught. No number-producing path changed (`git diff 32461e2..c414aeb -- src scripts`: the demo pairing, one label string, one docstring). |
+| N1 | Resolved as documentation | The `oof_space` docstring now marks `splits=None` as a legacy-only fallback. The behaviour is unchanged, which is acceptable: all nine scripts pass `splits` (Round 1 R1 row). A future caller is still not protected by an error. The note stays open for the P16 refactor. |
+| N2 | Resolved | The trial rule is now named "trial-reset smoothing, PF-02 diagnostic", consistent with the meta labels. |
+| N3, N4 | Open, carried | Network legacy pins are not in a test (deep-learning, next touch). The S02/S04 residual leak from approximate ids must be stated in the report. |
+| C1 (decision row, 40a6d57) | Satisfied | The row is appended and row 103 is left as it was. It states the order plainly: plan chose trial → smoke numbers at 18a6792 → reversal at 31d6f8e, "the numbers were therefore seen before the decision". It cites the R8 text, §5.6, the Conventions line and the P05 record, all of which predate P11. It names the era-matrix R8 row as unreconciled, gives a reading (P11 fixes the window-level CV; true resets need true ids, P16; PF-02 phases P04/P11/P16), and leaves it to Sebastian as a non-blocking question. It fixes the reporting rule: R-6's 2.0 s is reproduced with i%5, with the trial-reset diagnostic beside it, never in place of it. One imprecision, not blocking: item (d) calls the P05 row one "that corrected the era-matrix R8 row"; the row I cited (decisions.md row 58) records the conflict as a carry-forward. Either way the record predates P11, which is what C1 needed. The reporting part of C1 is checked at the results review. |
+| Suite | PASS | `.venv/bin/python -m pytest tests -o addopts="" -q -p no:cacheprovider` at c414aeb: `678 passed, 21 warnings in 372.28s (0:06:12)`. This equals the reported 678. Runtime above target, as noted in Round 1. |
+| R11 / privacy | PASS | No new reference consultation is declared. The word-bounded vendor/trailer scan of the Round 2 diff and commit messages is clean. |
+
+The pre-committed checks P1–P7 of Round 1 stand unchanged. With fix 1, the step-1 demo run will print three "skipped" lines for the network section; the verifier reads the network table from step 2 only.
+
+Verdict: PASS
