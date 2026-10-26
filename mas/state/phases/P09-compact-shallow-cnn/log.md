@@ -12,3 +12,5 @@
 | 7 Pre-run audit | scientific-reviewer | 2026-10-26 | PASS (15aaa5d), no required fixes; P08+P09 tests `70 passed`; counts and EEGNet regression re-derived independently | 1 | 03_ROADMAP P09, R-7/8/9, PF-04/31 | none | checks pre-committed: count_parameters exit 0, S03 197/3, k/197, PF-30, diagnostic comparisons only |
 | 8 Run + verify | verifier | 2026-10-26 | PASS (7ced253); pytest `573 passed, 21 warnings in 219.21s` (reports/logs/P09/pytest_20261026T002847.log); counts exit 0 = R-8; S03 197/3, 7 kept; compact_cnn 54.31 (107/197) / 62.94 (124), shallow_convnet 86.80 (171) / 92.89 (183), train 100 % both; run1 = run2 | 1 | R-8, PF-30 | none | |
 | 9 Results review | scientific-reviewer | 2026-10-26 | APPROVE (f20ea80); acceptance met; no deviations | 1 | logs, CSVs | none | |
+| 10 Report | scribe + orchestrator | 2026-10-26 | RESEARCH_LOG/CHANGELOG (93ca20f); mas/state/reports/P09.md returned as text, saved verbatim by the orchestrator | 1 | CSVs, logs, handoffs | none | |
+| 11 Gate | orchestrator | 2026-10-26 | PASS; merged --no-ff, tag p09-done | 1 | — | none | |
