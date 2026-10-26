@@ -96,3 +96,41 @@ P5 grading (review's wording; classical mean drop 4.06 at 1.0 s):
 - P4 misses are on EEGNet (S03, S05, cohort OFF means, Delta 2.0) and Compact-CNN (S03, S05 ON, Delta 1.0). The classical results P1-P3 are exact. No command was re-run.
 
 Verdict: FAIL
+
+## Round 2b (seed-spread diagnostic, D-4 applied mechanically)
+
+Clean checkout: pytest in a detached worktree @ `0b96524e6afe59fd70f6a3941d61b57bcf660fe6`; diagnostics ran at the same HEAD with a clean tree (05_run.md Round 2b).
+
+- Suite: `687 passed, 21 warnings in 549.27s (0:09:09)`, exit 0 (`reports/logs/P11/pytest_2b_20261026_124231.log`).
+- `git diff --stat aedf8a8 HEAD -- src scripts`: only `scripts/diagnostics/network_seed_spread.py` and `src/models/cnn/eegnet_cv.py`. As required.
+- Byte-unchanged after the run (sha256 against the pre-run list): `reports/augmentation_ab_*.csv`, `reports/legacy_leaky/*.csv`, `reports/n_subjects_benchmark.csv`, the legacy arrays (28 files, all OK). P1, P2, P3, P6 and P7 therefore still hold (their CSVs are untouched and their commands were not repeated).
+- Rule (07_review.md, step 3, D-4), applied by `mas/state/scratch/d4_rule.py` with `.venv/bin/python mas/state/scratch/d4_rule.py` (output kept in `mas/state/scratch/d4_rule.out`). Runs: seed 42 = `reports/augmentation_ab_<model>.csv`; bases 1042 and 2042 = `reports/diagnostics/p11_seed_spread_<model>.csv`. Per-subject cell: explained if a non-42 base is inside the P4 window or the R-9b value lies in [min, max] of the three runs; systematic if all three runs are outside on the same side. Cohort cell: explained if its driving cells are explained and the three-base mean is inside the window or within 1.0 pp. Driving cells as in the review: EEGNet S03 (same column; Delta 2.0: S03 2.0 OFF and ON), Compact-CNN S05 1.0 ON.
+- The script re-derived the out-of-window set: 9 EEGNet cells and 5 Compact-CNN cells, the same 14 as in 06_verify.md reason 1.
+
+### EEGNet (runs: seed 42 / 1042 / 2042; R-9b; window)
+
+| Cell | Runs | R-9b | Window | Class |
+|---|---|---|---|---|
+| S03 1.0 OFF | 54.82 / 71.57 / 71.57 | 73.60 | 68.60-78.60 | explained |
+| S03 1.0 ON | 64.47 / 73.60 / 75.13 | 79.19 | 74.19-84.19 | explained (2042 inside) |
+| S03 2.0 OFF | 59.90 / 78.68 / 76.14 | 82.23 | 77.23-87.23 | explained (1042 inside) |
+| S03 2.0 ON | 71.07 / 80.20 / 82.74 | 85.28 | 80.28-90.28 | explained (2042 inside) |
+| S05 2.0 OFF | 85.00 / 93.50 / 95.00 | 92.50 | 87.50-97.50 | explained |
+| Mean 1.0 OFF | 58.36 / 63.00 / 62.29 | 64.22 | 61.22-67.22 | explained (three-base mean 61.22, in window) |
+| Mean 1.0 ON | 63.21 / 65.33 / 64.13 | 66.24 | 63.24-69.24 | explained (mean 64.22) |
+| Mean 2.0 OFF | 61.28 / 65.22 / 64.82 | 67.56 | 64.56-70.56 | explained (mean 63.77, 0.79 below the window, within 1.0) |
+| Mean Delta 2.0 | 4.65 / 1.93 / 1.22 | 1.21 | -1.79-4.21 | explained (mean 2.60, in window) |
+
+### Compact-CNN
+
+| Cell | Runs | R-9b | Window | Class |
+|---|---|---|---|---|
+| S03 1.0 ON | 57.87 / 59.90 / 59.39 | 62.94 | 57.94-67.94 | explained (both bases inside) |
+| **S03 2.0 ON** | 65.48 / 64.47 / 65.48 | 71.07 | 66.07-76.07 | **systematic** (all three below the window) |
+| S05 1.0 ON | 54.50 / 60.50 / 60.50 | 62.00 | 57.00-67.00 | explained |
+| Mean 1.0 ON | 50.65 / 53.57 / 52.94 | 53.96 | 50.96-56.96 | explained (mean 52.39, in window) |
+| Mean Delta 1.0 | 13.56 / 17.19 / 17.27 | 17.16 | 14.16-20.16 | explained (mean 16.01, in window) |
+
+Result: 13 of 14 cells explained; 1 systematic: **Compact-CNN S03 2.0 s ON** (65.48, 64.47, 65.48 against a lower window edge of 66.07; the gap to the edge is 0.59 to 1.60 pp). By the pre-committed rule that is REJECT plus a blocker for Sebastian; the verifier does not interpret it further. The reported numbers stay the seed-42 CSVs.
+
+Verdict: FAIL
