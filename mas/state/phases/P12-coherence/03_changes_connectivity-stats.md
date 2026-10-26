@@ -50,3 +50,7 @@ Observations for the verifier (no tuning done): 105 before/after (0.800 / 0.739)
 ## Reference consultations (R11)
 
 None. The original repository under `reference/` was not opened.
+
+## Full suite
+
+`.venv/bin/python -m pytest tests -o addopts="" -q` -> `697 passed, 21 warnings in 751.78s (0:12:31)` (builder tests alone: 10 passed in 2.63 s). The full suite takes about 12.5 min on this machine.
