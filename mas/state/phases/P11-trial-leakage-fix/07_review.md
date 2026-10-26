@@ -124,9 +124,9 @@ Per-subject ranges are R-9b's values ±5 (clipped to [0, 100]). Examples: Compac
 
 The commands produce everything P1–P7 need: step 0 for P3; step 1 for P1, P2, P4 and P6; step 2 for P5. Once fix 1 is in, the network section of the step-1 demo run will print "skipped" lines for the three models, which is the intended outcome. The verifier keeps both demo logs and reads the network table from step 2 only.
 
-## Results review
+## Results review (template; the filled review is "Results review, Round 1" at the end of this file)
 
-Verdict: APPROVE / REJECT
+Verdict: see below
 
 ### Deviations from references
 
@@ -168,3 +168,109 @@ Head audited: c414aeb. Changes since Round 1 (32461e2):
 The pre-committed checks P1–P7 of Round 1 stand unchanged. With fix 1, the step-1 demo run will print three "skipped" lines for the network section; the verifier reads the network table from step 2 only.
 
 Verdict: PASS
+
+## Results review, Round 1
+
+Inputs:
+- runs at aedf8a8 (05_run.md, 73944df);
+- 06_verify.md (e85eeda, FAIL on P4);
+- deep-learning post-verify diagnosis (e1765fd, ffa26f2, 6e80de8; `mas/state/scratch/p11_round2_dl/`);
+- the CSVs `reports/{n_subjects_benchmark,cv_leakage_demo,cv_leakage_demo_networks,augmentation_ab_*}.csv`, which I read myself.
+
+`git diff --stat aedf8a8 HEAD -- src scripts configs` is empty, so the reported numbers come from the audited code plus fix 1.
+
+### Pre-committed checks
+
+| Check | Obtained (source) | Result |
+|---|---|---|
+| Counts | clean 200/196/197/197/200, rejected 0/3/3/1/0, 7 channels kept, none dropped (`reports/n_subjects_benchmark.csv`) | exact |
+| P1 R-6 | 61.00/67.50, 56.12/61.73, 86.80/90.36, 97.46/97.97, 95.00/95.50; mean 79.28/82.61. k = 122/135, 110/121, 171/178, 192/193, 190/191, every one the centre of its window. Trial-reset diagnostic beside it: 67.50/59.18/86.80/97.97/95.50, mean 81.39 (`reports/cv_leakage_demo.csv`) | **met, exact**. The C1 reporting rule applies: R-6's 2.0 s column is reproduced with the legacy-folder i%5 rule, and the trial-reset rule would miss S02 (−2.55) and S03 (−3.56) |
+| P2 leak size | leaky = R-5 exactly; grouped = n_subjects exactly; mean Δ1.0 −4.06 (R-6 −4.05), Δ2.0 −4.96 (R-6 −4.96). Per subject Δ1.0: −3.50/−10.21/−3.56/−1.52/−1.50 | **met** |
+| P3 legacy reachable | R-5, R-4 four rows + D-1 SFS, R-3 flagship all exact (`reports/legacy_leaky/`). Seeded saga rows on the hybrid: 87.31/94.42 and 88.32/94.92, both below Shrinkage-LDA 90.36/95.43. The row-by-row comparison against the P05 saga rows is impossible: the P05 copy was overwritten before this run (06). Recorded, not blocking: saga rows have no reference | **met** |
+| P4 R-9b | 14 cells out of window: EEGNet S03 ×4, S05 2.0 OFF, Mean 1.0 OFF/1.0 ON/2.0 OFF, Mean Δ2.0; Compact-CNN S03 1.0/2.0 ON, S05 1.0 ON, Mean 1.0 ON, Mean Δ1.0. ShallowConvNet inside everywhere. Sign rule holds (every Mean Δ > 0) | **not met; explanation incomplete** (see below) |
+| P5 qualitative | see grading below | partial (diagnostic) |
+| P6 approximate ids | S02 (condition 103, 39) and S04 (condition 101, 38) only | **met** |
+| P7 provenance | run commit aedf8a8; array hashes identical before and after (D0); frozen P10 hashes unchanged | **met** |
+
+### P4: is single-seed variance demonstrated for every out-of-window cell?
+
+What the post-verify diagnosis establishes, and I accept it:
+
+1. **No pipeline bug that the checks can see.**
+   - The network folds, ids, labels and gate mask equal those of the classical path, which reproduces R-6 exactly (`np.array_equal` for S01–S05). A regression test now guards this and fails on post-gate ids.
+   - `--cv legacy` reproduces P10's 75.63 for EEGNet S03.
+   - ShallowConvNet, on the same driver and folds, is inside every window.
+2. **Training randomness is large for EEGNet S03 OFF.** On the identical seed-42 folds, changing only the init/loader seed base gives 54.82 (seed 42, the reported run), 71.57 and 71.57 (bases 1042 and 2042). Range 16.75 pp, SD 9.67 (`.venv/bin/python`, ddof 1).
+   - The two non-42 runs are inside the P4 window (68.60–78.60), so R-9b's 73.60 is reachable by seed alone. **EEGNet S03 1.0 OFF: explained.**
+   - Coincidence flag: three runs land at exactly 141/197 = 71.57 (seed-43 split, bases 1042 and 2042) with different per-fold values. I re-derived the fold sizes and counts from the printed per-fold accuracies: (40,40,39,39,39) and (40,39,40,39,39), all consistent. Arithmetically genuine; a coincidence, not a defect.
+
+What is **not** demonstrated:
+
+3. **Cohort-level cells reduce to two single-subject cells.** I recomputed each cohort mean with one cell set to its R-9b value:
+   - EEGNet with S03 at R-9b: 1.0 OFF 62.12 (window 61.22–67.22), 2.0 OFF 65.75 (64.56–70.56), 1.0 ON 66.15, Δ2.0 3.03 (−1.78–4.22). All four come back inside.
+   - Compact-CNN with S05 ON at R-9b: Mean 1.0 ON 52.15 (50.96–56.96), Δ1.0 15.86 (14.16–20.16). Both inside.
+
+   So the cohort clauses stand or fall with EEGNet S03 (OFF **and ON**) and Compact-CNN S05 ON. With S03 OFF at its measured fixed-fold seed mean (65.99) instead of R-9b, EEGNet Mean 1.0 OFF would be 60.60, still 0.62 pp below. The other EEGNet subjects contribute small same-sign gaps: S01 −4.00, S02 −1.02, S04 −0.50, S05 −5.00.
+4. **Unmeasured cells.** EEGNet S03 1.0/2.0 ON (−14.72/−14.21), EEGNet S05 2.0 OFF (−7.50), Compact-CNN S03 ON (−5.07/−5.59) and Compact-CNN S05 1.0 ON (−7.50) were not seed-tested. The only measurement is EEGNet S03 OFF. Spread for one network, subject and arm does not establish it for another network or arm: Compact-CNN has 56,021 parameters against EEGNet's 2,349, and the ON arm adds an augmentation stream.
+5. **Signs lean one way.** Over all 60 R-9b cells (3 models × 5 subjects × 4 columns), P11 minus R-9b is positive in 18, negative in 36, zero in 6. On the 30 1.0 s cells alone: 10 positive, 20 negative. The cells are correlated within a subject (OFF/ON, and 1.0/2.0 from the same predictions), so this is not a test. But it is not the symmetric picture that pure seed noise predicts, and it rules out accepting the cohort misses without measurement.
+
+Conclusion: the explanation is plausible and demonstrated for one of the four driving cells. Under the tolerance-table clause, a signed explanation needs evidence for each out-of-window cell. The missing evidence is cheap to get, and the result could falsify the explanation (a narrow spread would point to a systematic difference instead). I do not sign the deviation yet.
+
+**R11 consultation (deep-learning, 12:05:00–12:05:15): within policy.**
+- Trigger valid: a deviation beyond tolerance after one investigation round without a bug.
+- Order correct: the diagnostics ran 11:54–12:04:50 (`scratchpad/p11r2` mtimes; `seeds.log` 12:04:50) before the first access.
+- All three accesses are logged and listed. Nothing was copied.
+- The original's RNG stream (fold seeds 43–47 from a 1-based index, unseeded loader) was correctly **not** adopted for the reported numbers; adopting it would tune toward R-9b (golden rule 5).
+- Note: the file was read at HEAD 5d6d1c2, not at a P11-era commit. The handoff says so.
+
+### P5 grading (diagnostic; it does not gate)
+
+- **Classical "drops ~4–5 pp": met.** −4.06 / −4.96, inside [−5.5, −3.0] / [−6.0, −3.5].
+- **CNNs "drop much more (Compact-CNN up to ~20 pp)": partial overall.**
+  - Compact-CNN: partial. Mean drops 5.56 (OFF) and 6.12 (ON) both exceed 4.06, but the largest per-subject drop is 14.21, below 15. I had pre-stated about 12 pp.
+  - EEGNet: partial. OFF 5.57 exceeds 4.06, ON 3.83 does not. Its S03 OFF drop of 20.81 is the seed-42 cell under investigation, so it is not evidence of leak size.
+  - ShallowConvNet: not reproduced (3.04 / 2.42).
+  - The "before" side is our CPU P10 run, not the original's leaky run. P5's explanation clause applies only once P4 is settled, so it is held open.
+- **EEGNet gain: pending P4.** Mean Δ1.0 +4.85 is inside its window and > 0; Δ2.0 +4.65 is outside. Descriptive only: original leaky +7.34, our P10 +3.11, R-9b +2.01. The report must not present any of these pairs as the roadmap's "shrinkage".
+- **Compact-CNN "keeps +17.16": not met at seed 42** (+13.56; with S05 at R-9b it would be 15.86). Pending P4.
+- **ShallowConvNet "keeps +2.53": met** (+2.63).
+
+### Required step: network seed-spread diagnostic (Round 2 of the results)
+
+Return to **deep-learning (diagnostic build) → verifier (run) → results review Round 2**. Pre-committed now; the next review applies it mechanically.
+
+1. **deep-learning:** add `scripts/diagnostics/network_seed_spread.py`, labelled DIAGNOSTIC.
+   - For one model and a list of subjects, it reuses `gated_windows`, the **seed-42 grouped folds** (`make_splits("grouped", yi, ids, 42)`) and `train_model`/`predict_proba` exactly as `train_and_eval_cv` does. The only change is the seed base `b`: model and loader seed `b + fold`, augmentation seed `b + fold` in the ON arm.
+   - It writes 1.0 s and 2.0 s (mod5) OFF and ON per subject and base to `reports/diagnostics/p11_seed_spread_<model>.csv` (+ meta naming the folds and bases).
+   - It never writes `augmentation_ab_*`.
+   - Synthetic test: (a) folds are identical across bases; (b) `b = 42` reproduces `train_and_eval_cv` exactly on a tiny tree.
+   - No change to any reporting path.
+2. **verifier:** run it for EEGNet and Compact-CNN, both arms, all five subjects, bases 1042 and 2042, CPU, 150 epochs. That is about 2 × (389 + 497) s ≈ 30 min, inside the budget. Commit the CSVs' numbers in 05/06 verbatim.
+3. **Rule per cell** (all 14 out-of-window cells of 06_verify.md reason 1):
+   - **Explained:** at least one of the two extra bases is inside that cell's P4 window, or the R-9b value lies within [min, max] of the three runs (42, 1042, 2042).
+   - **Cohort cells:** explained if every per-subject cell that drives them (EEGNet S03, Compact-CNN S05 ON) is explained, and the cohort mean over the three bases (mean row averaged across bases) is inside the window or within 1.0 pp of it.
+   - **Systematic (not explained):** all three runs outside on the same side. That is REJECT plus a blocker for Sebastian. Only then may the original's RNG convention be replayed, as a labelled DIAGNOSTIC, never as the reported numbers.
+4. The **reported** P11 numbers stay the seed-42 CSVs whatever the outcome. The spread table enters the report as a diagnostic (per cell: mean, SD, range across the three bases).
+
+### What the P11 report must say (binding on the scribe, whatever Round 2 gives)
+
+- **Smoothing chronology (C1):** R-6's 2.0 s is reproduced with the legacy-folder i%5 rule. The trial-reset diagnostic sits beside it (mean 81.39; S02 59.18, S03 86.80). The plan's choice was reversed after the smoke numbers were seen (18a6792 → 31d6f8e). The spec basis is R8 text, §5.6, Conventions and the P05 row. Sebastian's open question on the era-matrix row is cited.
+- **N4:** S02 and S04 have approximate trial ids (blocks 39 and 38). After the lost window, reconstructed trials straddle two true trials, so a small residual leak can remain on those two subjects until true ids (P16). S02 also shows the largest classical leak (−10.21 pp at 1.0 s), so this must sit next to its row.
+- **Seed sensitivity:** every P11 network number is a single training seed on fixed folds. EEGNet S03 OFF ranges 54.82–71.57 with the init seed alone. Network per-subject differences smaller than this spread, including A/B deltas such as Compact-CNN S05 +11.00 vs R-9b +22.50, are not ranked or interpreted. Use the Round 2 spread table once it exists.
+- **Deviation wording:** only after Round 2. If accepted, use the form "R-9b cells … deviate beyond ±5 / ±3 pp; explained by single-seed training variance measured at … (bases 42/1042/2042, same folds); splits, ids and normalisation verified identical to the R-6 path; sign rule holds; ShallowConvNet inside". Never "reproduced". If not accepted, state "R-9b not reproduced for EEGNet and Compact-CNN; open question to Sebastian".
+- **Leak size:** classical −4.06 / −4.96 pp (R-6 −4.05 / −4.96). Network drops are per arm against our P10, labelled leaky-vs-grouped of this rebuild, not of the original.
+- **Saga rows:** seeded from P11 (Deviation 1). The R-3 ranking is unchanged. The P05 saga rows can no longer be compared.
+
+### Decisions for decisions.md
+
+- **D-1 (P11):** R-6 reproduced exactly: counts, 1.0 s, and 2.0 s with the legacy-folder i%5 rule under trial-grouped CV. The trial-reset diagnostic (mean 81.39) is reported beside it, never in place of it. Leak effect −4.06 / −4.96 pp (R-6 −4.05 / −4.96). Legacy outputs equal R-5, R-4 (+P06 D-1) and R-3 exactly.
+- **D-2 (P11):** approximate trial ids on S02 (103: 39) and S04 (101: 38) only. Their residual leak is stated in every write-up until P16.
+- **D-3 (P11):** the deep-learning R11 consultation of the original A/B script (12:05, HEAD 5d6d1c2) is within policy. Splits, ids and normalisation are equivalent. The RNG stream differs (fold seeds 43–47, unseeded loader) and is not adopted for reported numbers (golden rule 5).
+- **D-4 (P11):** R-9b deviation **not yet accepted**. The seed-spread diagnostic and per-cell rule above were pre-committed before its run. Reported network numbers stay seed 42.
+- **D-5 (P11):** coincidence record: three EEGNet S03 OFF runs at 141/197 with different per-fold values. Arithmetic verified, no defect.
+- **D-6 (P11):** P5 classical met; CNN claim partial (ShallowConvNet shows no larger-than-classical drop); the EEGNet and Compact-CNN gain clauses are pending P4.
+- **D-7 (P11):** saga LogReg seeding (Deviation 1) leaves R-3's ranking unchanged. The P05 saga rows were overwritten before P11 and cannot be compared row by row.
+
+Verdict: REJECT
+
+1. P4 (R-9b): single-seed variance is demonstrated only for EEGNet S03 1.0 OFF. It is not demonstrated for EEGNet S03 ON, EEGNet S05 2.0 OFF, Compact-CNN S03 ON and S05 ON, nor for the cohort cells that these drive. The signs lean negative (36 vs 18 of 60 cells). Return to **deep-learning** for the seed-spread diagnostic script (step 1 above), then the **verifier** run (step 2), then results review Round 2 with the pre-committed rule (step 3). Reported numbers and all other checks (P1–P3, P6, P7) stand.
