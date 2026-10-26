@@ -42,6 +42,10 @@ class NetSpec:
   training_extra: str  # extra training facts (e.g. max-norm)
 
 
+AUGMENT_NOTE = {"off": "", "on": " (mixup, scale, shift, noise at p=0.5 on the z-scored training fold only, own numpy "
+                "generator seeded seed+fold, PF-28/PF-29)"}
+
+
 def build_parser(doc: str = __doc__) -> argparse.ArgumentParser:
   p = argparse.ArgumentParser(description=doc, formatter_class=argparse.RawDescriptionHelpFormatter)
   p.add_argument("--subject", default=DEFAULT_SUBJECT, help=f"subject folder (default {DEFAULT_SUBJECT})")
@@ -50,7 +54,8 @@ def build_parser(doc: str = __doc__) -> argparse.ArgumentParser:
   p.add_argument("--batch-size", type=int, default=BATCH_SIZE)
   p.add_argument("--lr", type=float, default=LR)
   p.add_argument("--device", choices=["auto", "cpu", "cuda"], default="auto")
-  p.add_argument("--augment", choices=["off"], default="off", help="augmentation arrives in P10; only 'off' here")
+  p.add_argument("--augment", choices=["off", "on"], default="off",
+                 help="training-fold augmentation (P10, PF-29); fold k seeds its generator with seed+k (default off)")
   p.add_argument("--seed", type=int, default=SEED, help=f"CV seed; fold k seeds the model with seed+k (default {SEED})")
   p.add_argument("--config", type=Path, default=None, help="default: <root>/configs/pipeline_config.yaml")
   p.add_argument("--data-root", "--processed-dir", dest="data_root", type=Path, default=None,
@@ -89,7 +94,7 @@ def header_lines(spec: NetSpec, seed: int, device: str, args) -> list:
     f"label ({spec.fs_note})",
     f"training: epochs={args.epochs} (fixed, no early stopping, no validation split), batch={args.batch_size}, "
     f"AdamW lr={args.lr:g} wd={WEIGHT_DECAY:g}, CosineAnnealingLR eta_min={ETA_MIN:g}, CE label_smoothing={LABEL_SMOOTHING:g}, "
-    f"manual_seed(seed+fold) per fold, seeded DataLoader generator, {spec.training_extra}augment=off",
+    f"manual_seed(seed+fold) per fold, seeded DataLoader generator, {spec.training_extra}augment={args.augment}" + AUGMENT_NOTE[args.augment],
     "train accuracy: mean over folds, eval mode on the un-augmented training fold (PF-30)",
   ]
 
@@ -121,7 +126,8 @@ def run_benchmark(spec: NetSpec, root: Path, argv: Optional[Sequence[str]] = Non
           f"channels kept {len(g['kept'])} [{', '.join(g['kept'])}]; dropped [{', '.join(g['dropped']) or 'none'}]", flush=True)
     n_channels.append(f"{s}={len(g['kept'])}")
     t1 = time.time()
-    r = train_and_eval_cv(g["X"], g["y"], spec.build, args.epochs, args.batch_size, args.lr, dev.type, args.seed, verbose=True)
+    r = train_and_eval_cv(g["X"], g["y"], spec.build, args.epochs, args.batch_size, args.lr, dev.type, args.seed, verbose=True,
+                         augment=args.augment == "on")
     rows.append({"Subject": s, "Device": dev.type, "Clean Windows": g["n_clean"],
                  "Rejected": g["n_stimulus"] - g["n_clean"],
                  "1.0s Acc (%)": round(100 * r["accuracy"], 2), "2.0s Smoothed (%)": round(100 * r["smoothed_accuracy"], 2),
@@ -132,7 +138,8 @@ def run_benchmark(spec: NetSpec, root: Path, argv: Optional[Sequence[str]] = Non
     print("[-] No subject evaluated")
     return 1
   df = pd.DataFrame(rows, columns=COLUMNS)
-  csv = reports / f"{spec.name}_benchmark_{dev.type}.csv"
+  tag = "_aug" if args.augment == "on" else ""
+  csv = reports / f"{spec.name}{tag}_benchmark_{dev.type}.csv"
   csv.parent.mkdir(parents=True, exist_ok=True)
   df.to_csv(csv, index=False)
   csv.with_suffix(".meta.txt").write_text(

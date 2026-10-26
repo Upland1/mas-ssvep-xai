@@ -111,7 +111,7 @@ def test_learnable_planted_sinusoids():
   assert r["accuracy"] > 0.6, r["accuracy"]
 
 
-def test_script_smoke_and_augment_only_off(tmp_path):
+def test_script_smoke_and_augment_choices(tmp_path):
   write_subject(tmp_path / "proc", "S03", n_trials=3)
   rep = tmp_path / "rep"
   cfg = tmp_path / "cfg.yaml"
@@ -125,4 +125,4 @@ def test_script_smoke_and_augment_only_off(tmp_path):
   meta = (rep / "eegnet_benchmark_cpu.meta.txt").read_text()
   assert "legacy" in meta and "i%5" in meta and "PF-30" in meta
   with pytest.raises(SystemExit):
-    be.build_parser().parse_args(["--augment", "on"])
+    be.build_parser().parse_args(["--augment", "maybe"])
