@@ -55,7 +55,7 @@ DETAIL_COLUMNS = ["subject", "method", "condition", "frequency_hz", "p_two_taile
                   "null_ci_lo", "null_ci_hi", "n_permutations", "n_stim_windows", "n_baseline_windows",
                   "fs", "source", "trial_ids_approximate", "coherence_estimator", "random_state"]
 ALPHA_COLUMNS = ["subject", "method", "condition", "frequency_hz", "mean_baseline_matched", "mean_stimulus",
-                 "mean_difference", "p_one_tailed", "permutation_unit"]
+                 "mean_difference", "p_one_tailed", "p_lower_tailed", "permutation_unit"]
 SOURCE = "legacy windows (P02), raw, fs-250 axis (PF-04)"
 
 
@@ -65,6 +65,13 @@ def _sfx(suffix: str) -> str:
 
 def summary_path(reports: Path, suffix: str) -> Path:
   return Path(reports) / f"connectivity_cohort_summary{_sfx(suffix)}.csv"
+
+
+def flips_path(reports: Path, a: str, b: str) -> Path:
+  """`connectivity_cohort_flips.csv` for the required (trial100, final) pair, else one file per pair."""
+  if (a, b) == ("trial100", ""):
+    return Path(reports) / "connectivity_cohort_flips.csv"
+  return Path(reports) / f"connectivity_cohort_flips_{a or 'final'}_vs_{b or 'final'}.csv"
 
 
 def edges_dir(reports: Path, suffix: str) -> Path:
@@ -152,7 +159,8 @@ def run_cohort(args) -> dict:
           alpha.append(dict(subject=s, method=m, condition=c, frequency_hz=CONDITION_FREQS[c],
                             mean_baseline_matched=float(r["base_matrix"][emask].mean()),
                             mean_stimulus=float(r["stim_matrix"][emask].mean()), mean_difference=r["obs_diff"],
-                            p_one_tailed=r["p_one_tailed"], permutation_unit=unit))
+                            p_one_tailed=r["p_one_tailed"], p_lower_tailed=r["p_lower_tailed"],
+                            permutation_unit=unit))
       np.savez(edir / f"{s}_{m}.npz", **npz)
       tot = sum(r["n_edges_sig_fdr"] for r in res.values())
       print(f"  [{s}] {m}: FDR edges total {tot}; global p " +
@@ -192,7 +200,11 @@ def compare_runs(reports: Path, suffix_a: str, suffix_b: str, alpha: float = 0.0
   a = pd.read_csv(summary_path(reports, suffix_a))
   b = pd.read_csv(summary_path(reports, suffix_b))
   key = ["subject", "method", "condition", "frequency_hz"]
-  mg = a.merge(b, on=key, suffixes=("_a", "_b"))
+  ka, kb = set(map(tuple, a[key[:3]].values)), set(map(tuple, b[key[:3]].values))
+  if ka != kb:
+    raise ValueError(f"summaries '{suffix_a}' and '{suffix_b}' differ in (subject, method, condition) rows: "
+                     f"only in A {sorted(ka - kb)[:5]}, only in B {sorted(kb - ka)[:5]}")
+  mg = a.merge(b, on=key, suffixes=("_a", "_b"), validate="one_to_one")
   mg["crit_B_a"], mg["crit_B_b"] = mg["p_one_tailed_a"] < alpha, mg["p_one_tailed_b"] < alpha
   mg["crit_A_a"], mg["crit_A_b"] = mg["n_edges_sig_fdr_a"] >= 1, mg["n_edges_sig_fdr_b"] >= 1
   mg["flip_B"], mg["flip_A"] = mg["crit_B_a"] != mg["crit_B_b"], mg["crit_A_a"] != mg["crit_A_b"]
@@ -210,10 +222,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     a, b = args.compare
     flips = compare_runs(reports, a, b, args.alpha)
     n_cells = len(pd.read_csv(summary_path(reports, a)))
-    out = reports / "connectivity_cohort_flips.csv"
+    out = flips_path(reports, a, b)
     flips.to_csv(out, index=False)
-    print(f"compared '{a}' vs '{b}': {n_cells} cells in run A, {len(flips)} flip across alpha={args.alpha:g} "
-          f"(inconclusive, R7)")
+    print(f"compared '{a or 'final'}' vs '{b or 'final'}': {n_cells} cells compared, {len(flips)} flip across "
+          f"alpha={args.alpha:g} (inconclusive, R7)")
     if len(flips):
       print(flips.to_string(index=False, float_format=lambda v: f"{v:.3f}"))
     print(f"saved {out}")

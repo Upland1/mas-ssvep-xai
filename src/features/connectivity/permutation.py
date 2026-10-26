@@ -158,6 +158,7 @@ def compute_permutation_test(stim: np.ndarray, base: np.ndarray, band: tuple, fs
   null_global = null[:, emask].mean(axis=1)
   n = n_permutations
   p_one = (1 + np.sum(null_global >= obs_global)) / (n + 1)
+  p_low = (1 + np.sum(null_global <= obs_global)) / (n + 1)  # lower tail, from the null counts
   p_two = (1 + np.sum(np.abs(null_global) >= abs(obs_global))) / (n + 1)
   edge_obs = obs[emask]
   edge_null = null[:, emask]
@@ -170,7 +171,7 @@ def compute_permutation_test(stim: np.ndarray, base: np.ndarray, band: tuple, fs
   lo, hi = np.percentile(null_global, [2.5, 97.5])
   return dict(
     observed_diff=obs, stim_matrix=stim_m, base_matrix=base_m, obs_diff=obs_global,
-    p_one_tailed=float(p_one), p_two_tailed=float(p_two), significant_uncorrected=bool(p_one < alpha),
+    p_one_tailed=float(p_one), p_lower_tailed=float(p_low), p_two_tailed=float(p_two), significant_uncorrected=bool(p_one < alpha),
     null_mean=float(null_global.mean()), null_std=float(null_global.std()), null_ci=(float(lo), float(hi)),
     null_distribution=null_global, edge_p_one_tailed=p_mat_one, edge_p_two_tailed=p_mat_two,
     fdr_significant=fdr, n_edges_sig_uncorrected=int((pe_one < alpha).sum()),
