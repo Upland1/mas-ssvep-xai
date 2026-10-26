@@ -550,3 +550,111 @@ def test_cohort_summary_and_npz_schema(tmp_path, capsys):
       assert np.all(np.diag(z["stim_101"]) == 0.0)
     else:
       assert np.all(np.isnan(np.diag(z["stim_101"])))
+
+
+# ------------------------------------------------------------------ Round 1: --compare and the lower tail
+
+def _write_summary(reports, suffix, rows):
+  """rows: (subject, method, condition, freq, p_one, n_fdr)."""
+  df = pd.DataFrame([dict(subject=s, method=m, condition=c, frequency_hz=f, p_one_tailed=p, n_edges_sig_fdr=k,
+                          permutation_unit="trial") for s, m, c, f, p, k in rows])
+  name = "connectivity_cohort_summary" + (f"_{suffix}" if suffix else "") + ".csv"
+  df.to_csv(reports / name, index=False)
+
+
+def _compare_tree(tmp_path):
+  _write_summary(tmp_path, "trial100", [("S01", "m", 101, 24.0, 0.04, 0), ("S02", "m", 101, 24.0, 0.50, 0),
+                                        ("S03", "m", 102, 20.0, 0.03, 2)])
+  _write_summary(tmp_path, "", [("S01", "m", 101, 24.0, 0.06, 2), ("S02", "m", 101, 24.0, 0.50, 0),
+                                ("S03", "m", 102, 20.0, 0.02, 3)])
+  _write_summary(tmp_path, "window200", [("S01", "m", 101, 24.0, 0.01, 0), ("S02", "m", 101, 24.0, 0.01, 1),
+                                         ("S03", "m", 102, 20.0, 0.50, 0)])
+
+
+def _run_compare(tmp_path, a, b, capsys):
+  assert cohort.main(["--compare", a, b, "--reports-dir", str(tmp_path)]) == 0
+  return capsys.readouterr().out
+
+
+def test_compare_writes_distinct_files_in_both_orders_with_hand_flips(tmp_path, capsys):
+  _compare_tree(tmp_path)
+  out1 = _run_compare(tmp_path, "trial100", "", capsys)
+  assert "3 cells compared, 1 flip" in out1
+  req = pd.read_csv(tmp_path / "connectivity_cohort_flips.csv")
+  assert list(req["subject"]) == ["S01"] and bool(req.loc[0, "flip_A"]) and bool(req.loc[0, "flip_B"])
+  out2 = _run_compare(tmp_path, "window200", "", capsys)
+  assert "3 cells compared, 3 flip" in out2
+  w = pd.read_csv(tmp_path / "connectivity_cohort_flips_window200_vs_final.csv")
+  assert sorted(w["subject"]) == ["S01", "S02", "S03"]
+  assert w.set_index("subject").loc["S02", ["flip_A", "flip_B"]].all()
+  # the later compare did not overwrite the required file
+  assert list(pd.read_csv(tmp_path / "connectivity_cohort_flips.csv")["subject"]) == ["S01"]
+  # reversed order: its own file, same flipping cell, p values swapped
+  out3 = _run_compare(tmp_path, "", "trial100", capsys)
+  assert "3 cells compared, 1 flip" in out3
+  rev = pd.read_csv(tmp_path / "connectivity_cohort_flips_final_vs_trial100.csv")
+  assert list(rev["subject"]) == ["S01"]
+  assert rev.loc[0, "p_one_tailed_a"] == pytest.approx(0.06) and rev.loc[0, "p_one_tailed_b"] == pytest.approx(0.04)
+  _run_compare(tmp_path, "", "window200", capsys)
+  assert (tmp_path / "connectivity_cohort_flips_final_vs_window200.csv").exists()
+  assert (tmp_path / "connectivity_cohort_flips.csv").exists()
+
+
+def test_compare_raises_on_missing_row_in_either_direction(tmp_path):
+  _compare_tree(tmp_path)
+  _write_summary(tmp_path, "short", [("S01", "m", 101, 24.0, 0.04, 0), ("S02", "m", 101, 24.0, 0.50, 0)])
+  with pytest.raises(ValueError):
+    cohort.compare_runs(tmp_path, "short", "")
+  with pytest.raises(ValueError):
+    cohort.compare_runs(tmp_path, "", "short")
+  with pytest.raises(ValueError):
+    cohort.main(["--compare", "trial100", "short", "--reports-dir", str(tmp_path)])
+
+
+def _fixed_null_test(monkeypatch, null_values, obs):
+  """Run compute_permutation_test with a controlled null: method value = sum of the window labels."""
+  n = len(null_values)
+
+  # observed difference is obs; each permutation i returns null_values[i]
+  def fake_chunk(pool, cache, ids, n_first, seeds, method_fn, fs, band):
+    out = np.zeros((len(seeds), 2, 2))
+    out[:, 0, 1] = out[:, 1, 0] = np.asarray(null_values)[:len(seeds)]
+    return out
+
+  monkeypatch.setattr(pm, "_perm_chunk", fake_chunk)
+
+  def fn_obs(windows, fs, band):
+    m = float(np.mean(windows[:, 0, 0]))
+    return np.array([[np.nan, m], [m, np.nan]])
+
+  stim = np.full((4, 2, 1), obs)
+  base = np.zeros((6, 2, 1))
+  return pm.compute_permutation_test(stim, base, BAND, FS, n, fn_obs, 1, 0)
+
+
+def test_lower_and_upper_tail_p_against_hand_counts_with_ties(monkeypatch):
+  null = [-0.5, -0.2, 0.0, 0.0, 0.1, 0.3, 0.3, 0.3, 0.9, 1.5]  # n = 10
+  r = _fixed_null_test(monkeypatch, null, 0.3)
+  assert r["obs_diff"] == pytest.approx(0.3)
+  # >= 0.3: {0.3, 0.3, 0.3, 0.9, 1.5} = 5 ; <= 0.3: {-0.5,-0.2,0,0,0.1,0.3,0.3,0.3} = 8
+  assert r["p_one_tailed"] == pytest.approx(6 / 11)
+  assert r["p_lower_tailed"] == pytest.approx(9 / 11)
+  # |null| >= 0.3: {-0.5, 0.3, 0.3, 0.3, 0.9, 1.5} = 6
+  assert r["p_two_tailed"] == pytest.approx(7 / 11)
+  # ties make the tails overlap, so 1 - p_one is NOT the lower tail
+  assert r["p_lower_tailed"] != pytest.approx(1 - r["p_one_tailed"])
+  # extremes: smallest possible value in each tail
+  top = _fixed_null_test(monkeypatch, null, 2.0)
+  assert top["p_one_tailed"] == pytest.approx(1 / 11) and top["p_lower_tailed"] == pytest.approx(1.0)
+  bot = _fixed_null_test(monkeypatch, null, -2.0)
+  assert bot["p_lower_tailed"] == pytest.approx(1 / 11) and bot["p_one_tailed"] == pytest.approx(1.0)
+
+
+def test_alpha_diagnostic_carries_p_lower_tailed(tmp_path):
+  _tree(tmp_path / "data")
+  rep = tmp_path / "rep"
+  assert cohort.main(["--methods", "plv", "--permutations", "7", "--n-jobs", "1", "--data-root",
+                      str(tmp_path / "data"), "--reports-dir", str(rep)]) == 0
+  a = pd.read_csv(rep / "connectivity_alpha_diagnostic.csv")
+  assert "p_lower_tailed" in a.columns and set(a["condition"]) == {104, 105}
+  assert ((a["p_lower_tailed"] >= 1 / 8 - 1e-12) & (a["p_lower_tailed"] <= 1)).all()
