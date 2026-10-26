@@ -36,7 +36,7 @@ if str(ROOT) not in sys.path:
 
 from src.features.connectivity.connectivity_extraction import (  # noqa: E402
   CONDITION_FREQS, LEGACY_FS_HZ, band_for_condition, compute_condition_coherence, load_gated_conditions,
-  mean_offdiag, per_window_mean_matrix, summary_rows)
+  mean_offdiag, meta_lines, per_window_mean_matrix, summary_rows)
 
 SEED = 0
 N_WINDOWS, T, N_CH = 40, 256, 7
@@ -94,14 +94,17 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     print(f"\n(b) {s}: channels {g['channels_kept']} (dropped {g['channels_dropped'] or 'none'}); "
           f"gate counts {g['counts']}")
     cols = ["condition", "f_c", "n_windows", "n_baseline", "mean_baseline_perwindow", "mean_matched_baseline",
-            "mean_baseline_broadband", "mean_difference_broadband", "mean_difference"]
+            "mean_difference_broadband", "mean_difference", "mean_difference_aligned"]
     print(df[cols].to_string(index=False, float_format=lambda v: f"{v:.4f}"))
+    r0 = rows[0]
+    print(f"R-11 baseline coherence {s} (201, 5-35 Hz): before (per-window, PF-15 bug) "
+          f"{r0['baseline_broadband_before']:.4f}, after (concatenated, REPORTED) {r0['baseline_broadband_after']:.4f}, "
+          f"aligned diagnostic {r0['baseline_broadband_after_aligned']:.4f}")
     df.to_csv(out / f"coherence_bias_demo_{s}.csv", index=False)
-    (out / f"coherence_bias_demo_{s}.meta.txt").write_text(
-      f"subject={s} data={args.data_root} fs={args.fs:g} (legacy PF-04) channels={g['channels_kept']} "
-      f"dropped={g['channels_dropped']} gate=P07 two-tier vpp 5-120 std 1-35 fail>50% counts={g['counts']}\n"
-      "columns: mean_baseline_perwindow = before (PF-15); mean_matched_baseline = after; "
-      "mean_difference_broadband = PF-16 bug; mean_difference = matched\n")
+    (out / f"coherence_bias_demo_{s}.meta.txt").write_text("\n".join([
+      f"DIAGNOSTIC demo part (b) subject={s} data={args.data_root}",
+      f"gate=P07 two-tier vpp 5-120 std 1-35 fail>50% counts={g['counts']}"]
+      + meta_lines(rows, g["channels_kept"], g["channels_dropped"], args.fs)) + "\n")
   print(f"\nsynthetic part in range: {ok}")
   return 0 if ok else 1
 

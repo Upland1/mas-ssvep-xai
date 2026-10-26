@@ -54,10 +54,10 @@ def band_average(freqs: np.ndarray, coh: np.ndarray, band: tuple) -> np.ndarray:
   return coh[..., sel].mean(axis=-1)
 
 
-def pairwise_coherence(signal: np.ndarray, fs: float, nperseg: int) -> tuple:
+def pairwise_coherence(signal: np.ndarray, fs: float, nperseg: int, noverlap: Optional[int] = None) -> tuple:
   """`(freqs, coh (C, C, F))` of a `(C, N)` signal; one `scipy.signal.coherence` call per pair.
 
-  The diagonal holds NaN. Index layout: `coh[i, j] = coh[j, i]` is the pair of channels i, j (R6).
+  `noverlap=None` keeps the scipy default (50 %); the aligned diagnostic passes 0. The diagonal holds NaN. Index layout: `coh[i, j] = coh[j, i]` is the pair of channels i, j (R6).
   """
   x = np.asarray(signal, dtype=np.float64)
   n_ch = x.shape[0]
@@ -66,7 +66,8 @@ def pairwise_coherence(signal: np.ndarray, fs: float, nperseg: int) -> tuple:
   out = None
   for i in range(n_ch):
     for j in range(i + 1, n_ch):
-      f, c = coherence(x[i], x[j], fs=fs, nperseg=nper)
+      kw = {} if noverlap is None else {"noverlap": noverlap}
+      f, c = coherence(x[i], x[j], fs=fs, nperseg=nper, **kw)
       if out is None:
         freqs = f
         out = np.full((n_ch, n_ch, len(f)), np.nan)
@@ -141,18 +142,68 @@ def per_window_mean_matrix(windows: np.ndarray, fs: float, band: tuple) -> np.nd
   return np.mean([compute_coherence_matrix(w, fs, band) for w in windows], axis=0)
 
 
+def compute_aligned_condition_coherence(windows: np.ndarray, fs: float, band: tuple) -> np.ndarray:
+  """DIAGNOSTIC (F2): concatenated coherence with Welch segments aligned to the windows.
+
+  `nperseg = T`, `noverlap = 0`, so no segment spans a window junction (junction discontinuities cannot
+  leak low-frequency power into the band). Not the reported estimator.
+  """
+  w = np.asarray(windows, dtype=np.float64)
+  freqs, coh = pairwise_coherence(concatenate_windows(w), fs, w.shape[2], noverlap=0)
+  return band_average(freqs, coh, band)
+
+
+def baseline_broadband_stats(windows: np.ndarray, y: np.ndarray, fs: float = LEGACY_FS_HZ) -> dict:
+  """REPORTED R-11 'baseline coherence': gated 201 windows, 5-35 Hz, mean off-diagonal.
+
+  `before` = per-window coherence (nperseg min(T, 128)) averaged over the windows (PF-15 bug, DIAGNOSTIC
+  side); `after` = concatenated (nperseg 256, R4); `after_aligned` = window-aligned diagnostic.
+  """
+  idx = np.flatnonzero(np.asarray(y) == BASELINE_CONDITION)
+  if len(idx) == 0:
+    raise ValueError("no baseline (201) windows")
+  w = np.asarray(windows)[idx]
+  return dict(before=mean_offdiag(per_window_mean_matrix(w, fs, BASELINE_BAND)),
+              after=mean_offdiag(compute_condition_coherence(w, fs, BASELINE_BAND)),
+              after_aligned=mean_offdiag(compute_aligned_condition_coherence(w, fs, BASELINE_BAND)))
+
+
+def band_bins(fs: float, nperseg: int, band: tuple, true_fs: float = 256.0) -> tuple:
+  """`(bins_on_fs_axis, true_hz)` of the Welch bins inside `band` on the fs axis (PF-04 label).
+
+  The recordings are `true_fs` = 256 Hz, so a bin at `f` on the 250 axis is really `f * true_fs / fs`.
+  """
+  f = np.fft.rfftfreq(nperseg, 1.0 / fs)
+  sel = f[(f >= band[0] - _EPS) & (f <= band[1] + _EPS)]
+  return [round(float(v), 3) for v in sel], [round(float(v) * true_fs / fs, 3) for v in sel]
+
+
+# REPORTED = enters the reported result; DIAGNOSTIC = bug demo / sensitivity check, never a result.
+COLUMN_LABELS = {
+  "condition": "id", "f_c": "id", "band_lo": "id", "band_hi": "id", "n_windows": "id", "n_baseline": "id",
+  "mean_raw": "REPORTED (concatenated, R4)",
+  "mean_matched_baseline": "REPORTED (same 201 windows re-scored in the band, PF-16 fix)",
+  "mean_difference": "REPORTED (stimulus - matched baseline)",
+  "baseline_broadband_before": "DIAGNOSTIC side of R-11 baseline (per-window averaged, PF-15 bug)",
+  "baseline_broadband_after": "REPORTED R-11 baseline coherence (201, 5-35 Hz, concatenated)",
+  "baseline_broadband_after_aligned": "DIAGNOSTIC (window-aligned segments, F2)",
+  "mean_baseline_perwindow": "DIAGNOSTIC (per-band per-window averaged, PF-15 bug; secondary 'before')",
+  "mean_difference_broadband": "DIAGNOSTIC (stimulus - 5-35 Hz broadband baseline, PF-16 bug)",
+  "mean_difference_aligned": "DIAGNOSTIC (window-aligned segments nperseg=T, noverlap=0; junction sensitivity, F2)",
+}
+
+
 def summary_rows(windows: np.ndarray, y: np.ndarray, fs: float = LEGACY_FS_HZ) -> list:
   """One dict per stimulus condition with the R-11 statistics (mean off-diagonal values).
 
-  Keys: condition, f_c, band_lo, band_hi, n_windows, n_baseline, mean_raw (stimulus, concatenated),
-  mean_matched_baseline (after), mean_difference (stimulus - matched), mean_baseline_perwindow
-  (before, PF-15 diagnostic), mean_baseline_broadband (PF-16 diagnostic) and mean_difference_broadband.
+  Keys: see `COLUMN_LABELS` (REPORTED vs DIAGNOSTIC). The per-subject broadband baseline
+  (`baseline_broadband_before/after/after_aligned`) is repeated on every row.
   """
   y = np.asarray(y)
   stim = compute_condition_connectivity(windows, y, fs)
   matched, idx = compute_baseline_matched_connectivity(windows, y, fs)
   diff = compute_difference_matrices(stim, matched)
-  base_broad = mean_offdiag(stim[BASELINE_CONDITION]) if BASELINE_CONDITION in stim else np.nan
+  bb = baseline_broadband_stats(windows, y, fs)
   rows = []
   for c in CONDITION_FREQS:
     if c not in stim:
@@ -160,13 +211,34 @@ def summary_rows(windows: np.ndarray, y: np.ndarray, fs: float = LEGACY_FS_HZ) -
     band = band_for_condition(c)
     before = mean_offdiag(per_window_mean_matrix(windows[idx], fs, band))
     raw = mean_offdiag(stim[c])
+    aligned = (mean_offdiag(compute_aligned_condition_coherence(windows[y == c], fs, band))
+               - mean_offdiag(compute_aligned_condition_coherence(windows[idx], fs, band)))
     rows.append(dict(
       condition=c, f_c=CONDITION_FREQS[c], band_lo=band[0], band_hi=band[1],
       n_windows=int((y == c).sum()), n_baseline=len(idx), mean_raw=raw,
       mean_matched_baseline=mean_offdiag(matched[c]), mean_difference=mean_offdiag(diff[c]),
-      mean_baseline_perwindow=before, mean_baseline_broadband=base_broad,
-      mean_difference_broadband=raw - base_broad))
+      baseline_broadband_before=bb["before"], baseline_broadband_after=bb["after"],
+      baseline_broadband_after_aligned=bb["after_aligned"],
+      mean_baseline_perwindow=before, mean_difference_broadband=raw - bb["after"],
+      mean_difference_aligned=aligned))
   return rows
+
+
+def meta_lines(rows: list, channels: Sequence[str], dropped: Sequence[str], fs: float, nperseg: int = NPERSEG) -> list:
+  """Meta text shared by the demo and the analysis: column labels, bands with true bins, channel count."""
+  out = [f"channels ({len(channels)}) = {list(channels)}; dropped = {list(dropped)}",
+         f"fs axis = {fs:g} Hz (legacy, PF-04); recordings are 256 Hz, so a bin at f on this axis is f*256/{fs:g} Hz"]
+  for c in CONDITION_FREQS:
+    b = band_for_condition(c)
+    bins, true = band_bins(fs, nperseg, b)
+    out.append(f"band {c}: ({b[0]:.4f}, {b[1]:.4f}) on the fs-{fs:g} axis; bins {bins} (axis Hz) = {true} (true Hz)")
+  out.append("column labels:")
+  out += [f"  {k}: {v}" for k, v in COLUMN_LABELS.items()]
+  if rows:
+    out.append(f"secondary diagnostic: mean of the 5 per-band matched baselines, before "
+               f"{np.mean([r['mean_baseline_perwindow'] for r in rows]):.4f}, after "
+               f"{np.mean([r['mean_matched_baseline'] for r in rows]):.4f} (cannot replace the 5-35 Hz baseline, A2)")
+  return out
 
 
 def load_gated_conditions(processed_dir: Path, subject: str, channel_names: Optional[Sequence[str]] = None) -> dict:

@@ -17,7 +17,7 @@ from matplotlib import cm, colors  # noqa: E402
 from mne_connectivity.viz import plot_connectivity_circle  # noqa: E402
 
 CONDITION_LABELS = {101: "24 Hz (101)", 102: "20 Hz (102)", 103: "15 Hz (103)",
-                    104: "10.91 Hz (104)", 105: "8.57 Hz (105)", 201: "No stimulus (201)"}
+                    104: "10.91 Hz (104)", 105: "8.57 Hz (105)", 201: "No stimulus (201)\n5-35 Hz broadband, not band-matched"}
 RAW_CMAP = "viridis"
 DIFF_CMAP = "RdBu_r"
 

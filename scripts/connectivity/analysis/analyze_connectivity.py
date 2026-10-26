@@ -1,6 +1,6 @@
 """Per-subject connectivity analysis (P12.4): coherence, stimulus vs matched baseline.
 
-Data source: legacy folder <data-root>/<S>/ (P02, 7 channels, raw windows, no continuous filtering,
+Data source: legacy folder <data-root>/<S>/ (P02, legacy channels, raw windows, no continuous filtering,
 R3 era B), conditions 101-105 and 201; fs 250 on the frequency axis (legacy, PF-04). One P07 two-tier
 gate (vpp 5-120 uV, std 1-35 uV, channel dropped if it fails in > 50 % of windows) over the union of
 101-105 and 201. Estimator: concatenated windows, one Welch coherence per pair (R4); bands f_c +- 1 Hz;
@@ -33,7 +33,7 @@ if str(ROOT) not in sys.path:
 
 from src.features.connectivity.connectivity_extraction import (  # noqa: E402
   BASELINE_CONDITION, CONDITION_FREQS, GATE, LEGACY_FS_HZ, compute_baseline_matched_connectivity,
-  compute_condition_connectivity, compute_difference_matrices, load_gated_conditions, summary_rows)
+  compute_condition_connectivity, compute_difference_matrices, load_gated_conditions, meta_lines, summary_rows)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -65,7 +65,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
   df = pd.DataFrame(rows)
   df.insert(0, "subject", s)
   print(df[["condition", "band_lo", "band_hi", "n_windows", "mean_raw", "mean_matched_baseline",
-            "mean_difference", "mean_baseline_perwindow"]].to_string(index=False, float_format=lambda v: f"{v:.4f}"))
+            "mean_difference", "mean_baseline_perwindow", "mean_difference_aligned"]].to_string(
+              index=False, float_format=lambda v: f"{v:.4f}"))
+  r0 = rows[0]
+  print(f"R-11 baseline coherence (201, 5-35 Hz, mean off-diagonal): before (per-window, PF-15 bug) "
+        f"{r0['baseline_broadband_before']:.4f}, after (concatenated, REPORTED) {r0['baseline_broadband_after']:.4f}, "
+        f"aligned diagnostic {r0['baseline_broadband_after_aligned']:.4f}")
   out = Path(args.reports_dir) / "connectivity"
   out.mkdir(parents=True, exist_ok=True)
   save = {"channels": np.array(names), "baseline_window_idx": idx}
@@ -77,10 +82,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
   np.savez(out / f"coherence_{s}_matrices.npz", **save)
   csv = out / f"coherence_{s}_summary.csv"
   df.to_csv(csv, index=False)
-  csv.with_suffix(".meta.txt").write_text(
-    f"subject={s} method={args.method} data={args.data_root} (legacy, 7 ch, raw windows, R3 era B)\n"
-    f"fs={args.fs:g} (legacy PF-04) bands=f_c+-1 Hz nperseg=256 concatenated (R4), matched baseline (PF-16)\n"
-    f"gate=P07 two-tier {GATE}\nchannels={names} dropped={g['channels_dropped']}\ncounts={g['counts']}\n")
+  csv.with_suffix(".meta.txt").write_text("\n".join([
+    f"subject={s} method={args.method} data={args.data_root} (legacy, raw windows, R3 era B)",
+    f"bands=f_c+-1 Hz nperseg=256 concatenated (R4), matched baseline (PF-16)", f"gate=P07 two-tier {GATE}",
+    f"counts={g['counts']}"] + meta_lines(rows, names, g["channels_dropped"], args.fs)) + "\n")
   if not args.no_figures:
     from src.visualization.connectivity_plots import plot_all_conditions_panel, plot_difference_panel
     fd = Path(args.figures_dir)
