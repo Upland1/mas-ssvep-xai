@@ -1,6 +1,6 @@
 # B006 — P11: one R-9b cell systematically outside tolerance (Compact-CNN S03 2.0 s ON)
 
-Status: OPEN (blocking P11 gate)
+Status: RESOLVED 2026-10-26 — Sebastian: "Accept it as a documented deviation and continue" (option 1)
 Raised by: orchestrator, 2026-10-26
 Phase: P11-trial-leakage-fix (branch `phase/P11-trial-leakage-fix`, HEAD after 909b67a)
 
