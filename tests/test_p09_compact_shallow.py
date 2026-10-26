@@ -135,7 +135,7 @@ def test_scripts_smoke_columns_and_meta(tmp_path, mod, name, params):
   assert "legacy" in meta and "i%5" in meta and "PF-30" in meta
   assert "Data source: legacy windows" in meta and "n_channels (after the gate): S03=7" in meta
   with pytest.raises(SystemExit):
-    mod.build_parser().parse_args(["--augment", "on"])
+    mod.build_parser().parse_args(["--augment", "maybe"])
 
 
 def test_mirror_protocol_identical_across_networks(tmp_path):
