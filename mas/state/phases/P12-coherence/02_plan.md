@@ -24,13 +24,16 @@ dropped if it fails in > 50 % of windows; every threshold passed explicitly, R5 
    (101–105) and baseline (201) windows (202 excluded), so stimulus and baseline
    matrices share the same channels. Per-condition clean and rejected counts are printed
    and saved in the meta.
-2. **Summary statistic for R-11.** "Baseline coherence" for a band = the mean of the
-   off-diagonal upper-triangle entries of the matched-baseline matrix in that band.
-   "Before the fix" = per-window coherence (`compute_coherence_matrix`, nperseg =
-   min(T, 128)) averaged over the 201 windows. "After" = `compute_condition_coherence`
-   on the same windows (nperseg 256). Both are reported per stimulus band (5 numbers per
-   subject) and as a range. The difference per condition is the mean off-diagonal
-   stimulus − matched-baseline value; the per-pair matrix is also saved.
+2. **Summary statistic for R-11 (amended after pre-run audit Round 1, finding F1).**
+   "Baseline coherence" = one number per subject: the mean off-diagonal upper-triangle
+   coherence of the gated 201 windows in `BASELINE_BAND` (5, 35) Hz. "Before the fix" =
+   per-window coherence (`compute_coherence_matrix`, nperseg = min(T, 128)) averaged
+   over the 201 windows; "after" = `compute_condition_coherence` on the same windows
+   (nperseg 256). The five per-band matched-baseline values (before/after) are reported
+   descriptively (A3), and their mean is a labelled secondary diagnostic only. The
+   difference per condition is the mean off-diagonal stimulus − matched-baseline value
+   (REPORTED); the per-pair matrix is also saved. *Superseded reading:* R-11's range
+   applied band by band (the original settled point 2).
 3. **Tolerance.** R-11's ranges carry "≈". Accept within ±0.05 of each range edge
    (tolerance table, descriptive statistics row). The 24/20 Hz "consistently positive"
    claim is checked as a sign over S03 and S04 for both conditions. The 10.91/8.57 Hz
@@ -104,9 +107,10 @@ verifier saves the pytest log under `reports/logs/P12/`.
 | Criterion (verbatim) | How it is checked | Reference |
 |---|---|---|
 | synthetic tests of task 2 | the bias and matched-baseline tests pass; demo (a) numbers printed in range | R-11 |
-| S03/S04 baseline coherence drops after the fix (R-11: from ≈0.68–0.73 to ≈0.59–0.66) | demo/analysis per-band baseline: before in [0.63, 0.78], after in [0.54, 0.71] (±0.05, settled point 3), after < before in every band | R-11 |
-| differences show 24 Hz and 20 Hz consistently positive in S03/S04 (≈+0.11 to +0.25) | mean differences for 101 and 102 > 0 in both subjects, inside [0.06, 0.30] | R-11 |
-| 10.91/8.57 Hz inconsistent (alpha-band ceiling hypothesis recorded, to be tested statistically in P13) | 104/105 differences printed per subject; reviewer records the hypothesis | R-11 |
+| S03/S04 baseline coherence drops after the fix (R-11: from ≈0.68–0.73 to ≈0.59–0.66) | the windows A0–A3 pre-committed in 07_review.md (pre-run audit Round 1). A2: per subject, the broadband (5–35 Hz) 201 baseline before in [0.63, 0.78] and after in [0.54, 0.71], with after < before. A3: after < before in all 10 per-band cells (values descriptive). A0: clean stimulus windows S03 197, S04 197 | R-11 |
+| differences show 24 Hz and 20 Hz consistently positive in S03/S04 (≈+0.11 to +0.25) | A4: the 101/102 differences each > 0 and inside [0.06, 0.30]. A6: the window-aligned diagnostic difference within 0.05 of the prescribed one per band; otherwise the band is flagged estimator-sensitive, and a differing aligned 101/102 sign makes A4 "not robust" | R-11 |
+| 10.91/8.57 Hz inconsistent (alpha-band ceiling hypothesis recorded, to be tested statistically in P13) | A5: 104/105 are descriptive (R-11: S03 ≤ +0.05, S04 > 0); the reviewer records the hypothesis next to the A6 junction-bias diagnostic | R-11 |
+| synthetic tests of task 2 (numbers) | A1: per-window averaged in [0.27, 0.40], concatenated ≤ 0.07, coupled ≥ 0.93 | R-11 |
 
 ## Sources
 
