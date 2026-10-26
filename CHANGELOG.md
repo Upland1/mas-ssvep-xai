@@ -161,3 +161,19 @@ Result and scope
 - S03 pinned run: 317 windows, equal to the legacy arrays; PO7 dropped by tier 1 (100 % fail).
 - PF-07: `--vpp-min 5.0 --no-channel-drop` rejects 320 of 320 S03 windows, all by PO7 `vpp_high`; with PO7 dropped, 5.0 and 0.5 both give 317/3. Accepted deviation D-1; open question for Sebastian on the cause.
 - Legacy 7-channel arrays not regenerated (SHA-256 unchanged); `make preprocess` must not run before P11.
+
+## P08 — EEGNet on raw windows
+
+2026-10-25 to 2026-10-26, branch `phase/P08-eegnet`. Code and run at `cf62bb3`; results review at `ef124c1`. Report: `mas/state/reports/P08.md`.
+
+Added
+- `src/models/cnn/eegnet.py`: `EEGNetSSVEP` (2,349 parameters at 7 × 256, four bias-free convolutions, head sized by a dummy forward), `apply_max_norm()` (max-norm 1.0 on the depthwise spatial filters), `count_parameters()`.
+- `src/models/cnn/eegnet_cv.py`: `zscore_windows` (per window and channel), `train_model` (AdamW, cosine schedule, label smoothing 0.05, `seed + fold`, max-norm after each step), `train_and_eval_eegnet_cv` (legacy leaky CV, train accuracy on the training fold).
+- `scripts/benchmarks/neural_networks/benchmark_eegnet.py`: CLI (`--subject`, `--device {auto,cpu,cuda}`, `--augment off`, `--epochs`, `--seed`), P07 gate, `reports/eegnet_benchmark_<device>.csv` and `.meta.txt`.
+- `tests/test_p08_eegnet.py` (15 cases) and `tests/test_p08_eegnet_known_answer.py` (10 tests); suite `528 passed, 21 warnings`.
+
+Result and scope
+- S03, legacy leaky CV, `reports/eegnet_benchmark_cpu.csv`: 1.0 s 75.63 % (149 / 197), 2.0 s smoothed 85.79 % (169 / 197), train 98.34 %.
+- S03, `reports/eegnet_benchmark_cuda.csv`: 1.0 s 71.07 % (140 / 197), 2.0 s smoothed 81.22 % (160 / 197), train 98.60 %.
+- Each device identical over two runs; CPU–CUDA gap 9 windows, reported per device, not averaged.
+- Legacy throughout (R1, R8, R5 legacy, fs 250 label). Not comparable with R-6; the classical flagship comparison is a labelled diagnostic only.
