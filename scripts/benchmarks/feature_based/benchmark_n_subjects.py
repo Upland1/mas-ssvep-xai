@@ -11,7 +11,8 @@ The per-channel report is printed for every subject.
 
 CV protocol (P11): `--cv grouped` (default) = StratifiedGroupKFold(5, shuffle, 42) over reconstructed
 trial ids (R1; ids from contiguous same-label blocks of the pre-gate labels, indexed by the valid
-mask, PF-03) and `--smoothing trial` (default) = 2.0 s smoothing that resets at each trial id (R8).
+mask, PF-03) and `--smoothing mod5` (default, reported: R8 legacy-folder clause, i%5 on legacy folders; `trial` = reset
+at each trial id, the PF-02 diagnostic).
 `--cv legacy --smoothing mod5` reproduces the P05-P10 leaky protocol (R1/PF-01 window-level
 StratifiedKFold, R8/PF-02 i%5 smoothing; NOT comparable with the leak-free R-6) and writes under
 <reports-dir>/legacy_leaky/. Still legacy (labelled): R3/PF-14 and PF-04 per-window sub-band
@@ -89,7 +90,7 @@ def _rel(path: Path) -> str:
 
 
 def evaluate_subject(processed: Path, subject: str, m: int = 1, fs: float = LEGACY_FS_HZ,
-                     seed: int = SEED, cv: str = "grouped", smoothing: str = "trial") -> dict:
+                     seed: int = SEED, cv: str = "grouped", smoothing: str = "mod5") -> dict:
   """One subject: gate once, flagship out-of-fold. Returns `{"subject", "row" or None, "log", "kept",
   "dropped", "header", "approximate"}`; a subject that cannot be evaluated has `row = None` and its reason in `log`.
   Console text is collected in `log` (printed in order by the caller, so parallel jobs do not interleave)."""

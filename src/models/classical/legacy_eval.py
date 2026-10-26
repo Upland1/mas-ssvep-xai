@@ -29,8 +29,11 @@ SEED = 42
 CV_LABEL = "StratifiedKFold(5, shuffle, 42) over windows (legacy R1/PF-01, leaky)"
 SMOOTH_LABEL = "legacy i%5 trial smoothing (R8 legacy, PF-02): 2-window average, reset at i % 5 == 0 of the clean array"
 GROUPED_CV_LABEL = "StratifiedGroupKFold(5, shuffle, 42) over reconstructed trial ids (R1, leak-free)"
-TRIAL_SMOOTH_LABEL = ("trial-aware 2-window average (R8): resets at each reconstructed trial id "
-                      "(ids built on pre-gate labels, indexed by the valid mask, PF-03)")
+TRIAL_SMOOTH_LABEL = ("2.0 s rule = trial-reset 2-window average (resets at each reconstructed trial id; ids built on "
+                      "pre-gate labels, indexed by the valid mask, PF-03); reported as the PF-02 diagnostic, not the "
+                      "R8 legacy-folder rule")
+GROUPED_MOD5_SMOOTH_LABEL = ("2.0 s rule = legacy i%5 smoothing (R8 legacy-folder clause: i%5 on legacy folders): "
+                             "2-window average reset at i % 5 == 0 of the clean array; trial-reset reported as PF-02 diagnostic")
 DIAG_SMOOTH_LABEL = "no-reset 2-window average (P04 rule), DIAGNOSTIC only"
 smooth_reported = smooth_probabilities_mod5   # the reported "2.0 s smoothed" rule of P05-P10
 
@@ -40,15 +43,18 @@ def cv_label(cv: str) -> str:
   return CV_LABEL if cv == "legacy" else GROUPED_CV_LABEL
 
 
-def smooth_label(rule: str) -> str:
-  """Protocol label of `--smoothing`: "mod5" (legacy i%5) or "trial" (R8)."""
-  return SMOOTH_LABEL if rule == "mod5" else TRIAL_SMOOTH_LABEL
+def smooth_label(rule: str, cv: str = "legacy") -> str:
+  """Protocol label of `--smoothing`: "mod5" (R8 legacy-folder clause; with the grouped split the P11 label) or
+  "trial" (PF-02 diagnostic on legacy folders)."""
+  if rule == "trial":
+    return TRIAL_SMOOTH_LABEL
+  return GROUPED_MOD5_SMOOTH_LABEL if cv == "grouped" else SMOOTH_LABEL
 
 
 def smooth_scores(scores: np.ndarray, trial_ids: Optional[np.ndarray] = None, rule: Optional[str] = None) -> np.ndarray:
   """Smoothed per-class scores: `rule="trial"` (needs `trial_ids`) or `"mod5"` (legacy i%5).
-  `rule=None` means "trial" when `trial_ids` is given, else "mod5" (the pre-P11 call)."""
-  rule = rule or ("trial" if trial_ids is not None else "mod5")
+  `rule=None` means "mod5" (R8 legacy-folder clause); "trial" only when asked."""
+  rule = rule or "mod5"
   if rule == "trial":
     if trial_ids is None:
       raise ValueError("rule='trial' needs trial_ids")
@@ -145,7 +151,7 @@ def accuracies(y: np.ndarray, pred: np.ndarray, scores: np.ndarray,
   """`(1.0 s accuracy, 2.0 s smoothed accuracy)` in [0, 1]; classes = sorted labels of `y`.
 
   Smoothing: `rule="trial"` (R8, resets at each id of `trial_ids`, row-aligned with `y`) or `"mod5"`
-  (legacy i%5, PF-02); `rule=None` is "trial" when `trial_ids` is given, else "mod5" (pre-P11 call).
+  (legacy i%5, PF-02); `rule=None` is "mod5" (R8 legacy-folder clause); "trial" (needs ids) is the PF-02 diagnostic.
   """
   classes = np.unique(y)
   sm = classes[np.argmax(smooth_scores(scores, trial_ids, rule), axis=1)]

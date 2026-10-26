@@ -149,9 +149,10 @@ def test_accuracies_rules_and_default():
   sc = np.array([[.9, .1], [.9, .1], [.2, .8], [.1, .9], [.1, .9]])
   ids = np.array([0, 0, 0, 1, 1])
   pred = np.array([101, 101, 102, 102, 102])
-  a1, a2 = le.accuracies(y, pred, sc, ids)             # default with ids = trial rule
+  a1, a2 = le.accuracies(y, pred, sc, ids, "trial")
   assert a1 == pytest.approx(0.8)
   assert le.accuracies(y, pred, sc) == le.accuracies(y, pred, sc, None, "mod5")   # pre-P11 call = mod5
+  assert le.accuracies(y, pred, sc, ids) == le.accuracies(y, pred, sc, ids, "mod5")   # default stays mod5 even with ids
   with pytest.raises(ValueError):
     le.accuracies(y, pred, sc, None, "trial")
   # trial rule: row 2 = (.9,.1)+(.2,.8) / 2 -> class 101 vs truth 101 after smoothing -> 4 or 5 correct
@@ -230,7 +231,7 @@ def grouped_run(tree, tmp_path_factory):
   mp = pytest.MonkeyPatch()
   mp.setattr(mod, "make_splits", spy)
   try:
-    _run_all(tree, out, "grouped", "trial")
+    _run_all(tree, out, "grouped", "mod5")
   finally:
     mp.undo()
   return out, calls
@@ -303,7 +304,8 @@ def test_legacy_mode_is_byte_identical_to_pre_p11_and_writes_under_legacy_leaky(
 def test_grouped_meta_names_splitter_smoothing_and_approximate_subjects(grouped_run):
   out, _ = grouped_run
   meta = (out / "n_subjects_benchmark.meta.txt").read_text()
-  assert "StratifiedGroupKFold" in meta and "trial-aware" in meta
+  assert "StratifiedGroupKFold" in meta and "R8 legacy-folder clause" in meta and "PF-02 diagnostic" in meta
+  assert "2.0 s rule = legacy i%5" in meta
   assert "trial_ids_approximate subjects: S05" in meta
   assert "trial ids:" in (out / "feature_space_benchmark_S03.meta.txt").read_text()
   assert "SFS inner CV: StratifiedGroupKFold" in (out / "feature_selection_ablation_S03.meta.txt").read_text()
@@ -326,7 +328,20 @@ def test_demo_cv_leakage_columns_mean_row_and_network_section(tree, tmp_path, ca
   for _, r in df.iloc[:2].iterrows():
     assert r["Delta 1.0 (pp)"] == pytest.approx(r["1.0s grouped (%)"] - r["1.0s leaky (%)"], abs=0.011)
   assert df.iloc[-1]["1.0s leaky (%)"] == pytest.approx(df.iloc[:2]["1.0s leaky (%)"].mean(), abs=0.006)
+  for _, r in df.iloc[:2].iterrows():
+    assert r["Delta 2.0 (pp)"] == pytest.approx(r["2.0s grouped mod5 REPORTED (%)"] - r["2.0s leaky mod5 (%)"], abs=0.011)
   net = pd.read_csv(rep / "cv_leakage_demo_networks.csv")
   assert net.loc[net.Subject == "S03", "Delta OFF 1.0"].item() == pytest.approx(-30.0)
   assert net.loc[net.Subject == "S03", "Augmentation gain 1.0 grouped"].item() == pytest.approx(1.0)
   assert "compact_cnn skipped" in capsys.readouterr().out
+
+
+def test_defaults_are_grouped_cv_and_mod5_smoothing_and_demo_delta_uses_reported_rule():
+  """Orchestrator decision (R8 legacy-folder clause): the reported 2.0 s rule on legacy folders is i%5, trial is the diagnostic."""
+  from scripts.diagnostics import demo_cv_leakage as demo
+  for mod in (bns, bcv, bfs, bhf, ecm):
+    a = mod.build_parser().parse_args([])
+    assert a.cv == "grouped" and a.smoothing == "mod5"
+  assert "REPORTED" in demo.COLUMNS[7] and "DIAGNOSTIC" in demo.COLUMNS[9]
+  assert le.smooth_label("trial", "grouped") == le.TRIAL_SMOOTH_LABEL and "PF-02 diagnostic" in le.TRIAL_SMOOTH_LABEL
+  assert le.smooth_label("mod5", "legacy") == le.SMOOTH_LABEL   # legacy label unchanged (byte-identical outputs)

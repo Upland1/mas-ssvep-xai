@@ -11,7 +11,7 @@ original's unmasked harmonic PSD is not reproduced). Model: Pipeline(StandardSca
 training fold (R2).
 
 CV protocol (P11): `--cv grouped` (default, R1: StratifiedGroupKFold over trial ids) and `--smoothing
-trial` (default, R8); `--cv legacy --smoothing mod5` = P05-P10 leaky protocol, outputs under
+mod5` (default: R8 legacy-folder clause, i%5; `trial` = PF-02 diagnostic); `--cv legacy --smoothing mod5` = P05-P10 leaky protocol, outputs under
 <reports-dir>/legacy_leaky/. Still legacy (labelled): R3/PF-14 and PF-04 per-window filtering, fs 250.
 
 Output: confusion matrix <figures-dir>/confusion_matrices/cm_harmonic_fbcca_cv_<S>.png (S03 also

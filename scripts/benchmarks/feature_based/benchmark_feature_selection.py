@@ -18,7 +18,7 @@ fitted on the training rows of its fold only (R2/PF-11) and applied to the test 
 
 CV protocol (P11): `--cv grouped` (default) = StratifiedGroupKFold(5, shuffle, 42) over reconstructed
 trial ids for the outer folds AND for the SFS inner CV (grouped over the training-fold trial ids,
-PF-01) and `--smoothing trial` (default, R8). `--cv legacy --smoothing mod5` reproduces P06 (window-level
+PF-01) and `--smoothing mod5` (default, R8 legacy-folder clause; `trial` = PF-02 diagnostic). `--cv legacy --smoothing mod5` reproduces P06 (window-level
 outer StratifiedKFold, scikit-learn default inner 5-fold, i%5 smoothing; leaky) and writes under
 <reports-dir>/legacy_leaky/. The `--sfs-diagnostics` variants keep their labelled P06 inner CVs.
 Still legacy (labelled): R3/PF-14 and PF-04 per-window sub-band filtering at fs 250.
@@ -135,7 +135,7 @@ def column_sets(Xtr: np.ndarray, ytr: np.ndarray, n_fbcsp: int, k: int, sfs_k: i
 
 def run_ablation(blocks: dict, subject: str, k: int = 20, sfs_k: int = 15, m: int = 1, seed: int = SEED,
                  n_jobs: Optional[int] = 1, include_sfs: bool = True, verbose: bool = True,
-                 cv: str = "grouped", smoothing: str = "trial") -> list:
+                 cv: str = "grouped", smoothing: str = "mod5") -> list:
   """Rows of the ablation table; fold matrices (and the CSP) are built once per fold from its training rows."""
   y = blocks["y"]
   ids = blocks.get("trial_ids")
@@ -230,7 +230,7 @@ def leak_audit_row(subject: str, f: int, tr: np.ndarray, te: np.ndarray, Xtr: np
 
 def run_sfs_diagnostics(blocks: dict, subject: str, sfs_k: int = 15, m: int = 1, seed: int = SEED,
                         n_jobs: Optional[int] = 1, variants: Optional[list] = None, verbose: bool = True,
-                        cv_outer: str = "grouped", smoothing: str = "trial") -> tuple:
+                        cv_outer: str = "grouped", smoothing: str = "mod5") -> tuple:
   """`(variant rows, audit rows)`. The final classifier of every variant is the reported scaler + Shrinkage-LDA;
   only the SFS configuration changes. Fold matrices (and CSP) are built once per fold from its training rows."""
   y = blocks["y"]

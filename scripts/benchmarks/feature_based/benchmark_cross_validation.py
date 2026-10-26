@@ -13,8 +13,8 @@ Every model is a Pipeline(StandardScaler, model) and the CSP is fitted on the tr
 only (R2/PF-11).
 
 CV protocol (P11): `--cv grouped` (default) = StratifiedGroupKFold(5, shuffle, 42) over
-reconstructed trial ids (R1, PF-03) and `--smoothing trial` (default) = 2-window average that resets
-at each trial id (R8). `--cv legacy --smoothing mod5` reproduces P05-P10 (R1/PF-01 window-level
+reconstructed trial ids (R1, PF-03) and `--smoothing mod5` (default, reported: R8 legacy-folder clause,
+i%5 on legacy folders; `trial` = trial-id reset, the PF-02 diagnostic). `--cv legacy --smoothing mod5` reproduces P05-P10 (R1/PF-01 window-level
 StratifiedKFold, leaky; R8/PF-02 i%5 reset) and writes under <reports-dir>/legacy_leaky/.
 Still legacy (labelled): R3 / PF-14 and PF-04 per-window sub-band filtering, fs 250 on 256 Hz data.
 
@@ -83,7 +83,7 @@ def _rel(path: Path) -> str:
 
 
 def run_benchmark(blocks: dict, subject: str, m: int = 1, seed: int = SEED, verbose: bool = True,
-                  cv: str = "grouped", smoothing: str = "trial") -> tuple:
+                  cv: str = "grouped", smoothing: str = "mod5") -> tuple:
   """Rows of the benchmark table and the model failures `[(space, model, error)]`."""
   y = blocks["y"]
   ids = blocks.get("trial_ids")

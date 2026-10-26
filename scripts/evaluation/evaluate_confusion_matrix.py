@@ -7,9 +7,9 @@ one quality decision (two-tier gate from P07, limits written out: vpp 5-120 uV, 
 dropped if it fails in > 50 % of the windows; R5 gate) feeds both blocks (PF-10). Model: Pipeline(StandardScaler, LDA(lsqr, shrinkage auto)).
 
 Reported: out-of-fold 1.0 s accuracy, and "2.0 s smoothed" = 2-window average of the out-of-fold
-probabilities. P11: `--smoothing trial` (default, R8) resets at each reconstructed trial id;
-`--smoothing mod5` is the legacy i%5 rule of the clean array (R8 legacy, PF-02, the original's
-"2.0s Trial Smoothed"). The P04 no-reset average is printed as a labelled DIAGNOSTIC only.
+probabilities. P11: `--smoothing mod5` (default, reported) is the i%5 rule of the clean array (R8 legacy-folder clause, the original's
+"2.0s Trial Smoothed"). The P04 no-reset average is printed as a labelled DIAGNOSTIC only,
+as is `--smoothing trial` (reset at each trial id, the PF-02 diagnostic).
 
 CV (P11): `--cv grouped` (default) = StratifiedGroupKFold(5, shuffle, 42) over trial ids (R1);
 `--cv legacy` = P05-P10 window-level StratifiedKFold (leaky; outputs under <reports-dir>/legacy_leaky/

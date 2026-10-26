@@ -39,17 +39,18 @@ def load_config(path: Path) -> dict:
 
 
 def add_protocol_args(parser) -> None:
-  """`--cv {grouped,legacy}` (default grouped, R1) and `--smoothing {trial,mod5}` (default trial, R8); P11."""
+  """`--cv {grouped,legacy}` (default grouped, R1) and `--smoothing {trial,mod5}` (default mod5, R8 legacy-folder clause); P11."""
   parser.add_argument("--cv", choices=CV_CHOICES, default="grouped",
                       help="grouped = StratifiedGroupKFold over trial ids (R1, default); legacy = P05-P10 window-level "
                            "StratifiedKFold (leaky, outputs under <reports-dir>/legacy_leaky/)")
-  parser.add_argument("--smoothing", choices=SMOOTHING_CHOICES, default="trial",
-                      help="2.0 s rule: trial = reset at each trial id (R8, default); mod5 = legacy i%%5 of the clean array")
+  parser.add_argument("--smoothing", choices=SMOOTHING_CHOICES, default="mod5",
+                      help="2.0 s rule: mod5 = i%%5 of the clean array (R8 legacy-folder clause, default, reported); "
+                           "trial = reset at each trial id (PF-02 diagnostic on legacy folders)")
 
 
 def protocol_labels(cv: str, smoothing: str) -> tuple:
   """`(cv label, smoothing label)` for headers and report titles."""
-  return cv_label(cv), smooth_label(smoothing)
+  return cv_label(cv), smooth_label(smoothing, cv)
 
 
 def trial_ids_header(b: dict) -> str:

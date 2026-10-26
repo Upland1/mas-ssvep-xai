@@ -5,11 +5,12 @@ gate once per subject (vpp 5-120 uV, std 1-35 uV, channel dropped if it fails in
 per-script gate). Model: the P05 flagship, FBCSP m = 1 (in-fold, R2/PF-11) + FBCCA -> StandardScaler ->
 Shrinkage-LDA (lsqr, auto), fs 250 (legacy PF-04). The SAME arrays go through (a) the legacy window-level
 StratifiedKFold(5, shuffle, 42) with the i%5 smoothing (leaky) and (b) StratifiedGroupKFold(5, shuffle, 42)
-over reconstructed trial ids with trial-aware smoothing (R1, R8). The 2.0 s grouped column is also given
-under the i%5 rule, so the effect of the smoothing rule is separated from that of the split.
+over reconstructed trial ids (R1). The REPORTED 2.0 s rule on legacy folders is i%5 (R8 legacy-folder clause)
+in both; the trial-reset rule is given as the PF-02 diagnostic column, so the effect of the smoothing rule
+is separated from that of the split.
 
 Output: <reports-dir>/cv_leakage_demo.csv (Subject, Clean, Approximate ids, 1.0s leaky, 1.0s grouped,
-Delta 1.0, 2.0s leaky (mod5), 2.0s grouped (trial), Delta 2.0, 2.0s grouped (mod5); Mean row) and a
+Delta 1.0, 2.0s leaky (mod5), 2.0s grouped (mod5, REPORTED), Delta 2.0, 2.0s grouped (trial, PF-02 diagnostic); Mean row) and a
 .meta.txt. Network section (no training): if the frozen P10 A/B <reports-dir>/legacy_leaky/
 augmentation_ab_<model>.csv and the P11 <reports-dir>/augmentation_ab_<model>.csv exist, per-subject
 OFF/ON leaky vs grouped deltas are printed and saved to <reports-dir>/cv_leakage_demo_networks.csv.
@@ -45,14 +46,15 @@ from src.models.classical.benchmark_runner import (  # noqa: E402
   discover_subjects, legacy_header_lines, load_config, prepare_subject)
 from src.models.classical.feature_spaces import benchmark_spaces  # noqa: E402
 from src.models.classical.legacy_eval import (  # noqa: E402
-  CV_LABEL, GROUPED_CV_LABEL, SEED, SMOOTH_LABEL, TRIAL_SMOOTH_LABEL, accuracies, oof_space, splits_for)
+  CV_LABEL, GROUPED_CV_LABEL, GROUPED_MOD5_SMOOTH_LABEL, SEED, SMOOTH_LABEL, TRIAL_SMOOTH_LABEL, accuracies, oof_space, splits_for)
 from src.models.classical.sklearn_models import get_sklearn_model_suite  # noqa: E402
 
 DEFAULT_CONFIG = ROOT / "configs" / "pipeline_config.yaml"
 MODEL = "Shrinkage-LDA lsqr"
 SPACE = "FBCSP + FBCCA (in-fold)"
 COLUMNS = ["Subject", "Clean", "Approximate ids", "1.0s leaky (%)", "1.0s grouped (%)", "Delta 1.0 (pp)",
-           "2.0s leaky mod5 (%)", "2.0s grouped trial (%)", "Delta 2.0 (pp)", "2.0s grouped mod5 (%)"]
+           "2.0s leaky mod5 (%)", "2.0s grouped mod5 REPORTED (%)", "Delta 2.0 (pp)",
+           "2.0s grouped trial DIAGNOSTIC (%)"]
 NET_MODELS = ("eegnet", "compact_cnn", "shallow_conv_net")
 NET_COLUMNS = ["Model", "Subject", "1.0s OFF leaky", "1.0s OFF grouped", "Delta OFF 1.0", "1.0s ON leaky",
                "1.0s ON grouped", "Delta ON 1.0", "Augmentation gain 1.0 leaky", "Augmentation gain 1.0 grouped"]
@@ -90,13 +92,13 @@ def leak_row(b: dict, subject: str, m: int = 1, seed: int = SEED) -> dict:
       raise RuntimeError(f"{subject} {cv}: {errs[MODEL]}")
     out[cv] = res[MODEL]
   a1_l, a2_l = accuracies(y, out["legacy"]["pred"], out["legacy"]["scores"], None, "mod5")
-  a1_g, a2_g = accuracies(y, out["grouped"]["pred"], out["grouped"]["scores"], ids, "trial")
-  _, a2_gm = accuracies(y, out["grouped"]["pred"], out["grouped"]["scores"], None, "mod5")
+  a1_g, a2_g = accuracies(y, out["grouped"]["pred"], out["grouped"]["scores"], None, "mod5")
+  _, a2_gt = accuracies(y, out["grouped"]["pred"], out["grouped"]["scores"], ids, "trial")
   r = lambda v: round(100 * v, 2)  # noqa: E731
   return {"Subject": subject, "Clean": b["n_clean"], "Approximate ids": "yes" if b["trial_ids_approximate"] else "no",
           "1.0s leaky (%)": r(a1_l), "1.0s grouped (%)": r(a1_g), "Delta 1.0 (pp)": round(r(a1_g) - r(a1_l), 2),
-          "2.0s leaky mod5 (%)": r(a2_l), "2.0s grouped trial (%)": r(a2_g),
-          "Delta 2.0 (pp)": round(r(a2_g) - r(a2_l), 2), "2.0s grouped mod5 (%)": r(a2_gm)}
+          "2.0s leaky mod5 (%)": r(a2_l), "2.0s grouped mod5 REPORTED (%)": r(a2_g),
+          "Delta 2.0 (pp)": round(r(a2_g) - r(a2_l), 2), "2.0s grouped trial DIAGNOSTIC (%)": r(a2_gt)}
 
 
 def with_mean_row(rows: list) -> pd.DataFrame:
@@ -162,8 +164,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     print(f"[+] {s}: {b['n_clean']} clean, trial blocks {sorted(set(n for v in rep['blocks'].values() for n in v))}, "
           f"ids {'APPROXIMATE' if rep['approximate'] else 'exact'}; 1.0 s leaky {r['1.0s leaky (%)']:.2f} -> grouped "
           f"{r['1.0s grouped (%)']:.2f} ({r['Delta 1.0 (pp)']:+.2f} pp); 2.0 s leaky mod5 {r['2.0s leaky mod5 (%)']:.2f} -> "
-          f"grouped trial {r['2.0s grouped trial (%)']:.2f} ({r['Delta 2.0 (pp)']:+.2f} pp), grouped mod5 "
-          f"{r['2.0s grouped mod5 (%)']:.2f}")
+          f"grouped mod5 REPORTED {r['2.0s grouped mod5 REPORTED (%)']:.2f} ({r['Delta 2.0 (pp)']:+.2f} pp); "
+          f"trial-reset DIAGNOSTIC {r['2.0s grouped trial DIAGNOSTIC (%)']:.2f}")
   if not rows:
     print("[-] No subject evaluated")
     return 1
@@ -173,7 +175,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
   df.to_csv(csv, index=False)
   meta = (header or []) + [
     f"leaky: {CV_LABEL}; smoothing: {SMOOTH_LABEL}",
-    f"grouped: {GROUPED_CV_LABEL}; smoothing: {TRIAL_SMOOTH_LABEL}",
+    f"grouped: {GROUPED_CV_LABEL}; reported 2.0 s: {GROUPED_MOD5_SMOOTH_LABEL}",
+    f"diagnostic column: {TRIAL_SMOOTH_LABEL}",
     f"model: {SPACE} -> {MODEL}; same arrays, same seed {args.seed} in both columns",
     f"data source: legacy windows, {_rel(processed)}/<S>/",
     "approximate ids: " + (" ".join(r["Subject"] for r in rows if r["Approximate ids"] == "yes") or "none")]
@@ -181,7 +184,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
   print("\n" + df.to_string(index=False))
   mean = df.iloc[-1]
   print(f"\nMean: 1.0 s {mean['1.0s leaky (%)']:.2f} -> {mean['1.0s grouped (%)']:.2f} ({mean['Delta 1.0 (pp)']:+.2f} pp); "
-        f"2.0 s {mean['2.0s leaky mod5 (%)']:.2f} -> {mean['2.0s grouped trial (%)']:.2f} ({mean['Delta 2.0 (pp)']:+.2f} pp); "
+        f"2.0 s {mean['2.0s leaky mod5 (%)']:.2f} -> {mean['2.0s grouped mod5 REPORTED (%)']:.2f} ({mean['Delta 2.0 (pp)']:+.2f} pp); "
         f"runtime {time.time() - t0:.0f} s")
   print(f"Saved: {_rel(csv)}")
   net = network_section(reports)
