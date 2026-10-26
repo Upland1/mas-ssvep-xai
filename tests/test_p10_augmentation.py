@@ -167,7 +167,7 @@ def test_fold_scope_and_same_init_off_vs_on(monkeypatch):
   recs = {}
   for arm in (False, True):
     rec, build = _spy_training(monkeypatch)
-    train_and_eval_cv(X, y, build, epochs=2, device="cpu", augment=arm)
+    train_and_eval_cv(X, y, build, epochs=2, device="cpu", augment=arm, cv="legacy")
     recs[arm] = rec
     monkeypatch.undo()
   off, on = recs[False], recs[True]
@@ -184,9 +184,9 @@ def test_fold_scope_and_same_init_off_vs_on(monkeypatch):
 
 def test_augmentation_changes_training_only_and_is_deterministic():
   X, y = make_windows(n_trials=4, seed=0)
-  off = train_and_eval_cv(X, y, epochs=3, device="cpu")
-  on1 = train_and_eval_cv(X, y, epochs=3, device="cpu", augment=True)
-  on2 = train_and_eval_cv(X, y, epochs=3, device="cpu", augment=True)
+  off = train_and_eval_cv(X, y, epochs=3, device="cpu", cv="legacy")
+  on1 = train_and_eval_cv(X, y, epochs=3, device="cpu", augment=True, cv="legacy")
+  on2 = train_and_eval_cv(X, y, epochs=3, device="cpu", augment=True, cv="legacy")
   assert np.array_equal(on1["proba"], on2["proba"]) and not np.array_equal(on1["proba"], off["proba"])
   assert on1["n_params"] == off["n_params"] and len(on1["fold_train_acc"]) == 5
 
@@ -194,9 +194,9 @@ def test_augmentation_changes_training_only_and_is_deterministic():
 def test_off_path_identical_to_p09():
   X, y = make_windows(n_trials=4, seed=0)
   import hashlib
-  r = train_and_eval_eegnet_cv(X, y, epochs=3, device="cpu")
+  r = train_and_eval_eegnet_cv(X, y, epochs=3, device="cpu", cv="legacy")
   assert hashlib.sha256(r["proba"].tobytes()).hexdigest() == EEGNET_SMOKE_PROBA_SHA256
-  r2 = train_and_eval_cv(X, y, eegnet_cv.build_eegnet, epochs=3, device="cpu", augment=False)
+  r2 = train_and_eval_cv(X, y, eegnet_cv.build_eegnet, epochs=3, device="cpu", augment=False, cv="legacy")
   assert np.array_equal(r["proba"], r2["proba"])
 
 
@@ -206,28 +206,28 @@ def _tree(tmp_path, subjects=("S01", "S02"), n_trials=3):
   cfg = tmp_path / "cfg.yaml"
   cfg.write_text("paths:\n  data_processed_dir: data/processed\n")
   return ["--epochs", "2", "--device", "cpu", "--data-root", str(tmp_path / "proc"),
-          "--reports-dir", str(tmp_path / "rep"), "--config", str(cfg)]
+          "--reports-dir", str(tmp_path / "rep"), "--config", str(cfg), "--cv", "legacy", "--smoothing", "mod5"]
 
 
 def test_driver_augment_on_flag_and_file_names(tmp_path):
   argv = _tree(tmp_path, ("S03",))
   assert be.main(["--subject", "S03", "--augment", "on", *argv]) == 0
-  assert (tmp_path / "rep" / "eegnet_aug_benchmark_cpu.csv").is_file()
-  assert "augment=on" in (tmp_path / "rep" / "eegnet_aug_benchmark_cpu.meta.txt").read_text()
+  assert (tmp_path / "rep" / "legacy_leaky" / "eegnet_aug_benchmark_cpu.csv").is_file()
+  assert "augment=on" in (tmp_path / "rep" / "legacy_leaky" / "eegnet_aug_benchmark_cpu.meta.txt").read_text()
 
 
 def test_ab_script_schema_deltas_mean_freeze_and_warning(tmp_path, capsys):
   argv = _tree(tmp_path)
   assert ab.main(["--model", "shallow_convnet", "--freeze-legacy", *argv]) == 0
   out = capsys.readouterr().out
-  csv = tmp_path / "rep" / "augmentation_ab_shallow_conv_net.csv"
+  csv = tmp_path / "rep" / "legacy_leaky" / "augmentation_ab_shallow_conv_net.csv"
   df = pd.read_csv(csv)
   assert list(df.columns) == ab.COLUMNS and list(df["Subject"]) == ["S01", "S02", "Mean"]
   body = df.iloc[:2]
   assert np.allclose(body["1.0s Delta"], body["1.0s ON (%)"] - body["1.0s OFF (%)"], atol=0.011)
   assert np.allclose(body["2.0s Delta"], body["2.0s ON (%)"] - body["2.0s OFF (%)"], atol=0.011)
   assert np.isclose(df.iloc[2]["1.0s OFF (%)"], body["1.0s OFF (%)"].mean(), atol=0.011)
-  frozen = tmp_path / "rep" / "legacy_leaky" / csv.name
+  frozen = csv  # --cv legacy writes under legacy_leaky/ directly; --freeze-legacy is redundant there (P11)
   assert frozen.read_bytes() == csv.read_bytes() and frozen.with_suffix(".meta.txt").is_file()
   assert "legacy" in csv.with_suffix(".meta.txt").read_text() and "OFF then ON" in out
   assert out.count("augment OFF") == 2 and out.count("augment ON") == 2
