@@ -65,12 +65,12 @@ phases:
     passed: '2026-10-25'
   P08:
     slug: eegnet
-    status: in_progress
+    status: passed
     owner: orchestrator
     branch: phase/P08-eegnet
-    commit: null
+    commit: c7f1b8a
     opened: '2026-10-25'
-    passed: null
+    passed: '2026-10-26'
   P09:
     slug: compact-shallow-cnn
     status: pending
