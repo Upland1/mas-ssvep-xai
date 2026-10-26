@@ -22,3 +22,4 @@
 | 8 Run + verify (Round 2b) | verifier | 2026-10-26 | FAIL (2b7441d, 909b67a) at 0b96524: suite 687 passed; seed-spread EEGNet 1920 s, Compact-CNN 1163 s; reported files byte-unchanged; D-4: 13/14 cells explained incl. all cohort cells; Compact-CNN S03 2.0 s ON systematic (65.48/64.47/65.48 vs 66.07–76.07) | 2 | R-9b, D-4 | none | HARD STOP: blocker B006 for Sebastian (pre-committed rule) |
 | 9a Blocker resolved | Sebastian | 2026-10-26 | B006 option 1: accept as documented deviation D-8 | 2 | B006 | none | |
 | 9 Results review (Round 2) | scientific-reviewer | 2026-10-26 | APPROVE with D-8 (50d9d01); diagnostic code cannot alter reported numbers; D-4 confirmed; D-8 signed (2–4 windows short; not seed variance; cause open); P5 regraded | 2 | R-9b, D-4, B006 | none | multi-seed planning rule from P12 recorded |
+| 8 Verify restatement | verifier | 2026-10-26 | PASS with D-8 (f744451); no code change since 0b96524 | 2 | B006, D-8 | none | |
