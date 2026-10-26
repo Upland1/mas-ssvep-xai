@@ -1,6 +1,6 @@
 # P13 · 07 · Scientific review
 
-Status: READY (pre-run audit Round 1: FAIL, fixes requested)
+Status: READY (pre-run audit Round 2: PASS)
 Author: scientific-reviewer
 Reads: 00, 02, 03_changes_*, 04 and every changed file (pre-run); 05, 06 and the CSVs (results)
 
@@ -131,5 +131,24 @@ multiple comparisons. -->
 
 <!-- Fix rounds: append "## Pre-run audit — Round N". After two failed rounds,
 set Status: BLOCKED. -->
+
+## Pre-run audit — Round 2
+
+Audited: `git diff 934cc2f..089ebda -- src scripts tests mas/state` (fix commits b8e5ccc, 643f0f9, 628759d, e80cfad; tester round 9d547b0, 6c2f935). Own check: `.venv/bin/python -m pytest tests/test_p13_connectivity.py tests/test_p13_known_answer.py -o addopts="" -q` gives `73 passed in 6.61s`. The tester reports a full-suite result of `796 passed, 21 warnings in 361.15s`.
+
+| Item | Result | Evidence |
+|---|---|---|
+| Fix 1: order-independent `--compare` | PASS | `flips_path` in `scripts/connectivity/analysis/analyze_connectivity_cohort.py` keeps `connectivity_cohort_flips.csv` only for (`trial100`, `""`); every other pair writes `connectivity_cohort_flips_<a>_vs_<b>.csv` (`final` for `""`). The console prints both suffixes and the number of cells compared. `compare_runs` raises when the (subject, method, condition) sets differ, and `validate="one_to_one"` also rejects duplicate rows. Tests: builder `test_compare_is_order_independent` (both orders) and `test_compare_raises_on_missing_rows`; tester `test_compare_writes_distinct_files_in_both_orders_with_hand_flips` (hand-predicted flips, no overwrite of the required file) and `..._missing_row_in_either_direction`. Mutants R1 (single file name) and R2 (row check disabled) were killed. |
+| Fix 2: plan | PASS | `02_plan.md` adds `--compare window200 ""` after the final trial200 run. The task-6 acceptance row names `connectivity_cohort_flips_window200_vs_final.csv`, which matches `flips_path("window200", "")`. The acceptance table binds to A1–A8, the FDR-total table and E1–E5 of Round 1 (934cc2f), and they prevail where more specific. The windows are unchanged. |
+| N2: lower tail | PASS | `p_low = (1 + #{null ≤ obs}) / (n + 1)` in `src/features/connectivity/permutation.py`, returned as `p_lower_tailed` and written to the alpha CSV. The tester's hand-count test with ties (6/11, 9/11, 7/11) kills the `1 − p_one` mutant R3. The results review therefore uses the column directly, so the Round 1 fallback formula is no longer needed. |
+| N3: rationale | PASS | `03_changes_connectivity-stats.md:140` and the new P13 row in decisions.md state that 21/28 means 7/8 channels undirected and that 42 directed edges is our own choice. The original settled-point row is kept (append-only). |
+| N1: two-tailed p centred on 0 | open, non-blocking | Unchanged. It is only in the details CSV, and no acceptance criterion or claim may use `p_two_tailed`. |
+| Scope | PASS | The diff touches only the compare path, the lower-tail p and tests. No change to estimators, splits, seeds or BH, so the Round 1 rule verdicts stand. The vendor and trailer scan of the new commits and this file finds nothing (command below the table). |
+
+Scan: `git log 934cc2f..HEAD --format=%B` and `git diff 934cc2f..HEAD`, with a fragment-built pattern that also covers the trailer token, give no hit.
+
+Carried into the results review unchanged: A1–A8, the FDR windows (coherence 0–5 / 0–5 / 49–81 / 39–63 / 10–20; wPLI 0–5 / 0–8 / 29–47 / 25–41 / 13–23), E1–E5, BH on one-tailed edge p, and nested 100/200 nulls stated in the report. For coherence suppression readings (E5), `p_lower_tailed` is the test statistic.
+
+Verdict: PASS
 
 ## Questions
