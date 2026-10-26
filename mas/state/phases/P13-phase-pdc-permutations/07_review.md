@@ -1,39 +1,111 @@
 # P13 · 07 · Scientific review
 
-Status: DRAFT
+Status: READY (pre-run audit Round 1: FAIL, fixes requested)
 Author: scientific-reviewer
 Reads: 00, 02, 03_changes_*, 04 and every changed file (pre-run); 05, 06 and the CSVs (results)
 
 ## Pre-run audit — Round 1
 
-Verdict: PASS / FAIL
+Audited: `git diff main..HEAD -- src scripts tests` at bb486a9 (7 code files, 2 test files), 00, 02, 03, 04, decisions.md rows 114–118, mas/state/reports/P12.md, RULES.md, 03_ROADMAP P13, 02_REQUIREMENTS §6, 04_REFERENCE R-12 and the tolerance table, 05_PITFALLS PF-03, PF-17–PF-20.
+Own checks (synthetic or arithmetic only, no recordings read): `.venv/bin/python -m pytest tests/test_p13_connectivity.py tests/test_p13_known_answer.py -o addopts="" -q` → `64 passed in 6.37s`. Other commands are quoted where used.
 
-| Rule | Result (PASS / FAIL / CONCERN / LEGACY (by design) / N/A) | Evidence (`path:line`) |
+| Rule | Result | Evidence (`path:line`) |
 |---|---|---|
-| R1 Trial-grouped CV | | |
-| R2 Fit only in-fold | | |
-| R3 Filter continuous, then window | | |
-| R4 Estimator small-sample bias | | |
-| R5 Shared quality decision, explicit thresholds | | |
-| R6 Index layouts verified | | |
-| R7 Honest statistics | | |
-| R8 Smoothing respects trials | | |
-| R9 Per-subject reporting with data source | | |
-| R10 Every change and test cites a source that exists and says what is claimed | | |
-| R10 Copied lines marked `# adapted from [n]`, license compatible | | |
-| R11 Reference consulted only after an attempt, every consultation listed | | |
-| Golden rule 3: legacy behaviour labelled and still reachable after fixes | | |
-| Tests cover every change; at least one fails on the historical bug | | |
-| Changes match 02_plan.md and the roadmap tasks | | |
-| No data, `.ebr`, local tooling files or tool/vendor names in the diff | | |
+| R1 Trial-grouped CV | N/A | no classifier or CV in this phase |
+| R2 Fit only in-fold | N/A | no train/test split; the MVAR fit is the statistic of each (permuted) group, `src/features/connectivity/mvar_pdc.py:69-73` |
+| R3 for phase (enforced from P13) | PASS | phase from the band-averaged complex CSD, `src/features/connectivity/phase_connectivity.py:39-42` (`csd`, `nperseg=min(T,128)`, Welch segments inside each window); PLV/wPLI formulas `:48`, `:53-57` match roadmap task 1. `grep -rn "hilbert\|filtfilt"` over src/scripts finds Hilbert only in `scripts/connectivity/diagnostics/demo_hilbert_edges.py` (plus the pre-existing legacy FBCSP/FBCCA filtfilt, not touched). Edge-immunity tests `tests/test_p13_known_answer.py:172`, mutant M3 killed |
+| R3 sub-band filtering, fs 250 | LEGACY (by design) | fs-250 axis `scripts/connectivity/analysis/analyze_connectivity_cohort.py:88`, labelled in `SOURCE` `:59` and the details CSV; PF-04 era row |
+| R4 Small-sample bias | PASS + CONCERN C1 | coherence is the concatenated estimator recomputed on every permuted group (`permutation.py:95`, `connectivity_extraction.py:100-103`); see C1 (junctions) |
+| R5 Shared quality decision | LEGACY (by design) | one P07 gate per subject shared by all methods and conditions, every threshold explicit (`**GATE`, `connectivity_extraction.py` `gate_selection`; `analyze_connectivity_cohort.py:119`); `load_subject(quality_mode="shared")` is P16 |
+| R6 Index layouts verified | PASS | strided `weights[lag::p, :].T` `mvar_pdc.py:50`; channel-major design `:29-32`; PDC column normalisation over the source column `:63` then zero diagonal `:65`, `[i, j]` = j → i. Proven by `test_mvar_row_layout_channel_major_with_known_weights`, `test_pdc_hand_computed_orientation_and_column_normalisation` (`tests/test_p13_known_answer.py:102`, hand formula, 1e-9), mutants M1, M2a, M2b killed. Contiguous slicing exists only in `demo_mvar_slicing.py:63-66` (allowed, diagnostic) |
+| R7 Honest statistics (enforced from P13) | PASS | trial-level split with observed sizes `permutation.py:56-82` and `:151-156` (`n_first = ns`); +1 pseudo-count `:160-165`; global p and FDR count kept in separate fields `:173-177`, separate summary columns and console lines `analyze_connectivity_cohort.py:134-140`, `:165-176`; flip list `:190-202`. Window-level first run labelled `permutation_unit = window` `:120`, `permutation.py:178` → LEGACY (by design) for the R7 first-run row. Gap in the run commands for task 6: F1 |
+| R8 Smoothing | N/A | no smoothing |
+| R9 Per subject with data source | PASS | per-subject rows; `SOURCE`, fs, window counts, `trial_ids_approximate` in `..._details.csv` (`analyze_connectivity_cohort.py:141-147`); console prints source and APPROXIMATE flag `:115-123` |
+| R10 Sources | PASS | 03 and 04 cite roadmap, §6, R-12, PF rows; BH 1995 DOI is correct (10.1111/j.2517-6161.1995.tb02031.x) |
+| R10 Copied lines | N/A | no borrowed code declared; nothing resembling copied blocks |
+| R11 Reference | PASS | no consultation listed in 03/04; `mas/state/scratch/reference_access.log` has no entry after 2026-10-26T12:05:15 (P11/P12 era); P13 commits start 15:26:34 |
+| Golden rule 3 | PASS | Hilbert and contiguous slicing reachable in kept demos; window-level permutations behind `--permutation-unit window`; aligned estimator labelled DIAGNOSTIC `analyze_connectivity_cohort.py:82-83`, `:230-231` |
+| Tests cover every change; fail on the historical bug | PASS | 27 + 37 tests; mutants M1 (PF-17), M3 (PF-18), M4a/M4b/M5/M8 (PF-19), M7 (PF-20), M9 (PF-03), M6 (pseudo-count) killed (04_tests.md) |
+| Changes match 02_plan.md and the roadmap | FAIL (F1) | code matches the settled points; the plan's run list cannot produce the task-6 acceptance row (window vs trial comparison), and the builder-documented overwrite of `connectivity_cohort_flips.csv` (`analyze_connectivity_cohort.py:213`) makes the result order-dependent |
+| No data, recordings, local tooling files or vendor names | PASS | `git diff --name-only main..HEAD` has no data/tooling paths; fragment-built vendor scan over the diff, `git log main..HEAD` messages and `git grep HEAD -- mas/state src scripts tests`: no hit (only the pre-existing recording-suffix mentions in blockers B002/B005) |
+
+### Checks asked by the orchestrator
+
+**PF-17 / PDC orientation.** PASS (R6 row). The PDC direction test drives a single channel and checks `[i, j]` = j → i with a hand formula, so a transposed or row-normalised PDC fails.
+
+**PF-18.** PASS (R3 row). The reported PLV/wPLI never see time-domain filtering. Note: the PLV/wPLI fast path computes the per-window CSD once for the pooled windows (`phase_connectivity.py:85-88`, `permutation.py:139-142`). This is valid only because the per-window CSD does not depend on the grouping, and `test_fast_path_equals_direct_call` proves equality.
+
+**PF-19 and the "at most one split trial" rule with the offset baseline ids.** PASS. The ids come from `build_trial_ids` on the full pre-gate labels (`connectivity_extraction.py:257`), so they are already globally unique. The offset at `permutation.py:138` maps the baseline ids to values above `max(stim)`, keeps them distinct from each other, and cannot create a trial shared by the two pools. The greedy fill adds whole trials and splits at most the first trial that does not fit, then stops (`:66-78`). The sizes are exact because `n_first = ns`. Tests cover 8 + 4 parametrised layouts × 40/30 seeds and the "no split when possible" case. One check of my own: on an S03-like layout (8 stimulus trials × 5 + 40 baseline trials × 2, `n_first` 40) the null groups are mixtures of 5- and 2-window trials. That is the expected trial-level exchangeability, and C1 depends on it. With approximate ids (S02/S04, PF-03), a short "trial" can merge or split real trials. The null is still trial-like, and the flag is in the details CSV and the console.
+
+**p-value pseudo-count.** PASS. `p = (1 + #{null ≥ obs}) / (n + 1)`, so the minimum is 1/201 = 0.004975 at 200 and 1/101 at 100 permutations. M6 was killed.
+
+**BH on one-tailed edge p (builder choice 1).** PASS, judged on the text before any real number. The roadmap (task 3) computes one- and two-tailed edge p and does not say which feeds BH, and R7 is silent too. R-12 labels its global p "one-tailed (stimulus − matched baseline)", and an "effect" there is an increase. A two-tailed BH would count decreases as FDR edges, so the R-12 totals would mix directions. One-tailed (stimulus > baseline) is therefore the natural reading. Pre-committed: the choice is frozen. The results review grades R-12 totals on the one-tailed BH only and does not switch tails after seeing numbers (golden rule 5). The report must state "BH-FDR over one-tailed (stimulus > baseline) edge p; npz `p_c` are one-tailed". The builder's S03 smoke per-cell agreement (20/21/15/0/8 vs 20/21/16/0/8) is consistent with this, but my judgement does not rest on it.
+BH discreteness, from `python -c` (`ceil(pmin·m/0.05)`): at 200 permutations, a frequency with 21 edges can have 0 FDR edges or at least 3, never 1 or 2. At 100 permutations the minimum is 5. For PDC's 42 edges it is 5 (200) and 9 (100). Consequences: (i) R-12's per-cell counts of 3 (S02 wPLI 20 Hz, S03 wPLI 15/10.91 Hz, S05 coh 20 Hz) are minimum non-zero counts. (ii) Some criterion-A flips between trial100 and trial200 are pure resolution artefacts: a cell with 3–4 edges at 200 cannot have any at 100. The flip list still labels them inconclusive, and the report should name the mechanism.
+
+**PF-20.** PASS. `significant_uncorrected` (B, global p < α) and `fdr_backed` (A, ≥ 1 FDR edge) are separate columns. The console prints (A) and (B) on separate lists per frequency. Two tests construct both kinds of disagreement, and M7 was killed. R-12 itself has both kinds: S02 wPLI 20 Hz is A without B (3 edges, p 0.144), and S05 wPLI 24 Hz is B without A (p 0.015, 0 edges). The report must keep them apart.
+
+**PF-03.** PASS. Ids are built on the pre-gate labels with 202 included in the walk, then the condition selection, then the gate mask `valid_mask` (`connectivity_extraction.py:257`, `permutation.py:209`). The test uses a gate-rejected window, and M9 was killed.
+
+**Seeds and determinism.** PASS. The cell seed is `derive_seed(42, subject, method, condition)` (`permutation.py:50-53`, `:223`). Permutation i uses the i-th word of `SeedSequence(cell).generate_state(n)` (`:149`), so the result is independent of `n_jobs` (test, n_jobs 1 vs 2, exact). Note: I checked `generate_state(100)` against `generate_state(200)[:100]` and they are equal (`python -c`, `prefix True`). The trial100 null is therefore the first half of the trial200 null, so the 100-vs-200 flip list measures Monte Carlo resolution with shared draws, not two independent runs. This is acceptable and is how a fixed `random_state` behaves, but the report must say so. The window, trial and aligned runs share cell seeds, but their splits differ in kind, so this only matters for the aligned-vs-concatenated pairing, where it is intended (identical splits).
+
+**42-edge PDC reading.** PASS with a corrected rationale. "21/28" in the roadmap is most naturally C(7,2) = 21 and C(8,2) = 28, the 7- and 8-channel undirected counts, not a directed count, because 28 ≠ 42. The text therefore does not fix the directed case. Each direction is a separate hypothesis for a directed measure, so 42 off-diagonal entries is the methodologically sound choice. A directed matrix read as an upper triangle would test only j → i with j > i. R-12 has no PDC row, so the choice cannot affect acceptance. Required wording for the report: "PDC: 42 directed edges, our choice (roadmap gives 21/28 for 7/8 channels, undirected)". No R11 consultation is needed.
+
+**C1: junction effect in the permutation null (P12 D-2). CONCERN, handled by the diagnostic.** Junctions affect only coherence: PLV/wPLI use per-window CSDs, and MVAR rows never cross windows (`mvar_pdc.py:29`). For coherence (`nperseg` 256, 50 % overlap) I computed the fraction of Welch segments straddling a trial junction with `_trial_permutation_split` on the S03-like layout above, over 500 seeds: observed stimulus 0.089, observed baseline 0.245 (gap −0.157); trial-level null first group 0.196, second 0.197 (gap −0.001); window-level null 0.394 / 0.296. The trial-level null is therefore balanced, and the observed split is not. If junction steps raise coherence (P12 synthetic regime), the observed difference is shifted NEGATIVE relative to the null. The one-tailed (stimulus > baseline) p is then conservative, and any lower-tail reading (P12 D-3 alpha suppression) is anti-conservative. The window-level null has its own junction imbalance (+0.098, opposite sign), which is one more reason it is only the legacy record. The builder's S03 smoke has the aligned estimator less significant than the concatenated one at 8.57 Hz (0.697 vs 0.104), which is the opposite of the junction prediction for the upper tail. So, as at P12, "estimator-sensitive" is the label, not "junction-biased".
+
+**Pre-committed treatment of estimator-dependent cells (results review, cannot be moved):**
+- E1. Reported numbers and every R-12 comparison use the concatenated estimator (R4, roadmap). The aligned run is a diagnostic and is never graded against R-12. Its S03 FDR total (smoke 48) is not tested against the S03 window.
+- E2. An S03 coherence cell (frequency) is **estimator-dependent** if criterion A (≥ 1 FDR edge) or B (p < 0.05) differs between the concatenated trial200 and the aligned_S03 run.
+- E3. Label an estimator-dependent cell "junction-consistent" only if the aligned estimator is the MORE significant one (lower p or more FDR edges) in the stimulus > baseline direction. Otherwise label it "estimator-sensitive (not junction-biased)".
+- E4. No qualitative claim may rest on an estimator-dependent cell. The report states it as inconclusive with both values. If S03 24 Hz were estimator-dependent, it counts as a 24 Hz switch to explain (A3 below).
+- E5. Any coherence statement that stimulus is BELOW baseline (alpha suppression, D-3) counts only if it holds with the aligned estimator too (S03 only). For S01, S02, S04 and S05 such statements are labelled "not cross-checked for junction effects".
+
+**Alpha diagnostic CSV.** PASS on content (matched-baseline mean, stimulus mean, difference, one-tailed p, unit; `analyze_connectivity_cohort.py:150-155`). The cross-subject Spearman is printed as descriptive (`:179-187`). Note N2: the suppression hypothesis needs the LOWER tail. With continuous statistics (no ties), `p_lower = 1 − p_one + 1/(n+1)` exactly, and the results review derives it with a shown command unless N2 is adopted. The relation baseline-level vs difference at n = 5 is descriptive: no "supports" claim, only "consistent with / not consistent with" per subject.
+
+**Schemas.** PASS. `SUMMARY_COLUMNS` (`analyze_connectivity_cohort.py:51-53`) matches 02_REQUIREMENTS §6 (pre-P18) in name and order. The npz keys are `channels_kept`, `stim_c`, `base_c`, `diff_c`, `p_c`, `fdr_c` (`:131`, `:148-149`). The extras go to the `_details.csv` sidecar. The test hard-codes the §6 list (`tests/test_p13_known_answer.py:522`).
+
+**Verifier commands vs acceptance.** FAIL (F1). Commands 1–5 and 7 produce the demos, window200, trial100, trial200 (final, unsuffixed) and aligned_S03. Command 6 produces the trial100-vs-final flips. Nothing produces the task-6 row "window vs trial p-value comparison printed". `--compare window200 ""` is not in the list, and if it were run after command 6 it would overwrite the required flips file (`analyze_connectivity_cohort.py:213`). Also, `compare_runs` uses an inner merge (`:195`), so if one summary lacks rows (for example a partial re-run with `--subjects`), the comparison silently shrinks. An empty flips file written by `.assign` has no rows that name the compared pair (P11 lesson: same-name outputs).
+
+**Demo numbers versus the roadmap.** Accept as synthetic-system dependence. No action beyond reporting both numbers.
+- MVAR: the contiguous slices of a channel-major `weights` are a permutation of the same C·p·C estimated entries. So `‖P(Â) − A‖ / ‖A‖ ≈ √(2(1 − ρ))`, which is 141 % for uncorrelated entries. 150–200 % needs a negatively correlated permutation (ρ ≤ −0.125), which depends on the system. Five seeds of the builder's demo system (`python -c`, `demo_mvar_slicing.run(s)`, s = 0–4) give strided 6.6/7.2/5.4/5.8/5.6 % and contiguous 129.7/139.1/135.2/132.1/133.7 %. That is stable, near the √2 expectation, and 18–26× the strided error. The bug's signature (≥ 100 % vs ≤ 15 %) is unambiguous.
+- CSD PLV 1.0000 → 0.9999 vs the roadmap's 0.998 → 0.998: the level depends on the noise, and the claim being tested is invariance under edge corruption (Δ ≤ 0.005), which holds.
+- Hilbert envelope 0.39–0.76 (first 15 samples) and 0.02–0.17 (last 15) vs "5–70 %": the overall span 2–76 % is the same phenomenon, and the upper end exceeds 70 % slightly.
+- The report must print the roadmap numbers beside ours and say "system-dependent; qualitative claim reproduced". It must not write "reproduces ~150–200 %".
+
+### Pre-committed acceptance windows for R-12 (trial200 = the unsuffixed final run, concatenated coherence, one-tailed BH; fixed now, not movable by the results review)
+
+Tolerance: "same qualitative pattern; FDR-edge totals per subject within ±25 % or ±5 edges" (04_REFERENCE tolerance table). The half-width is max(0.25·R, 5), integers inclusive. From `python -c` (`h=max(0.25*r,5); ceil(r-h), floor(r+h)`):
+
+| Method | S01 (R 0) | S02 | S03 | S04 | S05 |
+|---|---|---|---|---|---|
+| coherence total | 0–5 | 0–5 (R 0) | 49–81 (R 65) | 39–63 (R 51) | 10–20 (R 15) |
+| wPLI total | 0–5 | 0–8 (R 3) | 29–47 (R 38) | 25–41 (R 33) | 13–23 (R 18) |
+
+- A1 Synthetic: the full suite passes on the clean checkout. Both demos exit 0: strided ≤ 15 % and contiguous ≥ 100 %; CSD ΔPLV ≤ 0.005 and Hilbert edge envelope < 80 %.
+- A2 FDR totals: all 10 cells inside the table. One cell outside is "not within tolerance". It can be accepted only as a recorded deviation with a mechanism shown by an output (flip-list membership of the cells that make it up, approximate ids S02/S04 with the gate counts, or E2 estimator dependence for S03 coherence). No re-run with other seeds or permutation counts may replace the final run.
+- A3 24 Hz pattern (criterion B, global p < 0.05): all six cells S03–S05 × {coherence, wPLI} at 24 Hz must be significant, and S01/S02 at 24 Hz must be non-significant in both methods (R-12: 1.000/1.000/1.000/0.323). Any 24 Hz cell whose B verdict differs from R-12 is a "24 Hz switch", which is in the failure column of the tolerance table. It must be explained by output evidence (in the flip list, E2, or approximate ids). "Monte Carlo noise" alone is not accepted for a reference p ≤ 0.015 (S03–S05 all) unless the cell is in the flip list. Criterion-A changes at 24 Hz (for example S05 wPLI gaining FDR edges where R-12 has 0) are reported and explained, but do not by themselves fail A3.
+- A4 "Only 24 Hz": no other frequency has p < 0.05 in all of S03–S05 in BOTH coherence and wPLI. This joint reading is forced: in R-12 itself, wPLI alone is significant in all three at 10.91 Hz (0.015/0.015/0.005) and 8.57 Hz (0.005/0.025/0.010). Frequencies that meet this for one method only are reported descriptively.
+- A5 S01/S02 "null on essentially everything": FDR totals inside the table, and at most 1 of each subject's 10 coherence + wPLI cells with p < 0.05 (R-12 has 0), never at 24 Hz (A3).
+- A6 Flips: the trial100-vs-final flips CSV exists, and every listed cell is labelled inconclusive in the report. The report names the flips that come only from BH resolution (minimum non-zero count 5 at 100 vs 3 at 200) and says the two nulls share their first 100 draws. A count of flips is not graded.
+- A7 Task 6: window200 summary with `permutation_unit = window` in every row. The window-vs-trial comparison is produced by the plan command (after F1). Descriptive expectation (PF-19): window-level p no larger than trial-level at most cells. This is not graded, and the C1 junction imbalance of the window null is stated.
+- A8 PLV and PDC have no reference values. They are reported descriptively and labelled "no reference". PDC uses 42 directed edges.
+
+### Non-blocking notes
+
+- N1. `p_two_tailed` (`permutation.py:161`, `:165`) compares |null| with |obs| around 0. The null is not centred at 0, because the group sizes differ and the estimator bias depends on size. Centre on the null mean, or keep it out of any claim. It is only in the details CSV.
+- N2. Recommended in the same round as fix 1: add `p_lower_tailed = (1 + #{null ≤ obs}) / (n + 1)` to the result dict and the alpha CSV (P12 D-3 suppression test), with a reversed planted-effect test. If not adopted, the results review uses `1 − p_one + 1/(n+1)` (exact without ties) and says so.
+- N3. 03_changes "PDC 42 edges: reading of 21/28" and decisions.md P13 point 2: the rationale should read "our choice for the directed case; 21/28 = 7/8 channels undirected" (see above).
+- N4. The S03 smoke numbers in 03_changes are labelled SMOKE and are not reportable. The report must use only the verifier's run.
+
+Verdict: FAIL
 
 ### Required fixes
 
-<!-- Only if FAIL. Each names its rule and exact location. -->
-
-1.
-
-### Non-blocking notes
+1. connectivity-stats (R7, R9; `scripts/connectivity/analysis/analyze_connectivity_cohort.py:190-219`): make `--compare` order-independent.
+   - The pair (`trial100`, `""`) keeps writing `reports/connectivity_cohort_flips.csv`. Any other pair writes `reports/connectivity_cohort_flips_<a>_vs_<b>.csv`, with `final` for `""`.
+   - Print the compared suffixes and the number of compared cells in every case.
+   - Raise if the two summaries do not have the same (subject, method, condition) key set.
+   - Add a test: two compares in either order leave both files with their own pairs, and a missing row raises.
+2. orchestrator (task 6 acceptance; `02_plan.md` "Run commands"): add `.venv/bin/python -m scripts.connectivity.analysis.analyze_connectivity_cohort --compare window200 ""` after the final trial200 run. Add the pre-committed windows A1–A8 above to the acceptance table by reference.
 
 ## Results review
 
