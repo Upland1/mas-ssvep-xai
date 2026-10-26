@@ -100,13 +100,15 @@ def train_model(X: np.ndarray, yi: np.ndarray, seed: int, device: torch.device, 
 def train_and_eval_cv(X: np.ndarray, y: np.ndarray, build_model: Optional[Callable] = None, epochs: int = EPOCHS,
                       batch_size: int = BATCH_SIZE, lr: float = LR, device: str = "auto", seed: int = SEED,
                       verbose: bool = False, augment: bool = False, groups: Optional[np.ndarray] = None,
-                      cv: str = "grouped", smoothing: str = "mod5") -> dict:
+                      cv: str = "grouped", smoothing: str = "mod5", model_seed: Optional[int] = None) -> dict:
   """CV of a network (default EEGNet) on raw clean windows `X (n, C, T)` with condition codes `y`.
 
   `cv="grouped"` (R1) needs `groups` = trial id per window (`cv_utils.build_trial_ids` on the pre-gate labels, then the
   valid mask, PF-03) and asserts that no id is on both sides of any fold; `cv="legacy"` is the leaky P05-P10 split.
   Returns `pred` (codes), `proba` (classes sorted), `accuracy`, `smoothed_accuracy` (`smoothing` rule), `train_accuracy`
   (mean over folds, un-augmented training fold), per-fold lists, `classes`, `n_params`, `cv`, `smoothing`, `splits`.
+  `model_seed` (P11 seed-spread DIAGNOSTIC only): seed base of the model init, DataLoader generator and augmentation
+  generator (`model_seed + fold`) while the splitter keeps `seed`; None (default) = `seed`, the reporting behaviour.
   """
   dev = resolve_device(device)
   classes, to_idx = label_maps(y)
@@ -117,9 +119,10 @@ def train_and_eval_cv(X: np.ndarray, y: np.ndarray, build_model: Optional[Callab
   splits = make_splits(cv, yi, groups, seed)
   if cv == "grouped":
     assert_no_shared_trials(splits, groups)
+  base = seed if model_seed is None else int(model_seed)
   for fold, (tr, te) in enumerate(splits):
-    model = train_model(Xz[tr], yi[tr], seed + fold, dev, epochs, batch_size, lr, build_model,
-                        seed + fold if augment else None)
+    model = train_model(Xz[tr], yi[tr], base + fold, dev, epochs, batch_size, lr, build_model,
+                        base + fold if augment else None)
     n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     proba[te] = predict_proba(model, Xz[te], dev)
     fold_test.append(float(np.mean(proba[te].argmax(1) == yi[te])))
