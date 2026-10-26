@@ -128,3 +128,28 @@ None. The original repository was not opened; the 42-edge reading of the directe
 ## Questions
 
 None.
+
+## Round 1 audit fix
+
+Status: READY
+
+Commits: fix (code), test, and this docs commit, after `e80cfad`. No number-producing path changed; the new key `p_lower_tailed` is an addition.
+
+1. **F1, `--compare` independent of run order** (`analyze_connectivity_cohort.py`, `flips_path`, `compare_runs`). The pair (`trial100`, `""`) writes `reports/connectivity_cohort_flips.csv`; any other pair writes `reports/connectivity_cohort_flips_<a>_vs_<b>.csv` with `final` for `""` (for example `connectivity_cohort_flips_window200_vs_final.csv`). The console prints the compared suffixes and `N cells compared`. `compare_runs` raises `ValueError` if the two summaries do not hold the same (subject, method, condition) rows (the merge is also `one_to_one`). Tests: `test_compare_is_order_independent` (both orders, both files kept, the required file not overwritten), `test_compare_raises_on_missing_rows`.
+2. **N2, `p_lower_tailed`**: `compute_permutation_test` returns `p_lower_tailed = (1 + #{null <= obs}) / (n + 1)` from the null counts, and the alpha diagnostic CSV has the column (`connectivity_alpha_diagnostic[_s].csv`: subject, method, condition, frequency_hz, mean_baseline_matched, mean_stimulus, mean_difference, p_one_tailed, p_lower_tailed, permutation_unit). Tests: `test_lower_tail_p_from_null_counts`, `test_alpha_csv_has_lower_tail`.
+3. **N3, rationale corrected**: "21/28" in the roadmap means C(7,2) = 21 and C(8,2) = 28, the 7- and 8-channel undirected counts. It does not fix the directed case. PDC uses 42 directed edges as this rebuild's own choice (each direction is a separate hypothesis; R-12 has no PDC row, so acceptance is unaffected). This replaces the earlier wording that read "21/28" as the directed case.
+
+Full command list (confirmed against the amended `02_plan.md`; flags unchanged):
+
+```bash
+.venv/bin/python -m scripts.connectivity.diagnostics.demo_hilbert_edges
+.venv/bin/python -m scripts.connectivity.diagnostics.demo_mvar_slicing
+.venv/bin/python -m scripts.connectivity.analysis.analyze_connectivity_cohort --methods coherence plv wpli pdc --permutations 200 --permutation-unit window --n-jobs -1 --out-suffix window200
+.venv/bin/python -m scripts.connectivity.analysis.analyze_connectivity_cohort --methods coherence plv wpli pdc --permutations 100 --permutation-unit trial --n-jobs -1 --out-suffix trial100
+.venv/bin/python -m scripts.connectivity.analysis.analyze_connectivity_cohort --methods coherence plv wpli pdc --permutations 200 --permutation-unit trial --n-jobs -1
+.venv/bin/python -m scripts.connectivity.analysis.analyze_connectivity_cohort --compare trial100 ""
+.venv/bin/python -m scripts.connectivity.analysis.analyze_connectivity_cohort --compare window200 ""
+.venv/bin/python -m scripts.connectivity.analysis.analyze_connectivity_cohort --methods coherence --subjects S03 --permutations 200 --permutation-unit trial --coherence-estimator aligned --n-jobs -1 --out-suffix aligned_S03
+```
+
+Suite: `.venv/bin/python -m pytest tests -o addopts="" -q` -> `792 passed, 21 warnings in 352.67s (0:05:52)`.
