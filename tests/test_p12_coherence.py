@@ -130,3 +130,67 @@ def test_plots(tmp_path):
   cp.plot_difference_panel(mats, names, path=tmp_path / "d.png")
   cp.plot_all_conditions_panel(mats, names, path=tmp_path / "r.png")
   assert (tmp_path / "d.png").stat().st_size > 0 and (tmp_path / "r.png").stat().st_size > 0
+
+
+# --- Round 1 audit fixes ---------------------------------------------------------------------------
+
+def test_broadband_baseline_before_after_known_answer():
+  """R-11 baseline: independent noise -> before (per-window, nperseg 128) in [0.27, 0.40], after <= 0.05."""
+  w = np.concatenate([_noise(10, n=20), _noise(11, n=40)])
+  y = np.array([101] * 20 + [201] * 40)
+  bb = ce.baseline_broadband_stats(w, y, FS)
+  idx = np.flatnonzero(y == 201)
+  assert 0.27 <= bb["before"] <= 0.40
+  assert bb["after"] <= 0.05
+  assert bb["before"] == pytest.approx(ce.mean_offdiag(ce.per_window_mean_matrix(w[idx], FS, ce.BASELINE_BAND)))
+  assert bb["after"] == pytest.approx(ce.mean_offdiag(ce.compute_condition_coherence(w[idx], FS, ce.BASELINE_BAND)))
+  rows = ce.summary_rows(w, y, FS)
+  assert all(r["baseline_broadband_before"] == bb["before"] and r["baseline_broadband_after"] == bb["after"] for r in rows)
+
+
+def test_meta_labels_bins_and_channel_count():
+  rows = [dict(mean_baseline_perwindow=0.7, mean_matched_baseline=0.6)]
+  txt = "\n".join(ce.meta_lines(rows, ["A", "B", "C"], ["D"], FS))
+  assert "channels (3)" in txt and "REPORTED" in txt and "DIAGNOSTIC" in txt
+  assert "band 101: (23.0000, 25.0000)" in txt and "[23.438, 24.414]" in txt and "[24.0, 25.0]" in txt
+  bins, true = ce.band_bins(FS, 256, (23.0, 25.0))
+  assert bins == [23.438, 24.414] and true == [24.0, 25.0]
+
+
+def test_raw_panel_201_title_states_broadband():
+  assert "5-35 Hz broadband" in cp.CONDITION_LABELS[201]
+
+
+def _junction_trials(rng, amp, n_trials, n_win):
+  """Independent cuts of a 1-60 Hz stream (common < 4 Hz component + noise): junctions between trials."""
+  from scipy.signal import butter, sosfiltfilt
+  out = []
+  for _ in range(n_trials):
+    n = n_win * 256 + 2000
+    common = sosfiltfilt(butter(4, 4, fs=FS, output="sos"), rng.standard_normal(n))
+    x = amp * (common / common.std())[None] + rng.standard_normal((7, n))
+    x = sosfiltfilt(butter(2, [1, 60], "band", fs=FS, output="sos"), x, axis=1)[:, 500:500 + n_win * 256]
+    out.append(x.reshape(7, n_win, 256).transpose(1, 0, 2))
+  return np.concatenate(out)
+
+
+def test_junction_bias_prescribed_vs_aligned():
+  """No true difference; the prescribed estimator is pushed negative at 8.57 Hz, the aligned one is not (F2)."""
+  band = ce.band_for_condition(105)
+  d_pres, d_al = [], []
+  for seed in range(10):
+    rng = np.random.default_rng(seed)
+    s, b = _junction_trials(rng, 8.0, 8, 5), _junction_trials(rng, 8.0, 40, 2)
+    d_pres.append(ce.mean_offdiag(ce.compute_condition_coherence(s, FS, band))
+                  - ce.mean_offdiag(ce.compute_condition_coherence(b, FS, band)))
+    d_al.append(ce.mean_offdiag(ce.compute_aligned_condition_coherence(s, FS, band))
+                - ce.mean_offdiag(ce.compute_aligned_condition_coherence(b, FS, band)))
+  assert np.mean(d_pres) < -0.10
+  assert abs(np.mean(d_al)) <= 0.03
+
+
+def test_aligned_equals_default_estimator_on_white_noise_scale():
+  """The aligned estimator is a different (diagnostic) estimator, same band/shape contract."""
+  w = _noise(12, n=10)
+  m = ce.compute_aligned_condition_coherence(w, FS, BAND)
+  assert m.shape == (7, 7) and np.all(np.isnan(np.diag(m)))
