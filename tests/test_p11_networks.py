@@ -190,3 +190,25 @@ def test_ab_outputs_dirs_meta_and_freeze_legacy_only_with_legacy(tmp_path, capsy
   leg = tmp_path / "rep" / "legacy_leaky" / csv.name
   assert leg.is_file() and "legacy leaky" in leg.with_suffix(".meta.txt").read_text()
   assert list(pd.read_csv(leg).columns) == ab.COLUMNS
+
+
+# ---------- P11 round 2: the network path and the classical flagship path see the same folds ----------
+
+def test_network_folds_equal_classical_flagship_folds(tmp_path):
+  """`gated_windows` + `train_and_eval_cv` (networks) and `prepare_subject` + `splits_for` (flagship, = R-6) give the
+  same clean windows, labels, trial ids and (train, test) folds, with a gate rejection inside a block (PF-03)."""
+  from src.models.classical.benchmark_runner import prepare_subject
+  from src.models.classical.legacy_eval import splits_for
+  _tree(tmp_path, reject_stim_row=7)
+  proc = tmp_path / "proc"
+  g = benchmark_common.gated_windows(proc, "S03")
+  b = prepare_subject(proc, "S03")
+  assert g["n_clean"] == b["n_clean"] == 74
+  np.testing.assert_array_equal(g["y"], b["y"])
+  np.testing.assert_array_equal(g["trial_ids"], b["trial_ids"])
+  r = train_and_eval_cv(g["X"], g["y"], epochs=1, device="cpu", groups=g["trial_ids"], cv="grouped")
+  ref = splits_for("grouped", b["y"], b["trial_ids"], 42)
+  assert len(r["splits"]) == len(ref) == 5
+  for (tr, te), (rtr, rte) in zip(r["splits"], ref):
+    np.testing.assert_array_equal(tr, rtr)
+    np.testing.assert_array_equal(te, rte)
