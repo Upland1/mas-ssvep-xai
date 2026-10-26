@@ -319,6 +319,10 @@ def test_demo_cv_leakage_columns_mean_row_and_network_section(tree, tmp_path, ca
   rep = tmp_path / "reports"
   (rep / "legacy_leaky").mkdir(parents=True)
   hdr = "Subject,Clean Windows,1.0s OFF (%),1.0s ON (%),1.0s Delta,2.0s OFF (%),2.0s ON (%),2.0s Delta\n"
+  leak_meta = "cv=StratifiedKFold(5, shuffle, 42) over windows (legacy R1/PF-01, leaky); seed=42\n"
+  grp_meta = "cv=StratifiedGroupKFold(5, shuffle, 42) over reconstructed trial ids (R1, leak-free); seed=42\n"
+  (rep / "legacy_leaky" / "augmentation_ab_eegnet.meta.txt").write_text(leak_meta)
+  (rep / "augmentation_ab_eegnet.meta.txt").write_text(grp_meta)
   (rep / "legacy_leaky" / "augmentation_ab_eegnet.csv").write_text(hdr + "S03,75,60.0,70.0,10.0,65.0,75.0,10.0\nMean,75,60.0,70.0,10.0,65.0,75.0,10.0\n")
   (rep / "augmentation_ab_eegnet.csv").write_text(hdr + "S03,75,30.0,31.0,1.0,35.0,36.0,1.0\nMean,75,30.0,31.0,1.0,35.0,36.0,1.0\n")
   assert demo.main(["--data-root", str(tree), "--subjects", "S03", "S05", "--reports-dir", str(rep)]) == 0
@@ -345,3 +349,24 @@ def test_defaults_are_grouped_cv_and_mod5_smoothing_and_demo_delta_uses_reported
   assert "REPORTED" in demo.COLUMNS[7] and "DIAGNOSTIC" in demo.COLUMNS[9]
   assert le.smooth_label("trial", "grouped") == le.TRIAL_SMOOTH_LABEL and "PF-02 diagnostic" in le.TRIAL_SMOOTH_LABEL
   assert le.smooth_label("mod5", "legacy") == le.SMOOTH_LABEL   # legacy label unchanged (byte-identical outputs)
+
+
+def test_network_section_skips_pairs_whose_splitter_labels_do_not_match(tmp_path, capsys):
+  """A stale leaky file in the P11 slot (or no meta) must never be printed as 'leaky vs grouped'."""
+  from scripts.diagnostics import demo_cv_leakage as demo
+  hdr = "Subject,Clean Windows,1.0s OFF (%),1.0s ON (%),1.0s Delta,2.0s OFF (%),2.0s ON (%),2.0s Delta\nS03,75,60.0,70.0,10.0,65.0,75.0,10.0\n"
+  leak = "cv=StratifiedKFold(5, shuffle, 42) over windows (legacy R1/PF-01, leaky); seed=42\n"
+  grp = "cv=StratifiedGroupKFold(5, shuffle, 42) over reconstructed trial ids (R1, leak-free); seed=42\n"
+  rep = tmp_path
+  (rep / "legacy_leaky").mkdir()
+  for m, new_meta in (("eegnet", leak), ("compact_cnn", None), ("shallow_conv_net", grp)):
+    (rep / "legacy_leaky" / f"augmentation_ab_{m}.csv").write_text(hdr)
+    (rep / "legacy_leaky" / f"augmentation_ab_{m}.meta.txt").write_text(leak)
+    (rep / f"augmentation_ab_{m}.csv").write_text(hdr)
+    if new_meta:
+      (rep / f"augmentation_ab_{m}.meta.txt").write_text(new_meta)
+  net = demo.network_section(rep)
+  out = capsys.readouterr().out
+  assert set(net["Model"]) == {"shallow_conv_net"}                       # only the leaky/grouped pair is used
+  assert "eegnet skipped (splitter labels: legacy_leaky file leaky, reports file leaky" in out
+  assert "compact_cnn skipped (splitter labels: legacy_leaky file leaky, reports file unknown" in out

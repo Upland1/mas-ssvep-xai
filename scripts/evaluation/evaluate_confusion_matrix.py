@@ -109,7 +109,7 @@ def smoothed_diagnostics(y: np.ndarray, scores: np.ndarray, reports: Path, subje
     pred = classes[np.argmax(fn(scores), axis=1)]
     cm = confusion_matrix(y, pred, labels=list(classes))
     accs[rule] = float(np.mean(pred == y))
-    names = {"mod5": "legacy i%5 trial smoothing, R8 legacy, PF-02", "trial": "trial-aware smoothing, R8"}
+    names = {"mod5": "legacy i%5 trial smoothing, R8 legacy, PF-02", "trial": "trial-reset smoothing, PF-02 diagnostic"}
     kind = ("DIAGNOSTIC (P04 no-reset rule, not the reported number)" if rule == "noreset"
             else f"REPORTED ({names[rule]})" if rule == reported else f"DIAGNOSTIC ({names[rule]}, not the reported rule)")
     title = (f"{kind} {subject} 2.0 s smoothed predictions, rule {rule}; "

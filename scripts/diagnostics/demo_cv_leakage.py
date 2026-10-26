@@ -110,14 +110,34 @@ def with_mean_row(rows: list) -> pd.DataFrame:
   return pd.concat([df, pd.DataFrame([mean], columns=COLUMNS)], ignore_index=True)
 
 
+def meta_splitter(csv: Path) -> str:
+  """Splitter of an A/B CSV from its `.meta.txt` `cv=` line: "leaky", "grouped" or "unknown" (no/unreadable meta)."""
+  meta = Path(csv).with_suffix(".meta.txt")
+  try:
+    line = next(l for l in meta.read_text().splitlines() if l.startswith("cv="))
+  except (OSError, StopIteration):
+    return "unknown"
+  if "StratifiedGroupKFold" in line:
+    return "grouped"
+  return "leaky" if "StratifiedKFold" in line else "unknown"
+
+
 def network_section(reports: Path) -> Optional[pd.DataFrame]:
-  """Per-subject OFF/ON leaky (frozen P10, reports/legacy_leaky) vs grouped (P11) from the A/B CSVs; None if no pair exists."""
+  """Per-subject OFF/ON leaky (frozen P10, reports/legacy_leaky) vs grouped (P11) from the A/B CSVs; None if no pair exists.
+
+  A pair is used only if the meta of the `legacy_leaky/` file says leaky and the meta of the `reports/` file says
+  grouped (a stale P10 file in the P11 slot, or a grouped file in the frozen slot, is skipped with the reason)."""
   rows = []
   for model in NET_MODELS:
     old = Path(reports) / "legacy_leaky" / f"augmentation_ab_{model}.csv"
     new = Path(reports) / f"augmentation_ab_{model}.csv"
     if not (old.is_file() and new.is_file()):
       print(f"  [-] network section: {model} skipped ({'no frozen P10 CSV' if not old.is_file() else 'no P11 CSV yet'})")
+      continue
+    so, sn = meta_splitter(old), meta_splitter(new)
+    if (so, sn) != ("leaky", "grouped"):
+      print(f"  [-] network section: {model} skipped (splitter labels: legacy_leaky file {so}, reports file {sn}; "
+            f"need leaky and grouped)")
       continue
     a = pd.read_csv(old).set_index("Subject")
     g = pd.read_csv(new).set_index("Subject")

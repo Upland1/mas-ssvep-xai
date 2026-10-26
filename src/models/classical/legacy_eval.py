@@ -122,6 +122,8 @@ def oof_space(space: FeatureSpace, subbands: Optional[np.ndarray], y: np.ndarray
   sorted label order, each window predicted exactly once by a model that never saw it; `errors[name]`
   holds the first exception text of a model that failed in some fold (that model has no result).
   Each model is a `Pipeline(StandardScaler, clone(model))` fitted on the training fold only.
+  `splits=None` is a LEGACY-ONLY fallback (window-level StratifiedKFold, leaky, PF-01) kept for the frozen
+  P05 scripts; every leak-free caller passes `splits_for("grouped", ...)` (R1).
   """
   y = np.asarray(y)
   classes = np.unique(y)

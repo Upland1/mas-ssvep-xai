@@ -89,3 +89,10 @@ Status: READY. On legacy folders the REPORTED 2.0 s rule is `mod5` (i%5) combine
 - Tests: new `test_defaults_are_grouped_cv_and_mod5_smoothing_and_demo_delta_uses_reported_rule`; trial-rule tests pass "trial" explicitly; grouped run fixture and meta asserts updated. The legacy sha256 pins are unchanged and still pass (legacy outputs byte-identical to pre-P11).
 - Full suite (`pytest tests -o addopts="" -q`): `632 passed, 21 warnings in 281.95s (0:04:41)`.
 - API note for deep-learning: default 2.0 s rule on legacy folders is mod5. Call `accuracies(y, pred, scores, trial_ids, smoothing)` with `smoothing` default "mod5" and the grouped split (`make_splits("grouped", ...)`); pass "trial" only to print the diagnostic next to it. `protocol_labels(cv, smoothing)` gives the matching header labels.
+
+## Round 1 audit fix
+Status: READY.
+- Required fix (stale-result reuse): `demo_cv_leakage.network_section` now reads each A/B CSV's `.meta.txt` `cv=` line (`meta_splitter`: leaky / grouped / unknown). A model is paired only if the `legacy_leaky/` file is leaky and the `reports/` file is grouped; otherwise it is skipped with a printed reason ("splitter labels: legacy_leaky file X, reports file Y"). A missing meta counts as unknown, so is skipped. No number-producing path and no run order changed. New test `test_network_section_skips_pairs_whose_splitter_labels_do_not_match` (leaky file in the P11 slot, missing meta, valid pair); the existing demo test now writes both metas.
+- N2: in `evaluate_confusion_matrix.py` the trial rule is now named "trial-reset smoothing, PF-02 diagnostic". The mod5 name ("legacy i%5 trial smoothing, R8 legacy, PF-02") is left as is because it is inside the legacy report titles pinned byte-for-byte.
+- N1: `oof_space(splits=None)` documented as a legacy-only fallback for the frozen P05 scripts (not made to raise, since `benchmark_5_subjects`, `test_sklearn_models` and one P05 test rely on it).
+- Full suite (`pytest tests -o addopts="" -q`): `677 passed, 21 warnings in 339.01s (0:05:39)`.
