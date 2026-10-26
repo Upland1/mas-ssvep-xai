@@ -134,3 +134,14 @@ Clean checkout: pytest in a detached worktree @ `0b96524e6afe59fd70f6a3941d61b57
 Result: 13 of 14 cells explained; 1 systematic: **Compact-CNN S03 2.0 s ON** (65.48, 64.47, 65.48 against a lower window edge of 66.07; the gap to the edge is 0.59 to 1.60 pp). By the pre-committed rule that is REJECT plus a blocker for Sebastian; the verifier does not interpret it further. The reported numbers stay the seed-42 CSVs.
 
 Verdict: FAIL
+
+## Restatement with D-8
+
+Basis: results review Round 2 (07_review.md, 50d9d01), decisions.md D-8 and B006 option 1 (Sebastian). This section supersedes the verdict lines above; the numbers above are unchanged.
+
+- No re-run needed: `git diff --stat 0b96524 HEAD -- src scripts tests configs` is empty (0 lines), so the Round 2b runs at 0b96524 describe the current code.
+- P1, P2, P3, P6, P7: met (sections above; their CSVs are byte-unchanged after Round 2b).
+- P4: 13 of 14 out-of-window cells are explained under D-4, including every cohort cell. The remaining cell, Compact-CNN S03 2.0 s ON, is 129 / 127 / 129 of 197 over bases 42 / 1042 / 2042 (65.48 / 64.47 / 65.48 %), against a minimum in-window count of 131/197 (R-9b 71.07 %, window 66.07-76.07). It is **not reproduced within tolerance** and was accepted as documented deviation D-8 by Sebastian (B006, option 1), explanation signed by the scientific reviewer. The reported numbers stay the seed-42 CSVs.
+- P5 (reviewer's regrade, three-base means; the "before" side is our single-seed P10 run): classical met (-4.06 / -4.96); EEGNet drop not reproduced (OFF -2.71, ON -2.82; S03 -20.81 at seed 42 was a low-seed draw, not a leak size); Compact-CNN drop partial (OFF -6.27, ON -4.38; largest per-subject drop 14.55, below 15); ShallowConvNet drop not reproduced; EEGNet gain met at the leak-free level (+3.00, window -0.99-5.01); Compact-CNN gain met by the seed mean (+16.01, window 14.16-20.16; seed 42 alone +13.56); ShallowConvNet gain met (+2.63). Overall CNN leak-inflation claim partial; the classical inflation is reproduced, the CNN-specific inflation of the original is not.
+
+Verdict: PASS
