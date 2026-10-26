@@ -23,3 +23,5 @@
 | 9a Blocker resolved | Sebastian | 2026-10-26 | B006 option 1: accept as documented deviation D-8 | 2 | B006 | none | |
 | 9 Results review (Round 2) | scientific-reviewer | 2026-10-26 | APPROVE with D-8 (50d9d01); diagnostic code cannot alter reported numbers; D-4 confirmed; D-8 signed (2–4 windows short; not seed variance; cause open); P5 regraded | 2 | R-9b, D-4, B006 | none | multi-seed planning rule from P12 recorded |
 | 8 Verify restatement | verifier | 2026-10-26 | PASS with D-8 (f744451); no code change since 0b96524 | 2 | B006, D-8 | none | |
+| 10 Report | scribe | 2026-10-26 | P11.md written by the scribe (c8b4690); RESEARCH_LOG/CHANGELOG (f8f2587; P10 link filed); README results status (7df80c3); 5 observations in §9 | 2 | CSVs, logs, handoffs | none | |
+| 11 Gate | orchestrator | 2026-10-26 | tasks done; PASS (restated D-8) + APPROVE; vendor scan 0 required | 2 | 06_verify.md, 07_review.md | 1 (DL round 2) | merge --no-ff, tag p11-done; continue to P12 (stop after P15) |
