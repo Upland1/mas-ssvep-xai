@@ -45,3 +45,28 @@ None. Status READY.
 ```bash
 .venv/bin/python -m pytest tests -o addopts="" -q
 ```
+
+## Round 1 (pre-run audit required fix 4)
+
+Status: READY. Six cases appended to `tests/test_p12_known_answer.py` (21 in the file), independent of the builder's tests.
+
+| Test (`tests/test_p12_known_answer.py::`) | Simulates | Expected | Source |
+|---|---|---|---|
+| `test_r1_broadband_baseline_independent_noise` | 201 noise windows, 5-35 Hz | before in [0.27, 0.40]; after <= 0.05 | R-11, PF-15 |
+| `test_r1_broadband_baseline_coupled` | shared source in 201 | before and after >= 0.95 | analytic |
+| `test_r1_broadband_baseline_hand_built_uses_only_201` | partial coupling in 201 only, other conditions uncoupled | `after` equals a direct scipy per-pair concatenated mean over bins 5-35 Hz; `before` equals the direct per-window (nperseg 128) mean; they differ | hand computation |
+| `test_r1_labels_reported_vs_diagnostic` | `summary_rows` + `meta_lines` | every output column has a label; mean_raw, mean_matched_baseline, mean_difference, baseline_broadband_after start with REPORTED; before, aligned, per-window, broadband-difference columns are DIAGNOSTIC; channel count from data | R-11, PF-15/16 |
+| `test_r1_aligned_matches_hand_scipy_and_default_untouched` | scipy hand calls | aligned = nperseg T, noverlap 0 (also T = 200); reported = scipy defaults (nperseg 256, 50 % overlap) and differs from aligned; `noverlap=None` is identical to omitting it | exact |
+| `test_r1_junction_aligned_zero_prescribed_negative` | independent trials of a common 1-3 Hz mix (own generator), stimulus 8x5 vs baseline 40x2, no true difference, 8 seeds at 8.57 Hz | prescribed mean < -0.15 (observed -0.31); aligned abs <= 0.03 (observed +0.011) | F2 |
+
+Mutants (applied to `src/features/connectivity/connectivity_extraction.py`, restored by `git checkout`; run on both P12 test files):
+
+| Mutant | Result |
+|---|---|
+| M5 broadband baseline `after` uses the per-window estimator | 3 failed (2 new, 1 builder) |
+| M6a aligned estimator with default overlap | 3 failed (2 new, 1 builder) |
+| M6b aligned with nperseg 128 instead of T | 1 failed (new hand-scipy test only) |
+| M6c aligned with noverlap 64 | 3 failed (2 new, 1 builder) |
+| M7 reported estimator silently switched to aligned | 7 failed (4 new, 3 builder) |
+
+Full suite: `723 passed, 21 warnings in 354.22s (0:05:54)`.
