@@ -1,6 +1,6 @@
 # B007 — P15: one R-15 GNN cell systematically below tolerance, plus a sign flip of the coherence-edge Δ
 
-Status: OPEN (blocking the P15 gate)
+Status: RESOLVED 2026-10-27 — Sebastian: "Accept as documented deviations for B007" (option 1)
 Raised by: orchestrator, 2026-10-27
 Phase: P15-graph-gnn (branch `phase/P15-graph-gnn`, verify commit 87ed7af, run at 2392299)
 
