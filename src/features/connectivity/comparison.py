@@ -250,14 +250,19 @@ def fisher_combined_p(p_values) -> tuple:
 def pairwise_permutation_test(win_a: np.ndarray, ids_a: np.ndarray, win_b: np.ndarray, ids_b: np.ndarray,
                               base: np.ndarray, band_a: tuple, band_b: tuple, fs: float, method_fn: Callable,
                               n_permutations: int, seed: int, alpha: float = 0.05) -> dict:
-  """Pairwise test of two frequency deltas `D_a = M(a; band_a) - M(base; band_a)` and `D_b` likewise.
+  """Exchangeability test of the trials of conditions a and b, with statistics on their own-band deltas.
 
-  Null: the trials of a and b are pooled and re-split at trial level with the observed sizes
-  (`_trial_permutation_split`, at most one trial split to hit the count); the first group is scored in
-  `band_a` and the second in `band_b`, each against the fixed baseline in its own band. Statistics:
-  `t_mag = mean over edges of (D_a - D_b)`, two-sided; `d_pat = 1 - r(D_a, D_b)` over edges, one-sided
-  (large = dissimilar). Both use the same permutations. Edge p-values (two-sided) go through BH-FDR.
-  p-values carry the +1 pseudo-count. Symmetric methods only (upper-triangle edges).
+  Observed: `D_a = M(a; band_a) - M(base; band_a)` and `D_b` likewise. Null: the trials of a and b are pooled
+  and re-split at trial level with the observed sizes (`_trial_permutation_split`, at most one trial split);
+  the first group is scored in `band_a` and the second in `band_b`, each against the FIXED baseline in its own
+  band. The null is therefore "the a and b trials are exchangeable", NOT "D_a = D_b": its centre,
+  E[t] = [M(pool; band_a) - base_a] - [M(pool; band_b) - base_b], is generally not 0, so p_mag >= 0.05 never
+  means D_a ~ D_b and p_pat < 0.05 does not mean the delta patterns differ (P14 audit F2).
+  Statistics: `t_mag = mean over edges of (D_a - D_b)`, two-sided; `d_pat = 1 - r(D_a, D_b)` over edges,
+  one-sided (large = dissimilar). Both use the same permutations. Edge p-values (two-sided) go through BH-FDR.
+  p-values carry the +1 pseudo-count. DIAGNOSTIC (not a test of D_a = D_b by itself): the null mean and SD of
+  both statistics and `p_mag_centred = (1 + #{|t_null - mean| >= |t_obs - mean|}) / (n + 1)`.
+  Symmetric methods only (upper-triangle edges).
   """
   win_a, win_b, base = np.asarray(win_a), np.asarray(win_b), np.asarray(base)
   ids_a, ids_b = np.asarray(ids_a), np.asarray(ids_b)
@@ -311,6 +316,11 @@ def pairwise_permutation_test(win_a: np.ndarray, ids_a: np.ndarray, win_b: np.nd
   p_pat = (1 + np.sum(null_d >= d_obs)) / (n + 1) if np.isfinite(d_obs) else float("nan")
   pe = (1 + np.sum(np.abs(null_e) >= np.abs(diff_obs)[None], axis=0)) / (n + 1)
   fdr = benjamini_hochberg(pe, alpha)
-  return dict(t_mag=t_obs, p_mag=float(p_mag), d_pat=float(d_obs), p_pat=float(p_pat), r_obs=float(r_obs),
+  tc = null_t.mean()
+  p_cen = (1 + np.sum(np.abs(null_t - tc) >= abs(t_obs - tc))) / (n + 1)
+  dn = null_d[np.isfinite(null_d)]
+  return dict(t_mag=t_obs, p_mag=float(p_mag), t_null_mean=float(tc), t_null_sd=float(null_t.std()),
+              p_mag_centred=float(p_cen), d_null_mean=float(dn.mean()) if len(dn) else float("nan"),
+              d_null_sd=float(dn.std()) if len(dn) else float("nan"), d_pat=float(d_obs), p_pat=float(p_pat), r_obs=float(r_obs),
               n_edges_fdr=int(fdr.sum()), n_edges=int(emask.sum()), delta_a=d_a, delta_b=d_b,
               n_permutations=int(n), n_a=int(na), n_b=int(len(win_b)), n_base=int(len(base)))

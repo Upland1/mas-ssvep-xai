@@ -10,16 +10,19 @@ Per subject and method:
   "not reliable", PF-22);
 - for each of the 10 frequency pairs (a, b): the trials of a and b are exchanged at trial level with the
   observed group sizes (PF-19, the P13 splitter); each relabelled group is scored in its own band against the
-  same 201 windows re-scored in that band (the baseline is fixed, not permuted); magnitude statistic
+  same 201 windows re-scored in that band (the baseline is fixed, not permuted). The null is EXCHANGEABILITY of
+  the a and b trials, not D_a = D_b: it is generally off-centre, so p_mag >= 0.05 never means "D_a ~ D_b" and
+  p_pat < 0.05 does not mean "the delta patterns differ" (P14 audit F2). Magnitude statistic
   t_mag = mean over edges of (D_a - D_b), two-sided; pattern statistic d_pat = 1 - r(D_a, D_b), one-sided;
-  both share the same permutations. Edge-level two-sided p + BH-FDR; BH across the 10 pairs per subject and
+  both share the same permutations. A DIAGNOSTIC file <m>_pairwise_null[_s].csv gives the null mean/SD of both
+  statistics and p_mag_centred = (1 + #{|t_null - mean| >= |t_obs - mean|}) / (n + 1). Edge-level two-sided p + BH-FDR; BH across the 10 pairs per subject and
   method for p_mag and p_pat separately; reliability ceiling sqrt(rel_a rel_b); disattenuated r only if
   the ceiling > 0.1. Fisher-combined p across responders (from the benchmark CSV only, PF-21) and across
   non-responders. Five subjects: every inferential number is descriptive.
 
 Output (suffix `_<s>` from --out-suffix): reports/connectivity_comparison/<m>_pairwise_tests[_s].csv (section 6
 schema), <m>_split_half_reliability[_s].csv (section 6 schema), <m>_split_half_details[_s].csv (uncorrected r,
-label), <m>_pairwise_combined[_s].csv (Fisher-combined p per group and pair). `--compare A B` writes
+label), <m>_pairwise_null[_s].csv (DIAGNOSTIC null centre), <m>_pairwise_combined[_s].csv (Fisher-combined p per group and pair). `--compare A B` writes
 pairwise_flips.csv (cells crossing alpha on any criterion between two runs; '' = the unsuffixed final run).
 The 500 and 1000 permutation nulls are nested (the first 500 seeds are shared), so a flip is a
 resolution effect, not an independent replication (P13 D-4).
@@ -67,6 +70,8 @@ PAIRWISE_COLUMNS = ["subject", "method", "freq_a", "freq_b", "t_mag", "p_mag", "
 RELIABILITY_COLUMNS = ["subject", "method", "condition", "frequency", "split_half_reliability"]
 DETAIL_COLUMNS = ["subject", "method", "condition", "frequency", "r_fisher_uncorrected", "spearman_brown_applied",
                   "n_valid_splits", "label", "n_stim_windows", "n_baseline_windows", "fs", "source"]
+NULL_COLUMNS = ["subject", "method", "freq_a", "freq_b", "t_null_mean", "t_null_sd", "p_mag_centred",
+                "d_null_mean", "d_null_sd"]
 COMBINED_COLUMNS = ["method", "group", "freq_a", "freq_b", "k_subjects", "chi2_mag", "p_fisher_mag",
                     "chi2_pat", "p_fisher_pat"]
 SOURCE = "legacy windows (P02), raw, fs-250 axis (PF-04)"
@@ -155,6 +160,16 @@ def _pair_job(subject, method, a, b, win_a, ids_a, win_b, ids_b, base, fs, n_per
   return subject, method, a, b, {k: v for k, v in res.items() if k not in ("delta_a", "delta_b")}
 
 
+def null_table(jobs_out: list) -> dict:
+  """DIAGNOSTIC null-centre tables per method (does not touch the section 6 pairwise CSV)."""
+  rows = {}
+  for subject, method, a, b, r in jobs_out:
+    rows.setdefault(method, []).append(dict(
+      subject=subject, method=method, freq_a=CONDITION_FREQS[a], freq_b=CONDITION_FREQS[b],
+      **{k: r[k] for k in NULL_COLUMNS[4:]}))
+  return {m: pd.DataFrame(v, columns=NULL_COLUMNS) for m, v in rows.items()}
+
+
 def pairwise_tables(jobs_out: list, rel: dict, approx: dict, alpha: float) -> dict:
   """Assemble the per-method pairwise DataFrames: ceilings, disattenuation, BH across pairs per subject."""
   rows = {}
@@ -199,7 +214,8 @@ def run(args) -> dict:
   groups = {"responders": [s for s in subjects if s in set(resp)],
             "non_responders": [s for s in subjects if s not in set(resp)]}
   print(f"Data source: {SOURCE}; subjects {subjects}; methods {args.methods}; {args.permutations} trial-level "
-        f"permutations; gate {GATE}; responders {groups['responders']}, non-responders {groups['non_responders']}")
+        f"permutations (null = exchangeability of the a/b trials, each scored in its own band against the fixed "
+        f"matched baseline; NOT D_a = D_b, see <m>_pairwise_null); gate {GATE}; responders {groups['responders']}, non-responders {groups['non_responders']}")
   t0 = time.time()
   rel_rows, det_rows, rel, approx, jobs = [], [], {}, {}, []
   for s in subjects:
@@ -226,11 +242,13 @@ def run(args) -> dict:
     for (s, m, a, b, wa, ia, wb, ib, base) in jobs)
   print(f"pairwise permutation tests done ({time.time() - t1:.1f} s)")
   tables = pairwise_tables(jobs_out, rel, approx, args.alpha)
+  nulls = null_table(jobs_out)
   rel_df, det_df = pd.DataFrame(rel_rows, columns=RELIABILITY_COLUMNS), pd.DataFrame(det_rows, columns=DETAIL_COLUMNS)
   for m, df in tables.items():
     df.to_csv(csv_path(reports, m, "pairwise_tests", args.out_suffix), index=False)
     rel_df[rel_df["method"] == m].to_csv(csv_path(reports, m, "split_half_reliability", args.out_suffix), index=False)
     det_df[det_df["method"] == m].to_csv(csv_path(reports, m, "split_half_details", args.out_suffix), index=False)
+    nulls[m].to_csv(csv_path(reports, m, "pairwise_null", args.out_suffix), index=False)
     combined_table(df, groups).to_csv(csv_path(reports, m, "pairwise_combined", args.out_suffix), index=False)
   return dict(tables=tables, reliability=rel_df, details=det_df, groups=groups)
 
