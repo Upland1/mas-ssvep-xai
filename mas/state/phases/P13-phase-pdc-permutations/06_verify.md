@@ -135,3 +135,28 @@ Sources: `reports/connectivity_cohort_summary.csv`, `reports/connectivity_cohort
 3. E2: S03 coherence 8.57 Hz is estimator-dependent (inconclusive; "estimator-sensitive (not junction-biased)" by E3); it does not affect 24 Hz.
 
 Verdict: FAIL
+
+## DIAG-A2
+
+Command: `.venv/bin/python mas/state/scratch/verify/diag.py` (reads the six `reports/connectivity_cohort_summary_diagA2_rs<B>.csv`; T_B = S05 wPLI FDR total over the five conditions, E_B = FDR count of condition 104, 10.91 Hz). Run record: `05_run.md` "DIAG-A2". Nothing re-run, no code change.
+
+**R0 (identity), holds.** The rs42 summary rows equal the final S05 wPLI rows of `reports/connectivity_cohort_summary.csv` exactly (`DataFrame.equals` True; p, uncorrected edges and FDR edges all equal). The rs42 details CSV equals the final details rows (NaN-safe string comparison, `random_state` 42 in both) and every array of `connectivity_edges_diagA2_rs42/S05_wpli.npz` equals the final `connectivity_edges/S05_wpli.npz` (same keys). My first pass reported False for these two because of NaN and string-array handling in the comparison, not because of a value difference; the NaN-safe refinement is in the same script.
+
+Values by seed base B (per frequency 24 / 20 / 15 / 10.91 / 8.57 Hz; `connectivity_cohort_summary_diagA2_rs<B>.csv`):
+
+| B | T_B | E_B (10.91 Hz) | FDR edges | global p | uncorrected edges |
+|---|---|---|---|---|---|
+| 42 | 5 | 0 | 0/0/0/0/5 | 0.040/0.065/0.368/0.015/0.010 | 7/1/0/13/9 |
+| 1 | 7 | 0 | 0/0/0/0/7 | 0.030/0.090/0.373/0.025/0.015 | 7/1/0/12/10 |
+| 2 | 14 | 9 | 0/0/0/9/5 | 0.030/0.080/0.368/0.010/0.010 | 8/1/0/13/11 |
+| 3 | 12 | 0 | 7/0/0/0/5 | 0.025/0.075/0.348/0.020/0.015 | 8/1/0/10/11 |
+| 4 | 7 | 0 | 0/0/0/0/7 | 0.015/0.050/0.368/0.010/0.010 | 11/1/0/13/8 |
+| 5 | 12 | 7 | 0/0/0/7/5 | 0.040/0.055/0.393/0.010/0.005 | 7/1/0/13/8 |
+
+**R1 (T_B >= 13 and E_B >= 3 for at least one B in 1..5): holds.** B = 2 (T = 14, E = 9). Six T_B values: [5, 7, 14, 12, 7, 12]; E_B values: [0, 0, 9, 0, 0, 7].
+
+**R2 (all five bases T_B <= 12): does not hold** (B = 2 has T = 14).
+
+Per the rule: A2 is recorded as an accepted deviation pending the reviewer's sign-off; the reported value stays 5 (seed 42); the diagnostic values are not averaged into any reported number.
+
+Verdict: PASS
