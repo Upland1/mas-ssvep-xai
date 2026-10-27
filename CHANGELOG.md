@@ -320,3 +320,26 @@ Review
 - Pipeline runtime 67.55 min against an 18–34 min estimate; suite about 6.7 min against "about a minute". No reference consultation.
 
 Next phase: P15, after the orchestrator's gate.
+
+## P15 — Per-window graphs, the connectivity gate, and a GNN
+
+2026-10-27, branch `phase/P15-graph-gnn`. Code at `2392299`; first verifier run `87ed7af` (FAIL); results review at `5bd9240` (APPROVE); verifier restatement at `6e55897` (PASS). Phase report: `mas/state/reports/P15.md`.
+
+Added
+- `src/features/connectivity/connectivity_graph_features.py` (node band power, edge coherence and edge phase, flattening), `graph_dataset.py` (cached dataset loader), `graph_inputs.py` (input variants and the train-fold standardizer).
+- `src/models/graph/connectivity_gnn.py`: `ConnectivityGNN` with edge-gated layers.
+- `scripts/connectivity/graph_modeling/build_graph_dataset.py` (cache and sanity report), `benchmark_connectivity_gate.py` (R-14 gate), `benchmark_gnn.py` (R-15 benchmark with a smoke test).
+- `tests/test_p15_gnn.py`, `tests/test_p15_graph_features.py`, `tests/test_p15_known_answer.py`; suite `948 passed, 21 warnings` (`reports/logs/P15/pytest_full.log`).
+
+Result (S01–S05, legacy 7-channel windows, descriptive; `reports/connectivity_gate_benchmark.csv`, `reports/gnn_benchmark.csv`)
+- Gate, R-14 reproduced: 45 cells within 0.05 pp and nine cohort means within 0.06 pp; Base+Ec best at 77.57. The gate does not pass: 0 of 3 responders gain ≥ 2 pp.
+- GNN, R-15: within tolerance for 11 of 12 graded subject cells, and for the 1.0 s cohort cells. Not reproduced within tolerance, accepted as a documented deviation (B007), cause not established: nodes+F S02 at 2.0 s (37.07 against 46.1), the nodes+F cohort 2.0 s it drives (71.27 against 74.43), and the coherence-edge cohort sign (+1.07 against −0.40).
+- The "nodes+F ≈ nodes+coh+F" and "coherence edges do not help" claims hold. The GNN is below the LDA gate rows on every subject at 1.0 s.
+- Train accuracy above R-15 on six of six graded cells (diagnostic; cause open).
+
+Review
+- Pre-run audit Round 1 FAIL (`2bc973a`, documentation only), Round 2 PASS (`1d1bdca`). Blocker B007 resolved by Sebastian, option 1 (`79870ad`). Results review APPROVE (`5bd9240`), D-1 to D-6.
+- R11: deep-learning consultation (whole original file displayed; only `bias=False` adopted) and the reviewer's verification consultation; both listed in the report.
+- Suite runtime about 7.2 min against "about a minute" (noted, not blocking).
+
+Next phase: P16, after the orchestrator's gate.
