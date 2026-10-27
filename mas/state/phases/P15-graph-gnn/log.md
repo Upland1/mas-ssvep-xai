@@ -1,0 +1,21 @@
+# P15 · Run log  (written by: orchestrator)
+
+| Step | Agent | Date | Outcome | Round | Sources cited | Reference consultations (R11) | Notes (cost, loops, what was caught) |
+|------|-------|------|---------|-------|---------------|-------------------------------|--------------------------------------|
+| 0 Preflight | orchestrator | 2026-10-26 | check OK | 1 | mas_status.py | none | |
+| 1 Open | orchestrator | 2026-10-26 | opened P15 from main a5e0d19 | 1 | | none | last phase before the Sebastian stop |
+| 2 Assignment | orchestrator | 2026-10-26 | 00_assignment.md READY | 1 | 03_ROADMAP P15 | none | |
+| 3 Research | orchestrator | 2026-10-26 | skipped (the roadmap specifies features, gate and GNN exactly) | 1 | | none | |
+| 4 Plan | orchestrator | 2026-10-26 | 02_plan.md READY (auto) | 1 | R-1, R-8, R-14, R-15 | none | |
+| 5 Build (connectivity-stats) | connectivity-stats | 2026-10-26 | 03_changes READY (b277b74…a1b27be); suite `891 passed, 21 warnings in 418.00s`; smoke: R-1 counts exact; gate k=0 within 0.1 pp of R-14 (Base+Ec mean 77.6), verdict no pass (0/3 responders ≥ 2 pp); runtime ~1.5 min | 1 | R-1, R-14 | none | loader graph_dataset.py with stale-cache guard (deviation) |
+| 5 Build (deep-learning) | deep-learning | 2026-10-26 | 03_changes READY (1f08481, dedb71e, 4aadf4c, b220dbe); suite `910 passed, 21 warnings in 428.88s`; counts 5,150/5,534 exact after R11 (bias=False on W_self/W_msg); runtime ~5 min; S03 1-repeat smoke 77.16/81.73 vs R-15 77.8/82.2 but train 95.6 vs 86.8 | 1 | R-8, R-15 | 1: original connectivity_gnn.py @5d6d1c2 via git show (~lines 14–23, 37–62) after a failing count test | the hook blocked direct reads, so the access went through git show: the reviewer checks it is in the access log; train-accuracy gap vs R-15 flagged |
+| 6 Test | synthetic-tester | 2026-10-26 | 04_tests.md READY (b5769c9, 91cf590); +38 tests; 9 mutants killed; suite `948 passed, 21 warnings in 436.95s` | 1 | R1, R2, R6, R-8 | none | |
+| 7 Pre-run audit | scientific-reviewer | 2026-10-26 | FAIL Round 1 (2bc973a): fix 1, the R11 listing in 03_changes_deep-learning.md; science PASS; A1–A8 pre-committed; train-gap dropout hypothesis refuted | 1 | R1, R2, R6, R8, R11, R-8/14/15 | reviewer: original connectivity_gnn.py, benchmark_gnn.py 30–105/130–143, graph_inputs.py 41–65 (to verify a finished implementation) | fix 1 to deep-learning |
+| 5 Build (Round 1 fix) | deep-learning | 2026-10-26 | 0d10722: R11 listing corrected (documentation only; no code) | 2 | 07_review.md fix 1 | (listing of the earlier access) | doc-only fix, so no tester round; straight to audit round 2 |
+| 7 Pre-run audit (Round 2) | scientific-reviewer | 2026-10-26 | PASS (1d1bdca); fix 1 verified against the access log; A1–A8 unchanged | 2 | R11 | reviewer re-ran the logged git grep | wording slip ('file list only') left for the scribe |
+| 8 Run + verify | verifier | 2026-10-27 | FAIL (87ed7af) at 2392299: suite 948 passed; 4 commands ~5.5 min; A1 R-14 within 0.06 pp, gate does not pass for the right reason; A6–A8 met; R-15: nodes+F S02 2.0 s 37.07 vs 46.1, systematic (3/3 below, 3.45 × SD); nodes+F cohort 2.0 s 0.16 pp out; A4 sign flip (+1.07 vs −0.40); train accuracy above R-15 in all 6 cells | 2 | R-14, R-15, A1–A8 | none | HARD STOP: blocker B007 (A3 systematic rule, B006 precedent); also the planned stop after P15 |
+| 9a Blocker resolved | Sebastian | 2026-10-27 | B007 option 1: accept as documented deviations | 2 | B007 | none | stop after the P15 merge |
+| 9 Results review | scientific-reviewer | 2026-10-27 | APPROVE (5bd9240); D-1–D-6 | 2 | R-14, R-15, B007 | none | |
+| 8 Verify restatement | verifier | 2026-10-27 | PASS with B007 (6e55897); no code change since 2392299 | 2 | B007 | none | |
+| 10 Report | scribe | 2026-10-27 | P15.md (74b5d52), RESEARCH_LOG/CHANGELOG (48b90cb) | 2 | CSVs, logs, 07_review.md | none | |
+| 11 Gate | orchestrator | 2026-10-27 | tasks done; PASS (B007) + APPROVE; vendor scan 0 required | 2 | | 1 DL + reviewer verification | merge --no-ff, tag p15-done; STOP for Sebastian |
