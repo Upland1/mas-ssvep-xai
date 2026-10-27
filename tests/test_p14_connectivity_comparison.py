@@ -499,7 +499,7 @@ def test_null_diagnostic_csv_leaves_primary_csvs_untouched(tmp_path):
   def go(sub):
     args = c2.build_parser().parse_args(["--data-root", str(tmp_path / "data"), "--reports-dir", str(tmp_path / sub),
                                          "--methods", "plv", "--permutations", "9", "--splits", "3", "--n-jobs", "1",
-                                         "--out-suffix", "t", "--random-state", "7"])
+                                         "--out-suffix", "t", "--random-state", "7", "--responders", "S01"])
     c2.run(args)
     return tmp_path / sub
   r1, r2 = go("a"), go("b")
@@ -521,7 +521,8 @@ def test_random_state_and_suffix_for_diag_e3(tmp_path):
   for rs in (1, 2):
     args = c2.build_parser().parse_args(["--data-root", str(tmp_path / "data"), "--reports-dir", str(tmp_path / "r"),
                                          "--methods", "plv", "--permutations", "9", "--splits", "2", "--n-jobs", "1",
-                                         "--random-state", str(rs), "--out-suffix", f"diagE3_rs{rs}"])
+                                         "--random-state", str(rs), "--out-suffix", f"diagE3_rs{rs}",
+                                         "--responders", "S01"])
     c2.run(args)
     outs[rs] = pd.read_csv(c2.csv_path(tmp_path / "r", "plv", "pairwise_tests", f"diagE3_rs{rs}"))
   assert (tmp_path / "r" / "connectivity_comparison" / "plv_pairwise_null_diagE3_rs1.csv").is_file()
