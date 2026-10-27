@@ -1,6 +1,6 @@
 # P15 · 07 · Scientific review
 
-Status: READY (pre-run audit Round 1)
+Status: READY (pre-run audit Round 2 PASS)
 Author: scientific-reviewer
 Reads: 00, 02, 03_changes_*, 04 and every changed file (pre-run); 05, 06 and the CSVs (results)
 
@@ -201,6 +201,22 @@ older than step 3's start).
   fs 250 label, per-window features) and the approximate ids on S02/S04 (D-2).
 
 Verdict: FAIL
+
+## Pre-run audit — Round 2
+
+Checked commit: `73a7e9e`. The fix is `0d10722`, which edits the R11 row of `03_changes_deep-learning.md`.
+
+- **Code unchanged.** `git diff --stat e71797b HEAD -- src scripts tests configs` gives empty output. The Round 1 test result (74 passed) and the counts 5,150 / 5,534 therefore still hold. No tester round was needed.
+- **Fix 1 against `mas/state/scratch/reference_access.log`.** Lines 32–33 are the only deep-learning entries in P15. Lines 34–39 are my own Round 1 verification, which is listed in Round 1.
+  - (a) The `git grep` at 23:14:29 is listed.
+  - (b) The `git show … | sed -n 1,95p` at 23:14:32 is listed. The row correctly says it displayed the whole 73-line file, including both `forward` methods.
+  - "What changed" now says only `bias=False` was adopted, and that the forward pass, gate and readout came from task 5.
+  - The coincidence of line 46 is stated. The blocked recursive `grep` is labelled as not an access.
+  - Fix 1 is met.
+- **Wording note (non-blocking).** The row calls the `git grep` output a "file list only". That command (`-n`, run against `HEAD`) prints matching lines. I re-ran it, and the access is logged: it printed the two class-declaration lines with their line numbers, `connectivity_gnn.py:12` and `:36`. It showed no body code, so nothing material is understated. The scribe may write "file and line of the two class declarations".
+- A1–A8 and notes N1–N5 of Round 1 stand unchanged.
+
+Verdict: PASS
 
 ## Results review
 
