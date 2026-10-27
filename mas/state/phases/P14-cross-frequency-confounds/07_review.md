@@ -1,6 +1,6 @@
 # P14 · 07 · Scientific review
 
-Status: READY (pre-run audit Round 1: FAIL)
+Status: READY (pre-run audit Round 1: FAIL; Round 2: PASS)
 Author: scientific-reviewer
 Reads: 00_assignment.md, 02_plan.md, 03_changes_connectivity-stats.md, 04_tests.md, decisions.md P12–P14 rows, mas/state/reports/P13.md, mas/RULES.md, mas/03_ROADMAP.md P14, mas/02_REQUIREMENTS.md §6, mas/04_REFERENCE_RESULTS.md R-13, mas/05_PITFALLS.md PF-19, PF-21–PF-27, `git diff main..HEAD -- src scripts tests` (HEAD 79bd81f)
 
@@ -142,6 +142,39 @@ Written before any real P14 run. Seen beforehand: the P13 deltas, which are inpu
 - N6. The full suite now runs about 6.6 min (log step 5). This is beyond the about-a-minute target, but not a P14 defect.
 
 Verdict: FAIL
+
+## Pre-run audit — Round 2
+
+Audited commits 34301f7..41313dc: e2b4361 (plan), d86364a, b2a036c, 9aeb5db (builder), c2e0454, cfdbd43 (tester). The Round 1 pre-committed criteria (A0–A2, E1–E5, DIAG-E3, Q1/Q2 rules, pairwise wording) are unchanged and binding.
+
+| Fix | Result | Evidence |
+|---|---|---|
+| F1 `04_tests.md` | PASS. `git show HEAD:…/04_tests.md` gives `Status: READY`. It contains a 44-row test table with the variant each test catches, 9 mutants (M1–M9) mapped to the tests that killed them, the command with its verbatim pass line (`874 passed, 21 warnings in 408.68s`), coverage gaps (including the off-centre null closed and `p_pat` under cross-band response not asserted), R11 none, and sources. | cfdbd43 |
+| F2(a) wording | PASS. The function docstring, the module docstring and the console header state the null as exchangeability of the a/b trials and say it is not Δa = Δb. They also state that p_mag ≥ 0.05 never means Δa ≈ Δb and that p_pat < 0.05 does not mean the delta patterns differ. | `src/features/connectivity/comparison.py:253-266`; `scripts/connectivity/comparison/test_connectivity_frequency_differences.py:11-20`, `:216-218` |
+| F2(b) diagnostic | PASS. The CSV is `<m>_pairwise_null[_s].csv` with exactly the F2 columns. `p_mag_centred = (1 + #{\|t_null − mean\| ≥ \|t_obs − mean\|})/(n+1)` is computed from the same `null_t` draws. The primary statistics lines are untouched in the diff. The §6 pairwise CSV is unchanged. | `comparison.py` diff (+`tc`, `p_cen`); script `NULL_COLUMNS`, `null_table`, `:251` |
+| F2(c) tests | PASS. The builder added 4 tests and the tester 4 (#41–#44). They call `cmp.pairwise_permutation_test` and `c2.run` (the code path, not a rebuilt copy). Both review cases are asserted, and M9 (an uncentred `p_mag_centred`) is killed by #42/#43. P14 files: `78 passed in 43.42s` (my run). | `tests/test_p14_known_answer.py` #41–#44; `tests/test_p14_connectivity_comparison.py` |
+| F3 plan and decisions | PASS, with note R2-N1. 02_plan.md binds to A0–A2, E1–E5 (DIAG-E3, 4/6), the R² bands and the 4-of-5 rule, and reads p_mag/p_pat as exchangeability tests. The DIAG-E3 loop has `--random-state $B --out-suffix diagE3_rs$B`. The decisions.md P14 row records the null reading. | `02_plan.md:119-127` and the binding paragraph; `mas/state/decisions.md` P14 R1 row |
+
+**Independent re-check of the diagnostic** (inline `.venv/bin/python -` script, same half-window generator as in Round 1, 40 replicates, 199 permutations, on the fixed code):
+
+| Case | mean t_obs | mean t_null_mean | P(p_mag < .05) | P(p_mag_centred < .05) |
+|---|---|---|---|---|
+| exchangeable, common band-A rise | +0.383 | +0.384 | 0.12 | 0.10 |
+| Δa = Δb (own-band rises) | +0.003 | +0.003 | 0.00 | 0.00 |
+| Δa = Δb = 0, b-trials respond in band a | +0.004 | +0.239 | 0.00 | 1.00 |
+| identical, no effect | +0.004 | +0.003 | 0.07 | 0.07 |
+
+The null mean exposes the off-centre cases as intended. The first row's 0.12 is 5 of 40 replicates, and Round 1 gave 0.03 on 60 replicates; both are inside binomial noise for a valid exchangeability test. `p_mag_centred` is a diagnostic: it rejects in row 3, where Δa = Δb = 0 but the trials differ, so it is not a test of Δa = Δb either. The binding wording stays: a cell whose `p_mag` and `p_mag_centred` fall on different sides of 0.05 is labelled "null off-centre", and neither p is read as Δa vs Δb.
+
+**Primary outputs unchanged.** I confirmed this by inspection: the diff only adds return keys and a CSV, and the lines computing `t_mag`, `p_mag`, `d_pat`, `p_pat`, `pe` and BH are identical. The builder's 8-of-8 sha256 identity on a synthetic tree is consistent with this. I could not reproduce it myself, because my write scope excludes scratch trees.
+
+### Non-blocking notes (Round 2)
+
+- R2-N1 (orchestrator / verifier, before the run). The pre-check comment at `02_plan.md:119-120` says "sha256 over reports/connectivity_edges/*.npz". The pinned value covers the edge files **and** the benchmark CSV. The binding command is the one from Round 1: `sha256sum reports/connectivity_edges/*.npz reports/n_subjects_benchmark.csv | sha256sum` → `804b1ced5c949644f22396ca35aa17b5090f2068654ff559c2f7b02a3649e697`. Over the npz files alone the hash is `9472a8bceb1751086cc8d5126d6c466229ebde3e0a94845b6428c20225576e1d`; that value is also acceptable as an npz-only check, but it does not cover the benchmark CSV. A mismatch stops the run, which fails safe. Correcting the comment needs no new audit.
+- R2-N2. The DIAG-E3 loop at `02_plan.md:127` omits `--methods <m>`, so it reruns all three methods. That is valid, because R0 identity and the 4/6 rule apply per method, but it costs about 6 × 11.7 min (÷ 8 estimate, about 70 min) instead of about 20 min. If triggered, the verifier should add `--methods <m>` for the triggered method(s) to stay inside `LOCAL_RUN_BUDGET_MIN`.
+- R2-N3. The tester's remaining gap is that the size of the off-centre effect on real coherence/PLV/wPLI is not measured synthetically. The `<m>_pairwise_null.csv` output measures it on the real run, so it can be read in the results review.
+
+Verdict: PASS
 
 ## Results review
 
