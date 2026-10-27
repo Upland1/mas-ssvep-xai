@@ -263,3 +263,30 @@ Review
 - Suite runtime about 6 min against "about a minute" (noted, not blocking).
 
 Next phase: P13, after the orchestrator's gate.
+
+## P13 — Phase and autoregressive connectivity with permutation statistics
+
+2026-10-26, branch `phase/P13-phase-pdc-permutations`. Code and main run at `7f6cabb`; DIAG-A2 verifier `3865ba6`; results review at `a010a0d`. Phase report: `mas/state/reports/P13.md`.
+
+Added
+- `src/features/connectivity/phase_connectivity.py` (PLV and wPLI from the band-averaged CSD), `mvar_pdc.py` (strided MVAR coefficients, PDC over 42 directed edges), `permutation.py` (trial-level permutations with observed group sizes; BH over one-tailed edge p; `p_lower_tailed`).
+- `scripts/connectivity/analysis/analyze_connectivity_cohort.py`: all subjects and methods, window-level and trial-level runs, `--compare`, aligned coherence diagnostic (DIAGNOSTIC).
+- `scripts/connectivity/diagnostics/demo_hilbert_edges.py` (PF-18) and `demo_mvar_slicing.py` (PF-17).
+- `tests/test_p13_connectivity.py` (27) and `tests/test_p13_known_answer.py` (37); suite `796 passed, 21 warnings` (`reports/logs/P13/pytest_full.log`).
+
+Changed
+- `src/features/connectivity/connectivity_extraction.py`: the shared P07 gate per subject, with trial ids built on pre-gate labels (PF-03).
+
+Result (S01–S05, legacy 7-channel windows, raw; `reports/connectivity_cohort_summary.csv`; R-12 reference)
+- FDR totals (coherence / wPLI, S01–S05): 0 / 0 / 64 / 49 / 12 and 4 / 0 / 42 / 28 / 5 (R-12: 0 / 0 / 65 / 51 / 15 and 0 / 3 / 38 / 33 / 18). Nine of ten cells inside their windows.
+- The S05 wPLI total of 5 (window 13–23) is an accepted deviation (D-1): DIAG-A2 bases 1–5 give 7 / 14 / 12 / 7 / 12 (`reports/connectivity_cohort_summary_diagA2_rs<B>.csv`, DIAGNOSTIC). The reported value stays 5. Not reproduced by R-12.
+- 24 Hz significant in S03–S05 for coherence and wPLI; S01 and S02 null at 24 Hz for coherence and wPLI. S05 wPLI 20 Hz inconclusive.
+- S03 coherence 8.57 Hz estimator-dependent (8 FDR edges concatenated, 0 aligned); inconclusive.
+- Window-level p ≤ trial-level p in 71 of 100 cells; 11 flip-list cells inconclusive (BH resolution), 14 cells change verdict between the two units.
+- Alpha hypotheses from P12 tested: ceiling consistent for S03 coherence only; S03 suppression not supported; S05 exploratory lower-tail pattern carried to P14.
+
+Review
+- Pre-run audit Round 1 FAIL (`934cc2f`), fixes, Round 2 PASS. Main run verifier FAIL on A2 (`57e5fbd`); results review Round 1 REJECT (`cec7dca`); DIAG-A2 PASS (`3865ba6`); results review Round 2 APPROVE (`a010a0d`).
+- Suite runtime about 6 min against "about a minute" (noted, not blocking). No reference consultation.
+
+Next phase: P14, after the orchestrator's gate.
