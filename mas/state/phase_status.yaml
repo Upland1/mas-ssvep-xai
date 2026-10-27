@@ -105,12 +105,12 @@ phases:
     passed: '2026-10-26'
   P13:
     slug: phase-pdc-permutations
-    status: pending
+    status: passed
     owner: orchestrator
-    branch: null
-    commit: null
-    opened: null
-    passed: null
+    branch: phase/P13-phase-pdc-permutations
+    commit: 01f5a7a
+    opened: '2026-10-26'
+    passed: '2026-10-26'
   P14:
     slug: cross-frequency-confounds
     status: pending

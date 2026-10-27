@@ -1,0 +1,21 @@
+# P13 · Run log  (written by: orchestrator)
+
+| Step | Agent | Date | Outcome | Round | Sources cited | Reference consultations (R11) | Notes (cost, loops, what was caught) |
+|------|-------|------|---------|-------|---------------|-------------------------------|--------------------------------------|
+| 0 Preflight | orchestrator | 2026-10-26 | check OK | 1 | mas_status.py | none | |
+| 1 Open | orchestrator | 2026-10-26 | opened P13 from main fa9d663 | 1 | | none | |
+| 2 Assignment | orchestrator | 2026-10-26 | 00_assignment.md READY | 1 | 03_ROADMAP P13, phases.yaml, team.yaml | none | |
+| 3 Research | orchestrator | 2026-10-26 | skipped (the roadmap specifies the estimators and the test exactly) | 1 | | none | |
+| 4 Plan | orchestrator | 2026-10-26 | 02_plan.md READY (auto) | 1 | R-12, PF-17–20, §6 | none | runtime to be measured by the builder; over budget → human run |
+| 5 Build | connectivity-stats | 2026-10-26 | 03_changes READY (6b03ae8…781759d); suite `750 passed, 21 warnings in 366.32s`; runtime ~16 min total at 16 cores (no human run); S03 smoke close to R-12 (coherence FDR 64 vs 65, wPLI 42 vs 38); demos: MVAR strided 6.6 % vs contiguous 129.7 % (roadmap ~150–200 %), CSD PLV 1.0000→0.9999 (roadmap 0.998) | 1 | R-12, PF-17–20 | none | aligned-coherence diagnostic differs at 10.91/8.57 Hz (estimator-dependent cells) |
+| 6 Test | synthetic-tester | 2026-10-26 | 04_tests.md READY (389d1a0, 4fffc70); +37 tests; 11 mutants killed (one equivalent mutant replaced); suite `787 passed, 21 warnings in 368.21s` | 1 | PF-03, PF-17–20 | none | |
+| 7 Pre-run audit | scientific-reviewer | 2026-10-26 | FAIL Round 1 (934cc2f): --compare overwrites by run order and task-6 comparison missing from the commands; science PASS; R-12 windows A1–A8 and E1–E5 pre-committed | 1 | R3, R6, R7, PF-17–20, R-12 | none | fix 2 done by the orchestrator; fix 1 (+N2) to connectivity-stats |
+| 5 Build (Round 1 fix) | connectivity-stats | 2026-10-26 | b8e5ccc, 643f0f9, 628759d: order-independent --compare with row check; p_lower_tailed; N3 rationale; suite `792 passed, 21 warnings in 352.67s` | 2 | 07_review.md fix 1, N2, N3 | none | resumed after a usage-limit interruption; work intact |
+| 6 Test (Round 1) | synthetic-tester | 2026-10-26 | 9d547b0, 6c2f935: +4 tests (compare order, missing rows, lower tail with ties, alpha column); 3 mutants killed; suite `796 passed, 21 warnings in 361.15s` | 2 | 07_review.md fix 1 | none | |
+| 7 Pre-run audit (Round 2) | scientific-reviewer | 2026-10-26 | PASS (ed75448); fixes 1–2, N2, N3 verified; A1–A8/E1–E5 unchanged; N1 open (two-tailed centred on 0; details CSV only) | 2 | R7, PF-19/20 | none | |
+| 8 Run + verify | verifier | 2026-10-26 | FAIL (139f5f4, 57e5fbd) at 7f6cabb: suite 796 passed; 8 commands 15 min; A1, A3–A8 pass; A2 fails on 1/10 cells: wPLI S05 FDR total 5 vs window 13–23 (R-12 18; the 10.91 Hz cell has 13 uncorrected edges, global p 0.015, 0 FDR edges); coherence 0/0/64/49/12, wPLI 4/0/42/28/5 | 1 | R-12, A1–A8, E1–E5 | none | legacy hashes unchanged; S03 coherence 8.57 Hz estimator-sensitive (E3); sent to results review: reviewer to judge and pre-commit any seed-spread diagnostic (--random-state exists, no code change) |
+| 9 Results review | scientific-reviewer | 2026-10-26 | REJECT R1 (cec7dca): A2 miss not signed; DIAG-A2 pre-committed (6 seed bases, rules R0–R2); interpretation and report requirements listed | 2 | R-12, A1–A8, E1–E5 | none | reviewer edited its Status line with sed (recorded by the reviewer) |
+| 8 Run (DIAG-A2) | verifier | 2026-10-26 | PASS line appended (c6fa935, 3865ba6): R0 holds (base 42 identical); T_B 5/7/14/12/7/12 for bases 42/1/2/3/4/5, E_B 0/0/9/0/0/7; R1 holds (base 2), R2 not; final files byte-unchanged | 2 | DIAG-A2 rule | none | |
+| 9 Results review (Round 2) | scientific-reviewer | 2026-10-26 | APPROVE (a010a0d); A2 S05 wPLI accepted deviation (resolution), cautious wording; D-1–D-4 final | 2 | DIAG-A2, R-12 | none | |
+| 10 Report | scribe | 2026-10-26 | P13.md (07d8796), RESEARCH_LOG/CHANGELOG (a7e0922) | 2 | CSVs, logs, 07_review.md | none | |
+| 11 Gate | orchestrator | 2026-10-26 | tasks done; PASS (DIAG-A2) + APPROVE; vendor scan 0 required | 2 | | none | merge --no-ff, tag p13-done |
