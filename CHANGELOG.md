@@ -290,3 +290,33 @@ Review
 - Suite runtime about 6 min against "about a minute" (noted, not blocking). No reference consultation.
 
 Next phase: P14, after the orchestrator's gate.
+
+## P14 — Cross-frequency comparison, reliability, and power/alpha confounds
+
+2026-10-26, branch `phase/P14-cross-frequency-confounds`. Pipeline at `6b4ec21`; restatement at `8356a04` (PASS); results review at `878e96e`. Phase report: `mas/state/reports/P14.md`.
+
+Added
+- `scripts/connectivity/comparison/compare_connectivity_frequencies.py` (similarity, node strength, global delta, groups; QAP p).
+- `scripts/connectivity/comparison/test_connectivity_frequency_differences.py` (split-half reliability; pairwise trial-level tests at 500 and 1000 permutations; `--compare`).
+- `scripts/connectivity/diagnostics/check_power_alpha_confound.py` (target SNR, alpha change, OLS R², in-alpha versus out-of-alpha).
+- `src/features/connectivity/comparison.py`; `tests/test_p14_connectivity_comparison.py` and `tests/test_p14_known_answer.py`; suite `873 passed, 1 skipped, 21 warnings in 405.69s` (`reports/logs/P14/pytest_full_round2.log`).
+- Outputs: `reports/connectivity_comparison/` (61 CSVs), `outputs/figures/connectivity_comparison/` (21 PNG).
+
+Changed
+- Tests only, after the first run failed: two P14 tests now pass explicit responders instead of reading the git-ignored `reports/n_subjects_benchmark.csv` (`b4806cc`, `32a649f`).
+
+Result (S01–S05, legacy 7-channel windows, descriptive; R-13 qualitative)
+- Frequency similarity (Fisher mean r): coherence 0.629, PLV 0.510, wPLI 0.163, PDC 0.480 (R-13 coherence 0.54, wPLI 0.14). Coherence exceeds wPLI on both the mean and the share of p_qap < .05 (0.66 and 0.32).
+- Split-half reliability medians: coherence 0.924, wPLI 0.517 (R-13 0.92 and 0.54).
+- Target SNR and alpha change tables equal R-13 to two decimals.
+- R² of delta on SNR and alpha, all cells 0.675 and within-subject 0.540 for coherence (largely explained, SNR-dominated); PLV and PDC partly explained, SNR-dominated; wPLI explained between subjects only (0.0014 within-subject). Alpha adds little everywhere (ΔR² ≤ 0.059).
+- No consistent in-alpha difference for coherence, PLV or wPLI; PDC differs raw but is consistent with its lower SNR.
+- Pairwise exchangeability null is off-centre on real data (13 cells labelled "null off-centre"; 8 of 150 flips inconclusive).
+- S05 alpha-blocking pattern carried as an exploratory hypothesis, with its lower-SNR alternative and the 20 Hz counter-example.
+- Unexplained R-13 differences reported, not graded: coherence similarity 0.629 against 0.54; coherence magnitude count 11 against 6; two non-positive coherence reliabilities against none.
+
+Review
+- Pre-run audit Round 1 FAIL (`34301f7`), Round 2 PASS (`82255b7`). First verifier run FAIL (`b2478a9`, test hygiene), restatement PASS (`8356a04`); results review APPROVE (`878e96e`), D-1 to D-5.
+- Pipeline runtime 67.55 min against an 18–34 min estimate; suite about 6.7 min against "about a minute". No reference consultation.
+
+Next phase: P15, after the orchestrator's gate.
