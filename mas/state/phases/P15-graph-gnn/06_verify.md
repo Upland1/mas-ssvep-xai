@@ -82,3 +82,13 @@ Opened `mas/04_REFERENCE_RESULTS.md` (R-8, R-14, R-15) and `07_review.md`; the r
 Everything else is met: tests 948 passed; A1 (45 cells, 9 means, 8 k=30 means, best set, verdict and its reason), A6, A7 and A8.
 
 Verdict: FAIL
+
+## Restatement with B007
+
+Sebastian resolved B007 with option 1 and the scientific reviewer approved (07_review.md "Results review", 5bd9240; last P15 rows of decisions.md). The run is unchanged: `git diff --stat 2392299 HEAD -- src scripts tests configs` is empty (checked at HEAD 3dfcd25), so no re-run is needed and the numbers above stand.
+
+- A1 (R-14 gate table, best set, verdict and its reason), A6 (R-8 counts, R-1 windows), A7 (smoke) and A8 (run hygiene) are met.
+- R-15 nodes+F S02 2.0 s (37.07 vs 46.1), the nodes+F cohort 2.0 s (71.27 vs 74.43) and the A4 cohort sign flip (+1.07 vs -0.40): not reproduced within tolerance, accepted as a documented deviation by Sebastian (B007).
+- A5 (train column) stays a diagnostic and decides nothing.
+
+Verdict: PASS
