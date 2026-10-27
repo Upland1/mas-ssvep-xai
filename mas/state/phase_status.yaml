@@ -113,12 +113,12 @@ phases:
     passed: '2026-10-26'
   P14:
     slug: cross-frequency-confounds
-    status: in_progress
+    status: passed
     owner: orchestrator
     branch: phase/P14-cross-frequency-confounds
-    commit: null
+    commit: 0e9d00d
     opened: '2026-10-26'
-    passed: null
+    passed: '2026-10-26'
   P15:
     slug: graph-gnn
     status: pending
