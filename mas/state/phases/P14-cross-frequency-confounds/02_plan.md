@@ -116,15 +116,17 @@ fs 250 frequency axis (PF-04), labelled in every meta. Per-script shared gate (R
 ## Run commands (for the verifier)
 
 ```bash
-# 0. input pre-check (pre-run audit F3): the P13 edge files must hash to the value pinned in 07_review.md
-#    (sha256 over reports/connectivity_edges/*.npz, sorted, as computed in the audit) — stop if different
+# 0. input pre-check (pre-run audit F3; corrected per R2-N1): must print
+#    804b1ced5c949644f22396ca35aa17b5090f2068654ff559c2f7b02a3649e697, else stop
+sha256sum reports/connectivity_edges/*.npz reports/n_subjects_benchmark.csv | sha256sum
 .venv/bin/python -m scripts.connectivity.comparison.compare_connectivity_frequencies
 .venv/bin/python -m scripts.connectivity.comparison.test_connectivity_frequency_differences --permutations 500 --n-jobs -1 --out-suffix p500
 .venv/bin/python -m scripts.connectivity.comparison.test_connectivity_frequency_differences --permutations 1000 --n-jobs -1
 .venv/bin/python -m scripts.connectivity.comparison.test_connectivity_frequency_differences --compare p500 ""
 .venv/bin/python -m scripts.connectivity.diagnostics.check_power_alpha_confound
-# conditional DIAG-E3 (only if the E3 trigger in 07_review.md fires: magnitude-vs-pattern margin ≤ 1 cell)
-for B in 42 1 2 3 4 5; do .venv/bin/python -m scripts.connectivity.comparison.test_connectivity_frequency_differences --permutations 500 --n-jobs -1 --random-state $B --out-suffix diagE3_rs$B; done
+# conditional DIAG-E3 (only if the E3 trigger in 07_review.md fires: magnitude-vs-pattern margin ≤ 1 cell);
+# <M> = the triggered method(s) only (R2-N2, keeps it inside the budget)
+for B in 42 1 2 3 4 5; do .venv/bin/python -m scripts.connectivity.comparison.test_connectivity_frequency_differences --methods <M> --permutations 500 --n-jobs -1 --random-state $B --out-suffix diagE3_rs$B; done
 ```
 
 The builder confirms the flags and measures a runtime from a one-subject smoke. The
