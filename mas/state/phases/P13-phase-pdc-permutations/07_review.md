@@ -1,6 +1,6 @@
 # P13 · 07 · Scientific review
 
-Status: READY (pre-run audit Round 2: PASS)
+Status: READY (results review Round 1: REJECT, DIAG-A2 pending)
 Author: scientific-reviewer
 Reads: 00, 02, 03_changes_*, 04 and every changed file (pre-run); 05, 06 and the CSVs (results)
 
@@ -107,26 +107,6 @@ Verdict: FAIL
    - Add a test: two compares in either order leave both files with their own pairs, and a missing row raises.
 2. orchestrator (task 6 acceptance; `02_plan.md` "Run commands"): add `.venv/bin/python -m scripts.connectivity.analysis.analyze_connectivity_cohort --compare window200 ""` after the final trial200 run. Add the pre-committed windows A1–A8 above to the acceptance table by reference.
 
-## Results review
-
-Verdict: APPROVE / REJECT
-
-### Deviations from references
-
-| Ref | Expected | Obtained (log) | Δ | Within tolerance? | Explanation | Accepted? |
-|---|---|---|---|---|---|---|
-| | | | | | | |
-
-### Interpretation check
-
-<!-- Per-subject reading; inconclusive results stated as such; leakage in
-fitted objects, normalization, validation sets; statistics unit and
-multiple comparisons. -->
-
-### Decisions for decisions.md
-
-<!-- Accepted deviations, one line each; the orchestrator copies them. -->
-
 ## Sources spot-check
 
 <!-- Fix rounds: append "## Pre-run audit — Round N". After two failed rounds,
@@ -150,5 +130,119 @@ Scan: `git log 934cc2f..HEAD --format=%B` and `git diff 934cc2f..HEAD`, with a f
 Carried into the results review unchanged: A1–A8, the FDR windows (coherence 0–5 / 0–5 / 49–81 / 39–63 / 10–20; wPLI 0–5 / 0–8 / 29–47 / 25–41 / 13–23), E1–E5, BH on one-tailed edge p, and nested 100/200 nulls stated in the report. For coherence suppression readings (E5), `p_lower_tailed` is the test statistic.
 
 Verdict: PASS
+
+## Results review — Round 1
+
+Read: 05_run.md (139f5f4), 06_verify.md (57e5fbd, verifier FAIL on A2), run at 7f6cabb (15 min 05 s, all 8 commands exit 0, one execution each), the CSVs and npz under `reports/`, and `reports/logs/P13/*.log`. My own re-derivations are read-only `python -c` commands on those files.
+- FDR totals per method × subject from `reports/connectivity_cohort_summary.csv` reproduce 06_verify exactly: coherence 0/0/64/49/12, wPLI 4/0/42/28/5, PLV 0/0/44/23/0, PDC 0/5/10/26/5.
+- Window-level p ≤ trial-level p in 71 of 100 cells.
+- `p_lower_tailed` < 0.05 in 7 of the 40 alpha-diagnostic rows.
+
+Code ran at the audited state: `git diff --stat 089ebda 7f6cabb -- src scripts tests configs` is empty, because 7f6cabb only records the Round 2 audit. The legacy inputs are unchanged (15 sha256 identical before and after, 05_run.md). As expected for two subjects with all 320 windows and identical condition order, the S01 and S05 `y_labels.npy` hashes are equal; the `X_time_windows` hashes differ.
+
+### Pre-committed criteria (fixed in Round 1)
+
+| Criterion | Result | Reading |
+|---|---|---|
+| A1 synthetic + demos | met | suite `796 passed`; MVAR strided 6.6 % / contiguous 129.7 %; CSD PLV 1.0000 → 0.9999; Hilbert envelope 39–76 % (first 15 samples) and 2–17 % (last 15). The report prints the roadmap values beside these and calls the demo magnitudes system-dependent. |
+| A2 FDR totals | **not met: 9/10** | wPLI S05 = 5, window 13–23 (R-12 18). See "A2 miss" below. |
+| A3 24 Hz pattern | met | S03–S05 coherence 0.005/0.005/0.005, wPLI 0.005/0.005/0.040. S01/S02 are non-significant in both methods (coherence 1.000/1.000, wPLI 0.995/0.318). No 24 Hz switch. S05 wPLI 24 Hz has 0 FDR edges, as in R-12. Its p 0.040 is the weakest of the six; it is not in the trial100 flip list, and it moved 0.005 → 0.040 between window and trial level. |
+| A4 only 24 Hz (joint) | met | the joint set is {24 Hz}. wPLI alone is significant in all of S03–S05 at 10.91 and 8.57 Hz too (descriptive, same as R-12). |
+| A5 S01/S02 null | met | 0 cells with p < 0.05 among each subject's 10 coherence + wPLI cells. FDR totals 0/4 (S01) and 0/0 (S02) are inside their windows. S01 wPLI 10.91 Hz has 4 FDR edges with p 0.154. That is criterion A without B (PF-20), and the cell is in the trial100 flip list, so it is inconclusive. |
+| A6 flips | met | 11 cells in `connectivity_cohort_flips.csv`, all inconclusive. 10 are criterion-A flips with 0 edges at 100 permutations and 4–6 at 200, at or below twice the BH minimum. They come from BH resolution on nested nulls. The one criterion-B flip is S03 wPLI 15 Hz, p 0.069 → 0.050 (10/201 < 0.05; R-12 0.065). |
+| A7 task 6 | met | window200 is labelled `window` in all 100 rows. The comparison file lists 14 cells. Window-level p ≤ trial-level p in 71/100 cells, as PF-19 predicts (a null that is too narrow). The window null also has a junction imbalance (C1), so the window-vs-trial differences in coherence are not attributable to the unit alone. |
+| A8 PLV/PDC | met | reported, no reference. PDC has 42 edges, and its FDR counts sit at the BH minimum (5) in 8 of the 9 non-zero cells (the 9th has 6), so they are near-resolution. |
+| E1–E5 | applied | Only S03 coherence 8.57 Hz is estimator-dependent: criterion A gives 8 edges concatenated vs 0 aligned, with p 0.104 vs 0.697. The aligned estimator is the less significant one, so the label is "estimator-sensitive (not junction-biased)" (E3), and the cell is inconclusive (E4). R-12 also has 8 edges at this cell, so its agreement with R-12 cannot be used as support either. 24 Hz is not estimator-dependent. |
+
+### A2 miss: S05 wPLI (5 vs 13–23)
+
+The S05 wPLI cells (`connectivity_cohort_summary.csv`):
+
+| Cell | p | Uncorrected edges | FDR edges | R-12 (p, FDR) |
+|---|---|---|---|---|
+| 24 Hz | 0.040 | 7 | 0 | 0.015, 0 |
+| 20 Hz | 0.065 | 1 | 0 | 0.070, 0 |
+| 15 Hz | 0.368 | 0 | 0 | 0.398, 0 |
+| 10.91 Hz | 0.015 | 13 | 0 | 0.005, 13 |
+| 8.57 Hz | 0.010 | 9 | 5 | 0.010, 5 |
+
+The whole deficit is the 10.91 Hz cell (13 → 0). From `reports/connectivity_edges/S05_wpli.npz`, `p_104`:
+- The sorted edge p begin 0.005, 0.010, 0.0199, 0.0199, 0.0249, 0.0299 (×4), 0.0348, 0.0398, 0.0398, 0.0448.
+- The smallest ratio p_(k) / (0.05·k/21) is 1.393, at k = 9 (0.0299 vs 0.0214). BH rejects nothing.
+- For all 13 edges to pass, p_(13) must be ≤ 0.0310, which is 6/201. The four largest of the 13 sit at 7/201 to 9/201 (6–8 null exceedances each).
+- At p ≈ 0.035 and 200 permutations, the binomial SD of an exceedance count is √(200·0.035·0.965) = 2.6. The edges share the same null draws, so they move together. This is exactly the BH all-or-nothing block the orchestrator describes.
+
+This is a plausible mechanism, and the npz shows it. But it is not one of the three mechanisms A2 lists, and golden rule 5 forbids adding one after the numbers. Whether a different Monte Carlo draw of the same procedure reaches the reference is cheap to measure (wPLI uses the per-window CSD fast path, about 0.3 s per subject). So I require the diagnostic below and do not sign on the present evidence.
+- Ruled out by the outputs: approximate ids (S05 ids are exact, 280/280 clean, 7 channels), estimator dependence (E2 does not apply to wPLI), and data source (S05 OO, the same session as the reference; R-6 S05 was reproduced at P11).
+
+#### Pre-committed diagnostic DIAG-A2 (fixed now, before any run; reported numbers stay at random_state 42)
+
+The verifier runs these from the clean checkout at the commit that records this review, with no code change, once each, logging to `reports/logs/P13/diagA2_rs<B>.log`:
+
+```bash
+for B in 42 1 2 3 4 5; do
+  .venv/bin/python -m scripts.connectivity.analysis.analyze_connectivity_cohort --methods wpli --subjects S05 --permutations 200 --permutation-unit trial --n-jobs -1 --random-state $B --out-suffix diagA2_rs$B
+done
+```
+
+Outputs: `reports/connectivity_cohort_summary_diagA2_rs<B>.csv` (+ `_details`, alpha CSV, `connectivity_edges_diagA2_rs<B>/`). None of them touches the final files. For each base B, T_B is the S05 wPLI FDR total over the five conditions, and E_B is the 10.91 Hz FDR count.
+
+Decision rule, applied in this order:
+1. **R0 (identity).** The rs42 rows must equal the final S05 wPLI rows of `connectivity_cohort_summary.csv` exactly (p, uncorrected edges, FDR edges per condition). If not, the final run is not reproducible: REJECT, and connectivity-stats investigates determinism before anything else.
+2. **R1, "Monte Carlo / BH resolution" → accepted deviation.** At least one of B ∈ {1..5} has T_B ≥ 13 and E_B ≥ 3. Recorded as: "S05 wPLI FDR total 5 at seed 42 is outside 13–23. The deficit is the 10.91 Hz block (13 uncorrected edges at p 0.005–0.045, 0 FDR). Other seed bases of the same procedure give T = [list] and 10.91 Hz = [list], so the count is resolution-limited at 200 permutations, not a method difference." The report then states the 10.91 Hz FDR count as inconclusive, gives the six T_B values, and keeps the reported 5. The results review then APPROVEs, provided nothing else changes.
+3. **R2, "systematic" → Sebastian.** All five bases give T_B ≤ 12. In that case the shortfall is not a resolution artefact of one draw: R-12 S05 wPLI is not reproduced within tolerance, and the cause is not established.
+   - Consequences: the A2 FAIL stands. The orchestrator opens a blocker to Sebastian with the six T_B and E_B values and the 10.91 Hz edge p, asking whether the original used another permutation count, seed scheme or FDR tail for this cell.
+   - An R11 consultation of the original's wPLI/permutation code by connectivity-stats is then allowed: our implementation and test exist, and the result deviates beyond tolerance after one investigation round. It must be listed in a handoff.
+   - The phase does not gate until Sebastian decides.
+
+No other cell is re-run, and the six diagnostic values are not averaged into a reported number.
+
+### Interpretation check (binding on the report)
+
+- **Statistics unit.** The final results are trial-level, with 200 permutations, the observed group sizes, BH over one-tailed (stimulus > baseline) edge p within each frequency (21 edges; PDC 42), and no correction across frequencies or methods. Criteria (A) and (B) are reported separately.
+- **Per subject.**
+  - S01/S02 are null at 24 Hz and essentially everywhere. S01 wPLI 10.91 Hz (A without B) and S02 PDC 24 Hz (5 edges, p 0.015, in the flip list) are inconclusive.
+  - S03–S05 show the 24 Hz effect in coherence and wPLI.
+  - S03 adds 20 and 15 Hz in coherence/PLV.
+  - S04 adds effects at all coherence frequencies (FDR edges 12/11/7/12/7).
+  - S05 coherence and PLV have no FDR edges below 24 Hz.
+- **Window vs trial.** Window-level FDR totals are mostly higher (coherence 3/0/66/58/15, wPLI 0/3/46/37/20), and 14 cells change verdict, including S05 wPLI 24 Hz (10 edges → 0). This is the PF-19 effect, described as such. It is not evidence for which unit the reference used: window-level S05 wPLI gives 20 in total, inside the window, but with 10 edges at 24 Hz where R-12 has 0 and 3 at 10.91 Hz where R-12 has 13. The per-cell pattern does not match either.
+- **Flip list.** 11 cells, inconclusive. The report names BH resolution (minimum non-zero count 3 at 200 and 5 at 100 permutations for 21 edges; 5 and 9 for 42) and states that the 100-permutation null is the first half of the 200-permutation null.
+- **Alpha hypotheses (P12 D-3), from `connectivity_alpha_diagnostic.csv` with `p_lower_tailed`:**
+  - **Ceiling (S03).** The S03 matched coherence baseline is higher than S04's at 10.91/8.57 Hz (0.6435/0.7390 vs 0.5831/0.6422), and its differences are small (−0.0366/+0.0414 vs +0.1934/+0.1286). This is consistent with a ceiling for coherence in S03. But the cross-subject coherence Spearman rho is only −0.10/−0.30 (n = 5), so there is no cohort-level support. The wPLI rho of −0.90/−0.80 cannot be read as a ceiling either:
+    - S03 has the lowest wPLI baselines (0.134/0.107) and the largest wPLI increases (+0.350/+0.466).
+    - rho(baseline, stimulus − baseline) is biased negative by construction, because the baseline enters both terms (regression to the mean).
+    - So the report must call every rho "descriptive, expected negative under no effect".
+  - **Alpha suppression (S03 104).** Not supported. The coherence lower-tail p is 0.219 (concatenated) and 0.368 (aligned), with an observed difference of −0.0366. The wPLI difference is positive (p_lower 0.985).
+  - **Unplanned, exploratory.** 7 of 40 lower-tail p are below 0.05 with no correction; about 2 are expected by chance. The strongest are in S05, where stimulus is below baseline in coherence (10.91 Hz p_lower 0.005, 8.57 Hz 0.035) and PLV (0.015, 0.005) while wPLI rises (p_one 0.015, 0.010). PLV is free of junction effects (per-window CSD), whereas the S05 coherence values are "not cross-checked for junction effects" (E5). The report may describe this as an exploratory S05 observation: a drop in zero-lag alpha synchrony during stimulation alongside an increase in lagged coupling. It is not a confirmed hypothesis, and S03 (the subject D-3 named) does not show it.
+- **Leakage.** Nothing is fitted across groups. The MVAR and coherence are recomputed for each permuted group, and the shared gate uses no labels beyond the conditions.
+
+### Report requirements (scribe, P13.md)
+
+1. Every number is quoted verbatim with its CSV or log path. Data source: legacy 7-channel windows (P02, OO), fs-250 axis (PF-04), one P07 gate per subject, approximate ids for S02/S04.
+2. Per-subject tables for coherence and wPLI (p and FDR per frequency) beside R-12. PLV and PDC go in separate tables labelled "no reference".
+3. A2: the S05 wPLI line exactly as decided after DIAG-A2 (R1 wording, or R2 "not reproduced, cause not established, question to Sebastian"). Never "reproduces R-12" for S05 wPLI.
+4. Criteria (A) and (B) are named separately everywhere. Cells in the flip list and the E2 cell (S03 coherence 8.57 Hz) are labelled inconclusive, with both values.
+5. Methods:
+   - BH over one-tailed edge p;
+   - nested 100/200 nulls;
+   - BH minimum counts;
+   - PDC uses 42 directed edges by our choice (21/28 = 7/8 channels undirected);
+   - window-level run = legacy R7 first run.
+6. Demos: the roadmap and our values side by side, "qualitative claim reproduced, magnitudes system-dependent".
+7. Alpha section as in the interpretation check: ceiling consistent for S03 coherence only; suppression not supported for S03; S05 exploratory; rho descriptive and negatively biased by construction.
+8. No figures were produced, so P12 D-4 does not apply. If any cross-subject panel is added, it shares one colour limit.
+9. Grep the draft for "reproduc" and make each use match the per-criterion verdicts above (P06 lesson).
+
+### Decisions for decisions.md (proposed; final wording after DIAG-A2)
+
+- D-1. R-12 A1, A3–A8 met as pre-committed. A2: 9/10 FDR totals inside. S05 wPLI (5 vs 13–23) is pending DIAG-A2. Under R1 it is an accepted deviation (BH/Monte Carlo resolution at 10.91 Hz, values listed). Under R2 it goes to Sebastian as a blocker, with R11 allowed.
+- D-2. S03 coherence 8.57 Hz is estimator-sensitive (not junction-biased) and inconclusive. The junction concern from P12 D-2 is closed for P13: no junction-consistent cell.
+- D-3. P12 D-3 alpha hypotheses: ceiling consistent for S03 coherence only, with no cohort-level support. S03 suppression not supported. S05 exploratory lower-tail finding (coherence/PLV down, wPLI up), carried to P14 as a hypothesis, not a result.
+- D-4. Flip-list policy: criterion-A flips at the BH minimum count are labelled resolution-limited; any later phase that grades FDR counts uses the same nested-seed convention and states the BH minimum.
+
+Verdict: REJECT
+
+Next step: the orchestrator commits this review, then the verifier runs DIAG-A2 exactly as written (6 commands, wPLI S05 only), records it in 05_run.md / 06_verify.md under "DIAG-A2", and the scientific reviewer applies R0–R2 in "Results review — Round 2". No code or plan change is needed.
 
 ## Questions
