@@ -113,3 +113,15 @@ None. `reference/ssvep-eeg-xai/` was not opened; no test failed or deviated afte
 ## Questions
 
 None.
+
+## Round 1 audit fix
+
+Status: READY
+Commits: fix (null label and diagnostic), test (4 tests), this docs commit.
+
+- **F2 wording.** The docstring of `pairwise_permutation_test` (`src/features/connectivity/comparison.py`), the module docstring and the console header of `test_connectivity_frequency_differences.py` now state the null as exchangeability of the a/b trials (each scored in its own band against the fixed matched baseline), not Δa = Δb, and say that p_mag ≥ 0.05 never means Δa ≈ Δb.
+- **Diagnostic CSV (NEW output).** `reports/connectivity_comparison/<m>_pairwise_null[_<suffix>].csv`, columns `subject, method, freq_a, freq_b, t_null_mean, t_null_sd, p_mag_centred, d_null_mean, d_null_sd`. `p_mag_centred = (1 + #{|t_null − t_null_mean| ≥ |t_obs − t_null_mean|}) / (n + 1)`, exactly the review's definition (07_review.md, F2 (b)); `d_null_*` ignore non-finite null draws. The primary `p_mag`, `p_pat` and the §6 CSV are unchanged.
+- **Proof of no change.** On a synthetic tree (S01, plv + coherence, 20 permutations, 3 splits, `--out-suffix t`), the code at the pre-fix commit (git worktree) and the fixed code give identical sha256 for `pairwise_tests`, `split_half_reliability`, `split_half_details` and `pairwise_combined` of both methods (8 of 8 files, one unique hash each). The worktree and outputs were removed afterwards.
+- **Tests** (`tests/test_p14_connectivity_comparison.py`, now 34): a common band effect (all trials respond in band a) gives t_mag > 0.2 yet p_mag > 0.3, the null mean is off 0 and within 0.1 of t_mag, and p_mag_centred > 0.3; Δa = Δb = 0 with b-trials responding in band a gives |t_mag| < 0.05, p_mag > 0.9, a null mean > 0.1 and p_mag_centred < 0.05; the diagnostic CSV has the F2 columns, 10 rows and leaves the §6 columns exactly as before; `--random-state` and `--out-suffix` produce separate files and different draws.
+- **DIAG-E3 flags confirmed.** `--methods <m> --permutations 500 --n-jobs -1 --random-state $B --out-suffix diagE3_rs$B` works (tested with B = 1, 2 on a synthetic tree): outputs are suffixed per base and seeds derive from `--random-state`, so 42, 1, 2, 3, 4, 5 give independent draws. Runtime of one DIAG-E3 base: 1 method at 500 permutations about 1/3 of the 3-method p500 run (coherence is the most expensive method, so up to about 3.5 min at ÷ 8), six bases about 20 min at worst.
+- **Full suite:** `870 passed, 21 warnings in 413.43s (0:06:53)`.
