@@ -17,3 +17,5 @@
 | 9a Blocker resolved | Sebastian | 2026-10-27 | B007 option 1: accept as documented deviations | 2 | B007 | none | stop after the P15 merge |
 | 9 Results review | scientific-reviewer | 2026-10-27 | APPROVE (5bd9240); D-1–D-6 | 2 | R-14, R-15, B007 | none | |
 | 8 Verify restatement | verifier | 2026-10-27 | PASS with B007 (6e55897); no code change since 2392299 | 2 | B007 | none | |
+| 10 Report | scribe | 2026-10-27 | P15.md (74b5d52), RESEARCH_LOG/CHANGELOG (48b90cb) | 2 | CSVs, logs, 07_review.md | none | |
+| 11 Gate | orchestrator | 2026-10-27 | tasks done; PASS (B007) + APPROVE; vendor scan 0 required | 2 | | 1 DL + reviewer verification | merge --no-ff, tag p15-done; STOP for Sebastian |
