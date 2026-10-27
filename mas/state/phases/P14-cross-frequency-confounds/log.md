@@ -17,3 +17,5 @@
 | 5 Build (fix round 2, post-verify) | connectivity-stats (opus) | 2026-10-26 | b4806cc, 32a649f: two tests pass --responders S01; clean worktree without reports/ and data/: `873 passed, 1 skipped, 21 warnings in 402.98s` | 2 | 06_verify.md FAIL reason | none | no src/scripts change since 6b4ec21; pipeline outputs stand |
 | 8 Verify restatement (Round 2) | verifier | 2026-10-26 | PASS (8356a04) at 1e9dcac: clean-checkout suite `873 passed, 1 skipped, 21 warnings in 405.69s`; no src/scripts/configs change since 6b4ec21; outputs unchanged (mtime evidence, analysis re-run identical; manifest hash 3fdbbed3…176e) | 2 | | none | verifier also edited its earlier header verdict FAIL→PASS; the original FAIL stays in git history (b2478a9) and in this log |
 | 9 Results review | scientific-reviewer | 2026-10-26 | APPROVE (878e96e); D-1–D-5 recorded | 2 | CSVs, figures, R-13 | none | |
+| 10 Report | scribe | 2026-10-26 | P14.md (c84976f), RESEARCH_LOG/CHANGELOG (331d400) | 2 | CSVs, logs, 07_review.md | none | |
+| 11 Gate | orchestrator | 2026-10-26 | tasks done; PASS + APPROVE; vendor scan 0 required | 2 | | none | merge --no-ff, tag p14-done |
