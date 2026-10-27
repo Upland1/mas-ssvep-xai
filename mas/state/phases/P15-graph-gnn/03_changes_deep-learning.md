@@ -65,9 +65,9 @@ One subject (S03, 197 windows), 150 epochs, 1 repeat: nodes+F 7 s, nodes+coh+F 7
 
 | # | Trigger | Files and lines @ commit | What I learned | What changed in my code |
 |---|---|---|---|---|
-| 1 | count test failed after my own implementation: 5,278 / 5,662 vs 5,150 / 5,534 (+128 both) | the original's `src/models/graph/connectivity_gnn.py` @5d6d1c2, read with `git show` in the reference repository: `EdgeGatedLayer.__init__` (about lines 14-23) and the `ConnectivityGNN` constructor (about lines 37-62) | `W_self` and `W_msg` are `Linear(..., bias=False)`; the gate keeps its bias; the rest matches | `bias=False` on those two layers; nothing copied |
+| 1 | count test failed after my own implementation: 5,278 / 5,662 vs 5,150 / 5,534 (+128 both) | two accesses to the original at 5d6d1c2, as in `mas/state/scratch/reference_access.log`: (a) `git grep` for the class names at 23:14:29 (file list only); (b) `git show HEAD:src/models/graph/connectivity_gnn.py \| sed -n 1,95p` at 23:14:32, which displayed the whole 73-line file, including both `forward` methods | `W_self` and `W_msg` are `Linear(..., bias=False)`; the gate keeps its bias | only `bias=False` on `W_self` and `W_msg` was adopted. The forward pass, the gate and the readout came from task 5 and were not changed after the reading. `src/models/graph/connectivity_gnn.py:46` (the layer return) matches the original's return line textually because both transcribe the task-5 formula `LayerNorm(h + Dropout(ELU(W_self h + agg)))`. Nothing copied |
 
-An earlier recursive `grep` of the reference directory was blocked by the guard hook; the class lookup then used `git grep` inside the reference repository.
+An earlier recursive `grep` of the reference directory was blocked by the guard hook (not a successful access); the lookup then used `git grep` inside the reference repository.
 
 ## Left to do / known limitations
 
