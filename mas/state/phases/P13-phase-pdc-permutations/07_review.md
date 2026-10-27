@@ -1,6 +1,6 @@
 # P13 · 07 · Scientific review
 
-Status: READY (results review Round 1: REJECT, DIAG-A2 pending)
+Status: READY (results review Round 2: APPROVE)
 Author: scientific-reviewer
 Reads: 00, 02, 03_changes_*, 04 and every changed file (pre-run); 05, 06 and the CSVs (results)
 
@@ -244,5 +244,69 @@ No other cell is re-run, and the six diagnostic values are not averaged into a r
 Verdict: REJECT
 
 Next step: the orchestrator commits this review, then the verifier runs DIAG-A2 exactly as written (6 commands, wPLI S05 only), records it in 05_run.md / 06_verify.md under "DIAG-A2", and the scientific reviewer applies R0–R2 in "Results review — Round 2". No code or plan change is needed.
+
+## Results review — Round 2
+
+Read: 05_run.md (c6fa935) and 06_verify.md (3865ba6), DIAG-A2 at dba0e05. `git diff --stat 7f6cabb dba0e05 -- src scripts tests configs` is empty. The final files are byte-unchanged (`reports/logs/P13/diagA2_final_sha_before.txt` / `_after.txt`). I re-read `reports/connectivity_cohort_summary_diagA2_rs<B>.csv` for every base (`python -c`, read-only):
+
+| Base | T_B (S05 wPLI FDR total) | FDR edges 24/20/15/10.91/8.57 Hz | global p 24/20/15/10.91/8.57 Hz |
+|---|---|---|---|
+| 42 | 5 | 0/0/0/0/5 | 0.040/0.065/0.368/0.015/0.010 |
+| 1 | 7 | 0/0/0/0/7 | 0.030/0.090/0.373/0.025/0.015 |
+| 2 | 14 | 0/0/0/9/5 | 0.030/0.080/0.368/0.010/0.010 |
+| 3 | 12 | 7/0/0/0/5 | 0.025/0.075/0.348/0.020/0.015 |
+| 4 | 7 | 0/0/0/0/7 | 0.015/0.0498/0.368/0.010/0.010 |
+| 5 | 12 | 0/0/0/7/5 | 0.040/0.055/0.393/0.010/0.005 |
+| R-12 | 18 | 0/0/0/13/5 | 0.015/0.070/0.398/0.005/0.010 |
+
+**Applying the pre-committed rule.**
+- **R0 holds:** the base-42 rows equal the final S05 wPLI rows (`DataFrame.equals` True on condition, p, uncorrected and FDR edges).
+- **R1 holds:** base 2 gives T = 14 (≥ 13) and E = 9 (≥ 3).
+- **R2 does not hold.**
+
+A2 is therefore an **accepted deviation (BH / Monte Carlo resolution)**.
+
+**Honest reading.** R1 was met at its threshold, not comfortably:
+- Only 1 of the 6 bases falls inside the window 13–23. The six totals have median 9.5, and five lie below the window.
+- No base reaches R-12's 13 edges at 10.91 Hz (maximum 9).
+- The 10.91 Hz count is all-or-nothing across bases (0/0/9/0/0/7) while its global p stays between 0.010 and 0.025. The 24 Hz cell also flips on criterion A (7 edges in base 3 only).
+
+So the FDR count of this subject is resolution-limited at 200 permutations, and the seed-42 value of 5 is one draw from a spread of 5–14. The spread also leans below the reference. The data cannot tell whether that lean is chance (six draws) or a small systematic difference from the original (for example its seed scheme), and I do not claim either. This is recorded as information for Sebastian, not as a blocker, because the pre-committed R2 condition is not met.
+
+The criteria that rest on global p are stable across all six bases:
+- S05 wPLI 24 Hz p is 0.015–0.040, so A3 holds in every base.
+- 10.91 and 8.57 Hz stay significant (0.005–0.025), so the wPLI-only part of A4 is unchanged.
+- 20 Hz is borderline: p 0.0498 in base 4 (10/201 < 0.05) and 0.055–0.090 in the others (R-12 0.070). The report labels it inconclusive.
+
+### Final decisions (for decisions.md)
+
+- **D-1.** R-12 accepted. A1 and A3–A8 met as pre-committed. A2: 9 of 10 FDR totals inside. S05 wPLI is an accepted deviation.
+  - Seed-42 total 5 against the window 13–23 (R-12 18).
+  - DIAG-A2, same procedure, random_state bases 42/1/2/3/4/5: totals 5/7/14/12/7/12; 10.91 Hz FDR edges 0/0/9/0/0/7 (R-12 13); global p at 10.91 Hz 0.005–0.025 in every base.
+  - Cause: a BH all-or-nothing block of 13 uncorrected edges at p 0.005–0.045, so the count is resolution-limited at 200 permutations.
+  - Only 1 of 6 bases falls inside the window, and the spread leans below R-12; whether that lean is systematic is not established (information for Sebastian).
+  - The reported value stays 5.
+- **D-2.** S03 coherence 8.57 Hz is estimator-sensitive (not junction-biased): 8 FDR edges concatenated vs 0 aligned, p 0.104 vs 0.697. It is inconclusive. The P12 D-2 junction concern is closed for P13: no cell is junction-consistent.
+- **D-3.** P12 D-3 alpha hypotheses:
+  - Ceiling: consistent for S03 coherence only (baseline 0.6435/0.7390 vs S04 0.5831/0.6422), with no cohort-level support. The baseline–difference rho is descriptive and biased negative by construction.
+  - S03 alpha suppression: not supported (coherence p_lower 0.219 concatenated, 0.368 aligned).
+  - S05: an exploratory, uncorrected observation (coherence/PLV below baseline at 10.91/8.57 Hz, wPLI above; 7 of 40 lower-tail p < 0.05, about 2 expected by chance). It is carried to P14 as a hypothesis only.
+- **D-4.** Monte Carlo policy for FDR counts:
+  - Criterion-A flips at the BH minimum count are labelled resolution-limited.
+  - Any later phase that grades FDR-edge counts pre-commits a seed-base diagnostic of this kind for misses, and its acceptance windows name "BH/Monte Carlo resolution shown by that diagnostic" as an admissible mechanism. This closes a gap in my P13 A2 list.
+  - The nested 100/200 nulls and the BH minimum counts are stated wherever counts are compared.
+
+### Report requirements (confirmed, with the A2 wording fixed)
+
+Requirements 1–9 of Round 1 stand. Requirement 3 is now concrete. The S05 wPLI line reads:
+
+> FDR total 5 at seed 42 (window 13–23, R-12 18), not within tolerance. Accepted deviation, BH/Monte Carlo resolution: the same procedure with bases 1–5 gives 7/14/12/7/12 (10.91 Hz: 0/9/0/0/7 edges, R-12 13); 1 of 6 draws inside the window, the spread leans below the reference, and the cause of that lean is not established.
+
+It must never say "reproduces R-12" for this cell. Also:
+- Add the DIAG-A2 table above, with its CSV paths, as a labelled DIAGNOSTIC. Its values are not averaged into any reported number.
+- S05 wPLI 20 Hz is listed as inconclusive (p 0.0498–0.090 across bases).
+- The "reproduc" grep (requirement 9) also covers the S05 paragraphs.
+
+Verdict: APPROVE
 
 ## Questions
