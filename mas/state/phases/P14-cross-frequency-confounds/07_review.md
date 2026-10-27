@@ -1,6 +1,6 @@
 # P14 · 07 · Scientific review
 
-Status: READY (pre-run audit Round 1: FAIL; Round 2: PASS)
+Status: READY (pre-run audit Round 1: FAIL; Round 2: PASS; results review: APPROVE)
 Author: scientific-reviewer
 Reads: 00_assignment.md, 02_plan.md, 03_changes_connectivity-stats.md, 04_tests.md, decisions.md P12–P14 rows, mas/state/reports/P13.md, mas/RULES.md, mas/03_ROADMAP.md P14, mas/02_REQUIREMENTS.md §6, mas/04_REFERENCE_RESULTS.md R-13, mas/05_PITFALLS.md PF-19, PF-21–PF-27, `git diff main..HEAD -- src scripts tests` (HEAD 79bd81f)
 
@@ -178,27 +178,140 @@ Verdict: PASS
 
 ## Results review
 
-Verdict: APPROVE / REJECT
+Reads: 05_run.md, 06_verify.md (8356a04, Round 2 restatement PASS), every CSV in `reports/connectivity_comparison/`, the figures in `outputs/figures/connectivity_comparison/`, and `reports/logs/P14/pytest_full_round2.log`.
+
+**Run provenance.** The pipeline ran at 6b4ec21, and the hash pre-check matched `804b1ced…e697` before and after the run. `src/` and `scripts/` are unchanged since then; only test isolation changed, in b4806cc. The clean-checkout suite gives `873 passed, 1 skipped, 21 warnings in 405.69s` (`reports/logs/P14/pytest_full_round2.log:31`). The runtime was 67.55 min against the builder's estimate of 18–34 min. That is inside the 120 min budget, but the estimate was low by a factor of about 2–4, and the report must say so.
+
+I re-derived the graded numbers from the CSVs myself with inline `.venv/bin/python` reads in this session. They are `power_confound_ols.csv`, `power_vs_connectivity_cells.csv`, `power_confound_table.csv`, `<m>_split_half_reliability.csv`, `<m>_pairwise_tests[_p500].csv`, `<m>_frequency_similarity.csv` and `<m>_pairwise_null.csv`. All of them equal the verifier's numbers.
 
 ### Deviations from references
 
-| Ref | Expected | Obtained (log) | Δ | Within tolerance? | Explanation | Accepted? |
+R-13 is qualitative only (no tolerance). Each pre-committed criterion was graded against it as follows.
+
+| Ref | Pre-committed criterion | Obtained (CSV) | Consistent? | Note |
+|---|---|---|---|---|
+| A0 | `t_mag` = Δ of global deltas, ≤ 1e-9 | max 1.94e-16 (06_verify) | met | tasks 1 and 2 share the gate, windows and estimator |
+| A1 | observed columns identical p500 vs final | max diff 0.0 | met | |
+| A2 | §6 files and columns; 50/25 rows | all present; 21 figures | met | |
+| E1 | coherence > wPLI on Fisher r and on share p_qap < .05 | 0.6290 / 0.66 vs 0.1629 / 0.32 (arithmetic 0.5354 vs 0.1429) | consistent | Fisher r 0.629 vs R-13 0.54. The arithmetic mean, 0.535, is the closer one, so R-13 most likely reports arithmetic means. That is not established, and nothing here is graded on it. |
+| E2a | median coh > median wPLI | 0.9239 vs 0.5165 | consistent | R-13 0.92 vs 0.54 |
+| E2b | more coh cells ≥ 0.75 | 20 vs 4 | consistent | R-13 22 vs 3 |
+| E2c | wPLI ≥ 1 non-positive; coh fewer | wPLI 3, coh 2 | consistent (margin 1) | Coherence has 2 non-positive cells (S01 10.91 −0.163, S02 10.91 −0.003) where R-13 has 0. R-13's lowest cells are the same S01/S02 in-alpha cells (0.02, 0.34). 10-split Monte Carlo noise can account for this; the criterion is still met. |
+| E2d | lowest coh cells (descriptive) | S01 10.91, S02 10.91, S02 8.57 | same as R-13 | |
+| E3 | p_mag count ≥ p_pat count (p500) | coherence 11 / 1, wPLI 6 / 2 (PLV 14 / 2) | consistent, trigger not fired | The coherence magnitude count is 11 against R-13's 6. R-13 is not graded on counts. The 5-cell surplus is reported, not explained. |
+| E4 | S03–S05 > 3 dB; S01, S02 < 1 dB; in < out in ≥ 4/5 | 0.053, 0.282, 5.594, 8.234, 4.295; in < out 5/5 (2.017 vs 4.808) | consistent | equal to R-13 to 2 decimals |
+| E5 | ≥ 20/25 negative; mean < 0 | 23/25; −1.0005 dB; S05 most negative | consistent | equal to R-13 |
+
+No row is outside its criterion, so there is no deviation to accept.
+
+### Acceptance question 1: how much of the delta SNR and alpha explain
+
+Source: `power_confound_ols.csv`. The wording below applies the pre-committed bands mechanically. All numbers are descriptive (25 cells, 5 subjects).
+
+| Method | R² all (SNR-only) | R² centred (SNR-only) | Wording |
+|---|---|---|---|
+| coherence | 0.6750 (0.6681) | 0.5400 (0.5251) | Largely explained at both levels; SNR-dominated; alpha adds little (ΔR² 0.0069 / 0.0149). Consistent with R-13-implied 0.675 / 0.541. |
+| PLV | 0.4293 (0.3852) | 0.2995 (0.2991) | Partly explained; SNR-dominated; alpha adds little. No reference. The centred value sits 0.0005 below the 0.3 line, which is a band edge and not a finding. |
+| wPLI | 0.5299 (0.4708) | 0.0014 (0.0002) | Largely explained across subjects, but **between subjects only**: centred R² < 0.2, so it is not explained across frequencies within a subject. Consistent with R-13-implied 0.530 / 0.001. |
+| PDC | 0.4346 (0.3891) | 0.3650 (0.3275) | Partly explained; SNR-dominated; alpha adds little (ΔR² 0.0455 / 0.0375; alpha-only centred 0.127 overlaps SNR). No reference. |
+
+The report must also say three things. First, "explained" means explained statistically over 25 non-independent cells, with SNR measured on the same windows. Second, SNR is itself a stimulus response, so "SNR-dominated" means "the deltas follow SSVEP strength". It does not mean "the deltas are an artefact". Third, the wPLI result is carried by the responder/non-responder split: within a subject, wPLI does not follow SNR across frequencies (centred ρ_SNR 0.0369).
+
+### Acceptance question 2: whether 10.91 and 8.57 Hz behave differently
+
+Source: `power_vs_connectivity_cells.csv`. The SNR adjustment uses the residuals of the centred `mean_delta ~ centred SNR` fit; I recomputed it with `np.polyfit`.
+
+- **Coherence:**
+  - Raw in − out: +0.075, +0.056, −0.219, +0.063, −0.145 (3/5 positive).
+  - SNR-adjusted: +0.103, +0.065, −0.045, +0.131, −0.043 (3/5).
+  - Reading: no consistent in-alpha difference.
+- **PLV:**
+  - Raw: +0.010, +0.009, −0.093, +0.043, −0.075 (3/5).
+  - Adjusted: +0.020, +0.012, −0.030, +0.067, −0.039 (3/5).
+  - Reading: no consistent difference.
+- **wPLI:**
+  - Raw: +0.297, −0.074, +0.033, −0.214, +0.144 (3/5).
+  - Adjusted: +0.298, −0.074, +0.040, −0.211, +0.148 (3/5).
+  - Reading: no consistent difference.
+- **PDC:**
+  - Raw: −0.006, −0.035, −0.026, −0.008, −0.008 (5/5 negative).
+  - Adjusted: −0.001, −0.034, +0.001, +0.003, +0.008 (3/5).
+  - Reading: "differ, but consistent with their lower SNR". The adjusted values for S01, S03, S04 and S05 are within ±0.008. Only S02 stays at −0.034.
+
+Subjects must be named in the report:
+- Coherence and PLV: S03 and S05 lower in-alpha; S01, S02 and S04 higher.
+- wPLI: S02 and S04 lower in-alpha; S01, S03 and S05 higher.
+
+The in-alpha alpha measure rests on 2 bins (10.91 Hz) or 3 bins (8.57 Hz). The in-alpha SNR is lower in 5/5 subjects (2.017 vs 4.808 dB). Hann leakage into the alpha bins is ≤ 0.05 dB (Round 1, N1).
+
+### R2-N3: the off-centre pairwise null on real data
+
+Source: `<m>_pairwise_tests.csv` joined with `<m>_pairwise_null.csv`, final run, 50 cells per method.
+
+| Method | median \|t_null_mean\| / t_null_sd | cells with \|z\| > 1 / > 2 | median \|t_null_mean\| / \|t_mag\| | p_mag < .05 | p_mag_centred < .05 | "null off-centre" cells |
 |---|---|---|---|---|---|---|
-| | | | | | | |
+| coherence | 1.45 (max 9.32) | 29 / 20 | 0.75 | 10 | 6 | 4 |
+| PLV | 1.22 (max 5.12) | 28 / 15 | 0.62 | 14 | 14 | 4 |
+| wPLI | 1.05 (max 4.43) | 25 / 16 | 0.79 | 6 | 5 | 5 |
+
+The effect is **large on real data**. In 15–20 of 50 cells per method the null centre is more than 2 null SDs from 0. The median null centre equals 62–79 % of the observed |t_mag|. So most of each observed own-band difference Δa − Δb is reproduced when a and b trials are exchanged. It is a band-level difference common to both stimuli (a different matched baseline and band), not a stimulus-specific one. The p_mag counts measure only the excess over exchange. This is a substantive finding, and the report must state it in these terms. The binding wording from the Round 1 pre-commit applies:
+- No "Δa ≈ Δb" claim from p_mag ≥ 0.05.
+- p_pat is read as "trials differ in pattern beyond exchange", not "the delta patterns differ".
+- The 13 off-centre cells are listed as "null off-centre": 4 coherence, 4 PLV, 5 wPLI. S02/S04 cells are flagged as approximate ids.
+- The 8 of 150 flips between p500 and final are inconclusive, because the nulls are nested (P13 D-4).
+
+### Figures (P12 D-4)
+
+I opened `coherence_delta_matrices_{responders,non_responders}.png`, `wpli_node_strength.png` and `connectivity_delta_vs_power.png`. In code, `make_figures` computes one limit per method over all subjects and conditions (`compare_connectivity_frequencies.py:177-179`, `:195`). Similarity panels are fixed at [−1, 1].
+- Coherence delta matrices: every group panel uses the same ±0.548, and the colour bar label says so. PASS.
+- Node strength: one colour bar across the all/responders/non-responders panels. PASS.
+- Scatter: axes are per method, with no colour scale comparison. Subjects are coloured, and in-alpha cells are squares. PASS.
+- Note for the report: missing PO7 (NaN) and the diagonal render white, the same as a zero delta in `RdBu_r`. The caption must say "PO7 absent (white), not zero".
+
+### P13 D-3 (S05, exploratory)
+
+Source: `power_confound_s05.csv`. At 10.91 / 8.57 Hz, S05's coherence deltas are −0.084 / −0.097 and its PLV deltas −0.071 / −0.060, while wPLI is +0.374 / +0.305. S05's in-alpha alpha change, −2.260 dB, is the most negative in the cohort, which meets the pre-committed condition.
+
+The hypothesis wording "consistent with alpha blocking lowering amplitude-sensitive measures (coherence, PLV) but not the zero-lag-insensitive wPLI" is therefore admissible as a hypothesis only. It must also name two things:
+- **The SNR alternative.** S05's in-alpha SNRs (1.82, 2.29 dB) are its two lowest, and centred coherence follows SNR (R² 0.540). Lower SNR alone predicts the lower in-alpha coherence.
+- **A counter-example.** S05's alpha change at 20 Hz (−2.480 dB) is as negative as at 8.57 Hz, yet its 20 Hz coherence delta is +0.006, not negative.
+
+It stays exploratory (n = 1 subject, no test).
 
 ### Interpretation check
 
-<!-- Per-subject reading; inconclusive results stated as such; leakage in
-fitted objects, normalization, validation sets; statistics unit and
-multiple comparisons. -->
+- **Units and multiple comparisons.** The pairwise tests are trial-level permutations with the observed sizes. BH runs over 10 pairs per subject and method. The Fisher-combined p is descriptive: k = 3 responders, k = 2 non-responders, uncorrected over 10 pairs × 2 statistics. The Spearman and OLS p-values are descriptive.
+- **Responders.** Responders are S03, S04 and S05, defined from the P11 leak-free benchmark (PF-21) only. No grouping uses connectivity.
+- **Per subject (R9).** The report gives per-subject SNR, alpha change, deltas and reliability, with the data source: legacy 7-channel OO windows, raw, fs-250 axis (PF-04, legacy), one P07 gate per subject, PO7 absent. Approximate trial ids for S02/S04 are flagged in every pairwise statement.
+- **Leakage.** Nothing is fitted for prediction, and no test-set normalisation is involved.
+
+### Report requirements (scribe)
+
+1. Answer acceptance question 1 with the R² table above (all and centred, SNR-only, alpha-only) and the pre-committed wording. Name wPLI's between-subject-only result explicitly.
+2. Answer acceptance question 2 with per-subject raw and SNR-adjusted in − out for all four methods, with subjects named. Coherence, PLV and wPLI: "no consistent in-alpha difference". PDC: "differ, but consistent with their lower SNR". State the 2/3-bin alpha caveat.
+3. Report E1–E5 against R-13 as "consistent (qualitative)". Do not write "reproduces R-13" for the similarity, reliability or pairwise counts. The SNR and alpha tables do equal R-13 to 2 decimals and may be called identical, citing `power_confound_table.csv`. Name the coherence Fisher-vs-arithmetic mean point, the 2 non-positive coherence reliability cells, and the 11-vs-6 coherence magnitude count as unexplained differences.
+4. Report the pairwise null as exchangeability, using the R2-N3 table above. Say that most of the observed own-band difference is reproduced under exchange. Give the 13 off-centre cells and the 8/150 flips as inconclusive.
+5. Use the S05 wording above, with both the SNR alternative and the 20 Hz counter-example. Label it exploratory.
+6. Figure captions state one shared colour limit per method (P12 D-4) and "PO7 absent (white), not zero".
+7. Give the runtime: 67.55 min measured vs the 18–34 min estimate. State the test-hygiene fix (b4806cc, tests only) and the clean-checkout suite result.
+8. Cite the numbers verbatim from the CSVs and logs. Cite review-computed values (R-13-implied statistics, the R2-N3 ratios, the Hann leakage) as review-only from this file.
 
 ### Decisions for decisions.md
 
-<!-- Accepted deviations, one line each; the orchestrator copies them. -->
+- **D-1.** P14 acceptance is met: A0–A2 hold, and E1–E5 are consistent with R-13 (qualitative). DIAG-E3 was not triggered (margins 10 and 4).
+  - Q1: coherence is largely explained and SNR-dominated at both levels (0.675 / 0.540). PLV and PDC are partly explained and SNR-dominated. wPLI is explained between subjects only (0.530 / 0.0014). Alpha adds little everywhere (ΔR² ≤ 0.059).
+  - Q2: no consistent in-alpha difference for coherence, PLV or wPLI (3/5 each). PDC: "differ, but consistent with their lower SNR" (5/5 raw, 3/5 adjusted).
+- **D-2.** On the real data the pairwise exchangeability null is off-centre. Its median centre is 0.62–0.79 of |t_mag|, and |z| > 2 in 15–20 of 50 cells per method. Pairwise p-values measure only the stimulus-specific excess over a/b exchange. 13 cells are labelled "null off-centre" and 8/150 flips are inconclusive. P15 and later phases that reuse `pairwise_permutation_test` must report `<m>_pairwise_null` alongside.
+- **D-3.** The P13 D-3 S05 pattern stays an exploratory hypothesis. Alpha blocking is admissible wording only together with the lower-SNR alternative and the 20 Hz counter-example. It is not carried as a finding.
+- **D-4.** These are noted but not explained: the Fisher-mean similarity r for coherence is 0.629 against R-13's 0.54 (the arithmetic mean is 0.535); the coherence p_mag count is 11 against 6; and coherence has 2 non-positive reliability cells (S01/S02 10.91 Hz). None is graded. Sebastian may confirm which mean R-13 used.
+- **D-5.** Process: the runtime estimate was low by a factor of 2–4 (67.55 min measured). Future pairwise or permutation estimates should time the coherence path on the largest subject, not on S03 alone. Also, tests must not read generated, git-ignored files (b4806cc).
 
 ## Sources spot-check
 
-<!-- Fix rounds: append "## Pre-run audit — Round N". After two failed rounds,
-set Status: BLOCKED. -->
+- `mas/04_REFERENCE_RESULTS.md` R-13 opened: values as quoted in Round 1.
+- `reports/connectivity_comparison/*.csv` and the figures listed above were opened in this review.
+- The `06_verify.md` numbers were re-derived. Every graded value matches; I found no misquote between the prose and the tables.
+
+Verdict: APPROVE
 
 ## Questions
