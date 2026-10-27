@@ -1,6 +1,6 @@
 # P15 · 07 · Scientific review
 
-Status: READY (pre-run audit Round 2 PASS)
+Status: READY (pre-run audit Round 2 PASS; results review APPROVE with B007 deviations)
 Author: scientific-reviewer
 Reads: 00, 02, 03_changes_*, 04 and every changed file (pre-run); 05, 06 and the CSVs (results)
 
@@ -220,27 +220,121 @@ Verdict: PASS
 
 ## Results review
 
-Verdict: APPROVE / REJECT
+**Inputs.**
+- `06_verify.md` (87ed7af; run at 2392299, the audited code: `git diff --stat 1d1bdca HEAD -- src scripts tests configs` is empty there).
+- `mas/state/scratch/p15_verify.out`, `reports/gnn_benchmark.csv`, `reports/connectivity_gate_benchmark.csv`.
+- `mas/state/blockers/B007-p15-gnn-s02-2s-systematic.md` (RESOLVED, option 1) and the last P15 row of `mas/state/decisions.md`.
+
+**Re-derivation.** I re-derived the graded GNN numbers from the CSV myself:
+
+```bash
+.venv/bin/python -c "import pandas as pd; g=pd.read_csv('reports/gnn_benchmark.csv'); ..."
+```
+
+The full command is in this session. Output:
+- nodes+F cohort 2.0 s: `71.27`; S02 2.0 s: `37.07`.
+- Counterfactual cohort with S02 set to R-15: `74.28`.
+- S02 smoothing gain (2.0 s − 1.0 s): nodes+F `2.89` vs R-15 7.5; nodes+coh+F `3.57` vs R-15 2.9.
+- S02 nodes+F 2.0 s correct windows per repeat: `[74.0, 67.0, 77.0]` of 196, against R-15 ≈ 90.4 and a smallest in-window count of 81.
+
+These agree with the verifier.
+
+**Data source for every number:** legacy 7-channel OO folders, stimulus windows, two-tier P07 gate. Features are per-window (R3 legacy) on the fs 250 axis (PF-04). Trial ids are approximate on S02 and S04 (P11 D-2). 2.0 s uses the legacy i%5 rule (decisions.md lines 103–104).
+
+### Acceptance clauses against the pre-committed windows
+
+| Window | Clause | Result |
+|---|---|---|
+| A1 | R-14 gate table, best set, verdict and its reason | **Met.** 45/45 k=0 cells within ±1.5 pp (max \|Δ\| 0.06); 9/9 means within ±1.0 (max 0.06, Base+Ep 73.44 vs 73.5); 8/8 k=30 means within 0.04. Best set k=0 Base+Ec 77.57 ∈ [76.6, 78.6]; k=30 best edge set Base+Ec 77.53. Verdict "does NOT pass" for the pre-committed reason: responders 0/3 (S03 +1.22, S04 +0.10, S05 −1.70), cohort Δ +3.82, S01 +16.30 and S02 +3.16 ≥ 2. Same at k=30 (cohort +3.51, 0/3). |
+| A2 | R-15 cells ±5 pp; cohort ±3 pp | 11/12 subject cells inside; nodes+F S02 2.0 s outside (37.07 vs 46.1). Cohort: 3/4 inside; nodes+F 2.0 s outside by 0.16 pp (71.27, window [71.43, 77.43]). |
+| A3 | spread rule | S02 2.0 s: (b) systematic. All three repeats are below R-15 (37.76/34.18/39.29), and the gap is 3.45 × SD 2.62, so seed variance is not the cause. Cohort 2.0 s: (c) not explained, because its only driving cell is the S02 cell (counterfactual 74.28 inside). Sign tally 9 − / 3 +: not one-sided. |
+| A4 | ≈ and "do not help" (1.0 s, S02/S03/S05) | **Both met.** \|Δ\| ≤ 5 on each subject (+2.04 / −0.34 / +1.50); cohort Δ +1.07 ≤ 3. Do not help: +1.07 < 2 and 1/3 subjects ≥ 2. **Sign-flip clause not met**: R-15 −0.40 vs +1.07, with per-repeat cohort Δ +0.50 / +1.18 / +1.52, so 0 lies outside the range. |
+| A5 | train column (diagnostic) | Above R-15 in 6/6 cells, outside ±5 pp in 4/6 (S02, S03, both variants), with SD 0.25–1.48: systematic. It does not decide the phase (pre-committed). |
+| A6 | exact counts | **Met** (5,150 / 5,534; 200/196/197/197/200; 7 channels; approximate ids on S02/S04 only; every cache rebuilt). |
+| A7 | smoke | **Met.** |
+| A8 | hygiene | **Met** (legacy-array hash identical before/after; code diff empty; gate before GNN). |
 
 ### Deviations from references
 
 | Ref | Expected | Obtained (log) | Δ | Within tolerance? | Explanation | Accepted? |
 |---|---|---|---|---|---|---|
-| | | | | | | |
+| R-15 nodes+F S02 2.0 s | 46.1 | 37.07 (repeats 37.76/34.18/39.29; `reports/gnn_benchmark.csv`) | −9.03 | no (window [41.1, 51.1]; 67–77 of 196 windows vs smallest in-window 81) | Not reproduced within tolerance; cause not established. The 1.0 s cell of the same model is inside (34.18 vs 38.6). The miss sits in the 2-tap smoothing gain (+2.89 vs R-15's +7.5). In R-15 that gain is itself out of line with the sister variant on the same subject (nodes+coh+F +2.9, here +3.57), and it produces R-15's −6.0 pp S02 2.0 s variant Δ, the outlier flagged pre-run. This is *consistent with* a favourable draw in the original's single cell, but it does not show one. The i%5 misalignment on S02 is not a candidate: the clean array and mask are identical to the original's (R-1 exact, R-14 to 0.06 pp). Candidates: device (original defaults to CUDA; this run is CPU), RNG stream (global-RNG batch order vs a seeded loader generator), and S02's near-chance regime, where 2-tap smoothing gains are unstable. | Accepted as a documented deviation by Sebastian (B007, option 1) |
+| R-15 nodes+F cohort 2.0 s (S02/S03/S05) | 74.43 | 71.27 | −3.16 | no (0.16 pp below [71.43, 77.43]) | Driven entirely by the S02 cell above; with S02 at R-15 the cohort is 74.28. No separate cause. | Accepted, B007 |
+| R-15 coherence-edge Δ, cohort 1.0 s (sign) | −0.40 | +1.07 (per repeat +0.50/+1.18/+1.52) | +1.47 | magnitude inside ±3 pp; sign flipped and not noise under A4 | The direction of a small difference between two equally accurate variants is not reproduced. Both claims of the acceptance still hold numerically (≈; no subject pair reaches the 2 pp "help" threshold except S02 at +2.04). Cause not established; candidates as above. | Accepted, B007 |
+| R-15 train column | 56.4/86.8/96.1; 57.7/87.8/96.6 | 75.43/95.31/99.75; 78.02/96.11/100.00 | +3.4 to +20.3 | 4/6 outside ±5 pp (diagnostic, not graded) | Not a definitional difference: the original measures the same quantity (eval mode, training fold, mean over folds; R11 check, Round 1). Cause not established; candidates: device, RNG stream, and an undetected training difference I could not see in the code I opened. Split variance is now unlikely (SD ≤ 1.48). | Recorded; the B007 row records it as an open cause (diagnostic) |
+
+I sign these explanations. None of them is a reproduction. The wording for every write-up is "not reproduced within tolerance, accepted as a documented deviation by Sebastian (B007); cause not established". The word "reproduced" may be used only for R-14, R-8 and R-1.
 
 ### Interpretation check
 
-<!-- Per-subject reading; inconclusive results stated as such; leakage in
-fitted objects, normalization, validation sets; statistics unit and
-multiple comparisons. -->
+**Gate (R-14).** Reproduced within 0.06 pp in every cell, with the verdict for the same reason. The phase answers its main question on the classical side. Reading:
+- Per-window coherence adds information only where node power and FBCCA are weak: S01 +16.30 (Base 41.20 → 57.50) and S02 +3.16, and at k=30 S02 +8.06.
+- Where Base is near ceiling it adds nothing: S04 97.97, S05 98.90; S03 +1.22.
+- Phase features add nothing on their own or on top of Base (Base+Ep cohort −0.31 at k=0).
+- This is a descriptive heuristic on 5 subjects, not an inferential test (R7 N/A). No significance may be claimed.
+- Caveats for the report:
+  - The 3-segment in-window MSC is strongly upward-biased (N3; PF-15 style). On the weak subjects it may encode broadband or artefact differences between classes rather than SSVEP-specific coupling. S01's Ec alone (48.30) beats its N (31.40), which fits either reading. The mechanism is not established.
+  - S02's trial ids are approximate (residual leakage possible, D-2).
+  - The fs 250 axis shifts every band (PF-04).
+- The 2.0 s gate columns have no reference and are reported only.
+
+**GNN (R-15).** Both roadmap claims hold:
+- nodes+F ≈ nodes+coh+F.
+- Coherence edges do not help by the pre-committed 2 pp criterion.
+- Honest additional sentence: in this rebuild the edges give a small, consistent positive Δ (+0.50 to +1.52 pp cohort per repeat; +1.07 mean) where the original had −0.40. Neither reaches the gate threshold. The report must not turn this into "edges slightly help" or "edges hurt".
+- Per subject, the GNN is below the LDA gate rows on every subject at 1.0 s:
+  - S03 76.82 vs Base 82.74
+  - S05 89.50 vs 98.90
+  - S02 34.18 vs 47.96
+  - S01 34.00 vs 41.20
+
+  It is not a better classifier here.
+
+**Train-accuracy pattern (PF-30).** Train is higher than in the original on all six graded cells, while test cells mostly agree. The extra fit in this rebuild does not translate into test accuracy. The hints flag a generalization problem (gap 37–42 pp on S01/S02, 18–20 pp on S03, 9–12 pp on S04/S05): the same S01/S02 pattern as the CNNs in P04 and P10. The S02 and S01 test accuracies (34–36 %) are near chance (20 %) relative to their train accuracy (71–78 %). For them the GNN memorises training windows. The cause of the excess over R-15 is not established.
+
+**Leakage and fitting.** No new concern from the run. Scaler, SelectKBest and standardizer are in-fold. There is no validation split. Splits are grouped (residual risk only through the approximate S02/S04 ids).
+
+### Notes N1–N5 and the R11 wording slip
+
+- **N1 cache hash.** Carry-forward (connectivity-stats, first phase that reuses `graph_dataset.npz`). Extend `code_fingerprint` to the FBCCA/gate/trial-id sources and to the input-array sha256. P15 is unaffected, because A6 confirms every cache was rebuilt.
+- **N2 i%5.** Satisfied in 06_verify.md (cites decisions.md lines 103–104 and P11 C1). The report must carry the same sentence.
+- **N3 coherence wording.** The report calls `coh_diff` and the Ec features "per-window 3-segment MSC, upward-biased; a descriptive class difference, not a coherence estimate".
+- **N4 test debt.** Carry-forward to the synthetic-tester at the next GNN phase (P23). Mutation-test (a) SelectKBest on all rows and (b) train accuracy measured without `model.eval()`. Not blocking; correct by inspection.
+- **N5 data source.** 06_verify.md states it. The report repeats it in every table caption, with approximate ids on S02/S04.
+- **R11 wording slip.** The deep-learning R11 row says the `git grep` showed a "file list only". It displayed the file and line of the two class declarations (`connectivity_gnn.py:12`, `:36`) and no body code. The report and the decisions row use "file and line of the two class declarations". The handoff itself need not be edited again.
+
+### Report requirements (scribe)
+
+1. **R-14.** Present it as reproduced: 45/45 cells within 0.06 pp, best set Base+Ec 77.57, and the verdict "does not pass" because 0/3 responders gain ≥ 2 pp while S01/S02 gain. Label it a descriptive heuristic.
+2. **R-15.** Give per-subject tables for all five subjects (1.0 s, 2.0 s, train) with R-15 beside S02/S03/S05.
+   - The three B007 deviations use the exact wording above.
+   - Cause not established, with the candidate list.
+   - Never "reproduced" for R-15.
+3. **A4.** Both claims hold. State the small positive Δ (+1.07; per repeat +0.50/+1.18/+1.52) next to R-15's −0.40.
+4. **Train-accuracy section.**
+   - Not a definitional difference.
+   - Systematic excess, cause open.
+   - PF-30 reading: a generalization gap on S01/S02.
+5. **Data source line, legacy labels and R11.**
+   - Data source line (N5).
+   - Legacy labels: R3 per-window, fs 250 (PF-04), the i%5 rule (N2), approximate ids (D-2).
+   - The coherence wording (N3).
+   - R11: one deep-learning consultation (bias=False only), worded per the slip correction, and the reviewer's verification consultation.
+6. **Numbers.** Every number comes from `reports/*.csv`, `reports/logs/P15/` or `p15_verify.out`, with the path.
 
 ### Decisions for decisions.md
 
-<!-- Accepted deviations, one line each; the orchestrator copies them. -->
+- D-1: R-14 (A1) reproduced within 0.06 pp on all 45 cells, 9 k=0 means and 8 k=30 means; best set Base+Ec 77.57; gate does not pass for the responder reason (0/3; cohort +3.82). R-8, R-1, smoke and hygiene (A6–A8) met.
+- D-2 (B007): nodes+F S02 2.0 s (37.07 vs 46.1; 67/74/77 of 196 windows vs ≥ 81 needed; 3.45 × SD) and the nodes+F cohort 2.0 s it drives (71.27, 0.16 pp out; 74.28 with S02 at R-15). Wording: "not reproduced within tolerance, accepted as a documented deviation by Sebastian (B007); cause not established". Candidates: device, RNG stream, near-chance smoothing instability. The miss is in the smoothing gain (+2.89 vs +7.5), and R-15's own S02 2.0 s variant Δ (−6.0) was already anomalous.
+- D-3 (B007): the coherence-edge cohort Δ1.0 s sign flip (+1.07 vs −0.40; per repeat +0.50/+1.18/+1.52) is accepted with the same wording. "≈" and "do not help" hold under the pre-committed 2 pp criterion.
+- D-4: train accuracy exceeds R-15 on 6/6 graded cells (4/6 outside ±5 pp, systematic). It is not definitional (the original measures it identically). Cause not established. Diagnostic only, open for Sebastian.
+- D-5: R11 record. The deep-learning consultation is within policy (valid trigger; only bias=False adopted); its git grep displayed the file and line of the two class declarations ("file list only" corrected). The reviewer's verification consultation (log 23:44:31–23:45:50) is listed in this file.
+- D-6: carry-forwards N1 (cache fingerprint, connectivity-stats) and N4 (two mutation tests, synthetic-tester, at P23).
 
 ## Sources spot-check
 
-<!-- Fix rounds: append "## Pre-run audit — Round N". After two failed rounds,
-set Status: BLOCKED. -->
+I opened `06_verify.md`, `mas/state/scratch/p15_verify.out`, `B007-p15-gnn-s02-2s-systematic.md`, the last P15 row of `mas/state/decisions.md`, and `reports/gnn_benchmark.csv` (re-derived as above). The verifier's numbers agree with the CSV and with p15_verify.out. The B007 summary agrees with 06_verify.md.
+
+Verdict: APPROVE
 
 ## Questions
