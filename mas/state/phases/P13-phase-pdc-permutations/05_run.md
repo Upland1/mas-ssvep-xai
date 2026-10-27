@@ -71,3 +71,13 @@ Scratch (not committed): `mas/state/scratch/verify/{runlog.sh,runall.sh,analyze.
 ## Questions
 
 None.
+
+## DIAG-A2
+
+Rule: `07_review.md` "Pre-committed diagnostic DIAG-A2" (cec7dca). Clean checkout: `mas/state/scratch/verify/P13b` (detached worktree) at HEAD dba0e059db03dc56f14c31667535e46b7314b1e5 (later than cec7dca). Code check, no diff since the main run: `git diff --stat 7f6cabb HEAD -- src scripts tests configs | wc -l` prints `0`.
+
+Six commands, each executed once in the order 42, 1, 2, 3, 4, 5 (runner `mas/state/scratch/verify/rundiag.sh`): `.venv/bin/python -m scripts.connectivity.analysis.analyze_connectivity_cohort --methods wpli --subjects S05 --permutations 200 --permutation-unit trial --n-jobs -1 --random-state $B --out-suffix diagA2_rs$B`. Logs `reports/logs/P13/diagA2_rs<B>.log`, each with HEAD dba0e059..., `STATUS(porcelain): []` (tracked files; the untracked entries are the data, reports and .venv symlinks) and `EXIT: 0` for all six. All six finished in under 100 s in total.
+
+Outputs: `reports/connectivity_cohort_summary_diagA2_rs<B>.csv` (+ `_details`), `connectivity_alpha_diagnostic_diagA2_rs<B>.csv`, `connectivity_edges_diagA2_rs<B>/`.
+
+Final reported files byte-unchanged: sha256 of every `connectivity_cohort_summary*.csv`, flips, alpha, `connectivity_edges*/*.npz` and demo files (85 lines, diagA2 outputs excluded) before and after are identical (`reports/logs/P13/diagA2_final_sha_before.txt`, `..._after.txt`; `diff` silent).
