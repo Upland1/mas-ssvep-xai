@@ -17,3 +17,5 @@
 | 9 Results review | scientific-reviewer | 2026-10-26 | REJECT R1 (cec7dca): A2 miss not signed; DIAG-A2 pre-committed (6 seed bases, rules R0–R2); interpretation and report requirements listed | 2 | R-12, A1–A8, E1–E5 | none | reviewer edited its Status line with sed (recorded by the reviewer) |
 | 8 Run (DIAG-A2) | verifier | 2026-10-26 | PASS line appended (c6fa935, 3865ba6): R0 holds (base 42 identical); T_B 5/7/14/12/7/12 for bases 42/1/2/3/4/5, E_B 0/0/9/0/0/7; R1 holds (base 2), R2 not; final files byte-unchanged | 2 | DIAG-A2 rule | none | |
 | 9 Results review (Round 2) | scientific-reviewer | 2026-10-26 | APPROVE (a010a0d); A2 S05 wPLI accepted deviation (resolution), cautious wording; D-1–D-4 final | 2 | DIAG-A2, R-12 | none | |
+| 10 Report | scribe | 2026-10-26 | P13.md (07d8796), RESEARCH_LOG/CHANGELOG (a7e0922) | 2 | CSVs, logs, 07_review.md | none | |
+| 11 Gate | orchestrator | 2026-10-26 | tasks done; PASS (DIAG-A2) + APPROVE; vendor scan 0 required | 2 | | none | merge --no-ff, tag p13-done |
