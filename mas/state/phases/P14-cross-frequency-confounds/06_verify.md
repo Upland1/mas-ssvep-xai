@@ -7,7 +7,7 @@ Clean checkout: `mas/state/scratch/verify/P14` @ 6b4ec212a0bb536e16e16c238fe672f
 
 Numbers come from `mas/state/scratch/p14_analysis.out` (script `mas/state/scratch/p14_analysis.py`, reading the CSVs below `reports/connectivity_comparison/`) and from `reports/logs/P14/*.log`. Everything is descriptive at 5 subjects (25 cells).
 
-Verdict: FAIL
+Verdict: PASS
 
 ## Tests on the clean checkout
 
@@ -99,3 +99,11 @@ The numbers in `05_run.md` (hash, exit codes, runtimes, counts 5 of 75 and 150/8
 1. The full suite on the clean checkout is red: `2 failed, 871 passed, 1 skipped` (`reports/logs/P14/pytest_full.log`, exit 1). `test_null_diagnostic_csv_leaves_primary_csvs_untouched` and `test_random_state_and_suffix_for_diag_e3` read the generated, git-ignored `reports/n_subjects_benchmark.csv` through `responders_from_benchmark` because they pass no `--responders`/`--benchmark`. This breaks the verification standard (`pytest tests/` runs with no generated or real data). Fix is tests-only (pass `--responders` or a synthetic benchmark CSV in `tmp_path`); `src/` and `scripts/` are unchanged, so no pipeline rerun should be needed, and a re-run of the suite on a clean checkout would settle it.
 
 Everything else passed: A0–A2 met; E1–E5 consistent with R-13; DIAG-E3 not triggered; inputs and legacy arrays unchanged; nothing else blocks the phase.
+
+## Round 2 restatement
+
+1. `git diff --stat 6b4ec21 HEAD -- src scripts configs` prints nothing: the code that produced the outputs is unchanged, so the first-run outputs stand and no rerun was needed.
+2. Clean-checkout suite at 1e9dcac (`reports/logs/P14/pytest_full_round2.log`, exit 0), summary verbatim: `873 passed, 1 skipped, 21 warnings in 405.69s (0:06:45)`. The two tests that failed in Round 1 now pass without generated files. Reason 1 above is closed.
+3. Outputs: all 82 files in `reports/connectivity_comparison/` and `outputs/figures/connectivity_comparison/` have mtimes at or before 21:13:46 (end of the confound run); the verifier's analysis script gives output identical to the first run (`mas/state/scratch/p14_analysis_round2.out`), so A0–A2, E1–E5, the R² bands, the in-alpha rule and the "null off-centre" lists stand as stated above. Sha256 manifest: `mas/state/scratch/p14_outputs_round2.txt`.
+
+Verdict: PASS

@@ -43,3 +43,16 @@ None.
 5. Trial ids approximate for S02 and S04 (console of every run).
 
 ## Questions
+
+## Round 2 restatement
+
+Branch HEAD 1e9dcac72f3885224cadaea16c3060a083acac6c (fix commits b4806cc, 32a649f; records 2256cac, 1e9dcac).
+
+| # | Command | Runtime | Exit | Log |
+|---|---|---|---|---|
+| R2-1 | `git diff --stat 6b4ec21 HEAD -- src scripts configs` | <1 s | 0, empty output | (this section) |
+| R2-2 | `.venv/bin/python -m pytest tests -o addopts="" -q` in clean worktree `mas/state/scratch/verify/P14r2` @ 1e9dcac (no `reports/`, no `data/`; the only untracked entry is my `.venv` symlink) | 408 s | 0 | `reports/logs/P14/pytest_full_round2.log` |
+
+Summary line, verbatim: `873 passed, 1 skipped, 21 warnings in 405.69s (0:06:45)`.
+
+Outputs unchanged: no file under `reports/connectivity_comparison/` or `outputs/figures/connectivity_comparison/` is newer than 21:13:46 (the end of the confound command); sha256 manifest of the 82 files taken now: `mas/state/scratch/p14_outputs_round2.txt` (manifest hash `3fdbbed3b6f34d17ec6c9b99002228e08c5ecf9b6fd9c35ae02c0ba18fb8176e`). I did not record per-file hashes right after the first run, so the evidence for "byte-unchanged" is the mtime plus a re-run of `p14_analysis.py` whose output is identical to the first (`diff` of `p14_analysis.out` and `p14_analysis_round2.out`). No pipeline command was re-run.
