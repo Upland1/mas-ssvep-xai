@@ -121,11 +121,11 @@ phases:
     passed: '2026-10-26'
   P15:
     slug: graph-gnn
-    status: pending
+    status: in_progress
     owner: orchestrator
-    branch: null
+    branch: phase/P15-graph-gnn
     commit: null
-    opened: null
+    opened: '2026-10-26'
     passed: null
   P16:
     slug: continuous-filtering
