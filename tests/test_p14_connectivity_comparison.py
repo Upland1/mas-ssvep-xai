@@ -446,3 +446,84 @@ def test_no_misspelled_duplicate_script():
 def test_scripts_do_not_read_raw_recordings():
   for p in (ROOT / "scripts" / "connectivity").rglob("*.py"):
     assert "data/raw" not in p.read_text() and ".ebr" not in p.read_text()
+
+
+# ---------------------------------------------------------------- pairwise null reading (audit F2)
+
+def _band_coupled(rng, n_win, band, weights, t=256):
+  """Windows (n, C, T): independent noise plus ONE latent source restricted to `band`, with channel weights."""
+  c = len(weights)
+  noise = rng.standard_normal((n_win, c, t))
+  spec = np.fft.rfft(rng.standard_normal((n_win, 1, t)), axis=-1)
+  f = np.fft.rfftfreq(t, 1 / FS)
+  spec[..., (f < band[0]) | (f > band[1])] = 0
+  s = 12.0 * np.fft.irfft(spec, n=t, axis=-1)
+  return noise + np.asarray(weights)[None, :, None] * s
+
+
+def test_pairwise_null_is_off_centre_for_a_common_band_effect():
+  """Every trial responds in band a only: D_a > 0, D_b ~ 0, so D_a - D_b != 0, yet p_mag is not small
+  because the exchange keeps the band effect in the null; the null mean is far from 0 and the centred
+  diagnostic puts the observation at the null centre."""
+  rng = np.random.default_rng(0)
+  w = [1.0] * 5
+  a, b = _band_coupled(rng, 40, BAND_A, w), _band_coupled(rng, 40, BAND_A, w)
+  base = _coupled(rng, 40, w, coupling=False)
+  r = cmp.pairwise_permutation_test(a, _ids(40, 5), b, _ids(40, 5), base, BAND_A, BAND_B, FS,
+                                    compute_condition_plv, 199, 1)
+  assert r["t_mag"] > 0.2                                              # Delta_a - Delta_b is clearly non-zero
+  assert r["p_mag"] > 0.3                                              # ... and is NOT rejected
+  assert abs(r["t_null_mean"]) > 0.2 and abs(r["t_null_mean"] - r["t_mag"]) < 0.1   # null centred away from 0
+  assert r["p_mag_centred"] > 0.3
+
+
+def test_pairwise_null_zero_delta_with_b_trials_responding_in_band_a():
+  """Delta_a = Delta_b = 0 (b responds only in band a, which b is not scored in): t_obs ~ 0, p_mag ~ 1 although the
+  null mean is clearly positive; the centred diagnostic exposes the off-centre null."""
+  rng = np.random.default_rng(1)
+  w = [1.0] * 5
+  a = _coupled(rng, 40, w, coupling=False)
+  b = _band_coupled(rng, 40, BAND_A, w)
+  base = _coupled(rng, 40, w, coupling=False)
+  r = cmp.pairwise_permutation_test(a, _ids(40, 5), b, _ids(40, 5), base, BAND_A, BAND_B, FS,
+                                    compute_condition_plv, 199, 2)
+  assert abs(r["t_mag"]) < 0.05 and r["p_mag"] > 0.9
+  assert r["t_null_mean"] > 0.1 and r["t_null_sd"] > 0
+  assert r["p_mag_centred"] < 0.05
+  assert r["p_mag_centred"] >= 1 / 200                                       # +1 pseudo-count floor
+
+
+def test_null_diagnostic_csv_leaves_primary_csvs_untouched(tmp_path):
+  """The section 6 pairwise CSV is byte-identical whether or not the diagnostic exists, and has the F2 columns."""
+  _tree(tmp_path / "data")
+  def go(sub):
+    args = c2.build_parser().parse_args(["--data-root", str(tmp_path / "data"), "--reports-dir", str(tmp_path / sub),
+                                         "--methods", "plv", "--permutations", "9", "--splits", "3", "--n-jobs", "1",
+                                         "--out-suffix", "t", "--random-state", "7"])
+    c2.run(args)
+    return tmp_path / sub
+  r1, r2 = go("a"), go("b")
+  f = c2.csv_path(r1, "plv", "pairwise_tests", "t")
+  assert f.read_bytes() == c2.csv_path(r2, "plv", "pairwise_tests", "t").read_bytes()
+  assert list(pd.read_csv(f).columns) == c2.PAIRWISE_COLUMNS
+  nl = pd.read_csv(c2.csv_path(r1, "plv", "pairwise_null", "t"))
+  assert list(nl.columns) == ["subject", "method", "freq_a", "freq_b", "t_null_mean", "t_null_sd", "p_mag_centred",
+                              "d_null_mean", "d_null_sd"] and len(nl) == 10
+  assert ((nl["p_mag_centred"] >= 1 / 10) & (nl["p_mag_centred"] <= 1)).all()
+  # the primary columns equal the ones computed without the diagnostic fields (same seeds, same code path)
+  prim = pd.read_csv(f)
+  assert (prim["p_mag"] >= 0.1).all()
+
+
+def test_random_state_and_suffix_for_diag_e3(tmp_path):
+  _tree(tmp_path / "data")
+  outs = {}
+  for rs in (1, 2):
+    args = c2.build_parser().parse_args(["--data-root", str(tmp_path / "data"), "--reports-dir", str(tmp_path / "r"),
+                                         "--methods", "plv", "--permutations", "9", "--splits", "2", "--n-jobs", "1",
+                                         "--random-state", str(rs), "--out-suffix", f"diagE3_rs{rs}"])
+    c2.run(args)
+    outs[rs] = pd.read_csv(c2.csv_path(tmp_path / "r", "plv", "pairwise_tests", f"diagE3_rs{rs}"))
+  assert (tmp_path / "r" / "connectivity_comparison" / "plv_pairwise_null_diagE3_rs1.csv").is_file()
+  assert not (tmp_path / "r" / "connectivity_comparison" / "plv_pairwise_tests.csv").exists()   # suffix keeps runs apart
+  assert not outs[1]["p_mag"].equals(outs[2]["p_mag"])                                           # seed changes the draws
