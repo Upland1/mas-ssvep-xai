@@ -116,11 +116,15 @@ fs 250 frequency axis (PF-04), labelled in every meta. Per-script shared gate (R
 ## Run commands (for the verifier)
 
 ```bash
+# 0. input pre-check (pre-run audit F3): the P13 edge files must hash to the value pinned in 07_review.md
+#    (sha256 over reports/connectivity_edges/*.npz, sorted, as computed in the audit) — stop if different
 .venv/bin/python -m scripts.connectivity.comparison.compare_connectivity_frequencies
 .venv/bin/python -m scripts.connectivity.comparison.test_connectivity_frequency_differences --permutations 500 --n-jobs -1 --out-suffix p500
 .venv/bin/python -m scripts.connectivity.comparison.test_connectivity_frequency_differences --permutations 1000 --n-jobs -1
 .venv/bin/python -m scripts.connectivity.comparison.test_connectivity_frequency_differences --compare p500 ""
 .venv/bin/python -m scripts.connectivity.diagnostics.check_power_alpha_confound
+# conditional DIAG-E3 (only if the E3 trigger in 07_review.md fires: magnitude-vs-pattern margin ≤ 1 cell)
+for B in 42 1 2 3 4 5; do .venv/bin/python -m scripts.connectivity.comparison.test_connectivity_frequency_differences --permutations 500 --n-jobs -1 --random-state $B --out-suffix diagE3_rs$B; done
 ```
 
 The builder confirms the flags and measures a runtime from a one-subject smoke. The
@@ -137,6 +141,16 @@ issues a human-run request. Permutation counts are not reduced.
 | the report states, with numbers, how much of the delta is explained by target SNR and alpha change | OLS R² per method, Spearman (all and within-subject centred) | R-13 |
 | whether 10.91/8.57 Hz behave differently | in-alpha vs out-of-alpha means per method | R-13 |
 | (no fixed numeric target; compare qualitatively with R-13) | the reviewer pre-commits the qualitative comparisons in the pre-run audit | R-13 |
+
+**Binding (amended after the pre-run audit, F3):** the results review grades exactly the
+criteria pre-committed in 07_review.md "Pre-run audit, Round 1" (34301f7). These are the
+integrity checks A0–A2 (failure means FAIL), the qualitative comparisons E1–E5 (with the
+DIAG-E3 trigger and its 4/6 rule), the R² wording bands for "how much of the delta is
+explained" (≥ 0.5 / 0.2–0.5 / < 0.2; "SNR-dominated" if SNR alone gives ≥ 0.8 of the
+full R²; "alpha adds" only for ΔR² ≥ 0.10), and the 4-of-5 same-sign rule (raw and
+SNR-adjusted) for "whether 10.91/8.57 Hz behave differently". Where they are more specific
+than the rows above, they prevail. The pairwise p_mag/p_pat are read as tests of a/b trial
+exchangeability, not of Δa = Δb (decisions.md P14 row).
 
 ## Sources
 
