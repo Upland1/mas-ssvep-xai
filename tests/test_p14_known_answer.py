@@ -769,3 +769,100 @@ def test_comparison_script_section6_schemas_for_all_four_methods(tmp_path):
     assert list(gd.columns) == ["subject", "method", "condition", "frequency", "mean_delta", "n_fdr_edges"]
     assert len(gd) == 10 and len(pd.read_csv(d / f"{m}_frequency_similarity.csv")) == 20
     assert len(pd.read_csv(d / f"{m}_node_strength.csv")) == 2 * 5 * 8
+
+
+# ------------------------------------------------------------------ Round 1: off-centre exchangeability null (F2)
+
+HALF = 48                                                    # samples per time half; half 1 = "band A", half 2 = "band B"
+
+
+def half_corr_fn(x, fs, band):
+  """Band A (low edge >= 20 Hz) is scored on the first time half, band B on the second."""
+  seg = x[..., :HALF] if band[0] >= 20.0 else x[..., HALF:]
+  c = seg.shape[1]
+  m = np.corrcoef(np.transpose(seg, (1, 0, 2)).reshape(c, -1))
+  np.fill_diagonal(m, 0.0)
+  return m
+
+
+def _halfsig(rng, n_trials, per, w_half1, w_half2):
+  """Trials of `per` windows; channels share a source in half 1 (weights w_half1) and half 2 (w_half2)."""
+  n, c = n_trials * per, len(w_half1)
+  x = rng.standard_normal((n, c, 2 * HALF))
+  src = rng.standard_normal((n, 1, 2 * HALF))
+  wt = np.concatenate([np.repeat(np.asarray(w_half1, float)[None, :, None], HALF, 2),
+                       np.repeat(np.asarray(w_half2, float)[None, :, None], HALF, 2)], axis=2)
+  return x + wt * src, np.repeat(np.arange(n_trials), per)
+
+
+W0, W1 = [0.0] * 5, [1.5, 1.2, 1.0, 0.8, 0.6]
+
+
+def _pair(rng, a_w, b_w, n_perm=199, seed=0, n_trials=16):
+  a, ia = _halfsig(rng, n_trials, 4, *a_w)
+  b, ib = _halfsig(rng, n_trials, 4, *b_w)
+  base, _ = _halfsig(rng, 20, 4, W0, W0)
+  return cmp.pairwise_permutation_test(a, ia, b, ib + 100, base, BAND_A, BAND_B, FS, half_corr_fn, n_perm, seed)
+
+
+def test_common_band_effect_gives_nonsmall_pmag_and_centred_p_because_null_is_off_centre():
+  """Every trial (a and b) couples in band A only: D_a - D_b is clearly non-zero, yet the pooled null is centred
+  at the same value, so p_mag and p_mag_centred are not small (exchangeability, not D_a = D_b)."""
+  res = [_pair(np.random.default_rng(300 + i), (W1, W0), (W1, W0), seed=i) for i in range(8)]
+  assert all(r["t_mag"] > 0.2 for r in res)
+  assert all(abs(r["t_null_mean"] - r["t_mag"]) < 0.1 and r["t_null_mean"] > 0.15 for r in res)
+  assert np.mean([r["p_mag"] for r in res]) > 0.3 and np.mean([r["p_mag_centred"] for r in res]) > 0.3
+  assert sum(r["p_mag"] < 0.05 for r in res) <= 1
+
+
+def test_cross_band_response_gives_pmag_one_and_small_centred_p():
+  """D_a = D_b = 0 by construction (a: nothing in band A; b: nothing in band B) but b-trials couple in band A.
+  Observed t = 0, null centred at +D/2: p_mag = 1, p_mag_centred small, and p_pat is not a pattern test."""
+  res = [_pair(np.random.default_rng(400 + i), (W0, W0), (W1, W0), seed=i) for i in range(6)]
+  for r in res:
+    assert abs(r["t_mag"]) < 0.06 and r["t_null_mean"] > 0.1
+    assert r["p_mag"] > 0.9
+    assert r["p_mag_centred"] < 0.05
+    assert r["t_null_sd"] > 0
+
+
+def test_centred_p_matches_review_definition_from_the_splitter(monkeypatch):
+  """Recompute p_mag_centred = (1 + #{|t_null - mean| >= |t_obs - mean|}) / (n + 1) from the same draws."""
+  rng = np.random.default_rng(500)
+  a, ia = _halfsig(rng, 12, 4, W0, W0)
+  b, ib = _halfsig(rng, 12, 4, W1, W0)
+  base, _ = _halfsig(rng, 12, 4, W0, W0)
+  ib = ib + 100
+  r = cmp.pairwise_permutation_test(a, ia, b, ib, base, BAND_A, BAND_B, FS, half_corr_fn, 150, 9)
+  pool, ids, na = np.concatenate([a, b]), np.concatenate([ia, ib]), len(a)
+  iu = np.triu_indices(5, 1)
+  ba, bb = half_corr_fn(base, FS, BAND_A), half_corr_fn(base, FS, BAND_B)
+  t_obs = ((half_corr_fn(a, FS, BAND_A) - ba) - (half_corr_fn(b, FS, BAND_B) - bb))[iu].mean()
+  nt = []
+  for s in np.random.SeedSequence(9).generate_state(150):
+    i1, i2 = pm._trial_permutation_split(ids, na, np.random.default_rng(int(s)))
+    nt.append(((half_corr_fn(pool[i1], FS, BAND_A) - ba) - (half_corr_fn(pool[i2], FS, BAND_B) - bb))[iu].mean())
+  nt = np.array(nt)
+  tc = nt.mean()
+  assert r["t_null_mean"] == pytest.approx(tc, abs=1e-12) and r["t_null_sd"] == pytest.approx(nt.std(), abs=1e-12)
+  assert r["p_mag_centred"] == pytest.approx((1 + np.sum(np.abs(nt - tc) >= abs(t_obs - tc))) / 151, abs=1e-12)
+  assert r["p_mag"] == pytest.approx((1 + np.sum(np.abs(nt) >= abs(t_obs))) / 151, abs=1e-12)
+
+
+def test_pairwise_null_diagnostic_csv_columns_and_section6_csv_unchanged(tmp_path):
+  _fixture_tree(tmp_path / "data")
+  args = c2.build_parser().parse_args(["--data-root", str(tmp_path / "data"), "--reports-dir", str(tmp_path / "rep"),
+                                       "--methods", "plv", "--permutations", "9", "--splits", "3", "--n-jobs", "1",
+                                       "--out-suffix", "t", "--responders", "S01"])
+  c2.run(args)
+  d = tmp_path / "rep" / "connectivity_comparison"
+  nul = pd.read_csv(d / "plv_pairwise_null_t.csv")
+  assert list(nul.columns) == ["subject", "method", "freq_a", "freq_b", "t_null_mean", "t_null_sd", "p_mag_centred",
+                               "d_null_mean", "d_null_sd"]
+  assert len(nul) == 10 and (nul["t_null_sd"] >= 0).all() and nul["p_mag_centred"].between(1 / 10, 1).all()
+  main = pd.read_csv(d / "plv_pairwise_tests_t.csv")
+  assert list(main.columns) == ["subject", "method", "freq_a", "freq_b", "t_mag", "p_mag", "d_pat", "p_pat", "r_obs",
+                                "n_edges_fdr", "n_edges", "reliability_ceiling", "r_disattenuated",
+                                "trial_ids_approximate", "sig_bh_mag", "sig_bh_pat"]
+  assert (main[["freq_a", "freq_b"]].values == nul[["freq_a", "freq_b"]].values).all()
+  assert not (d / "plv_pairwise_null.csv").exists()          # suffix respected
