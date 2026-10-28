@@ -70,7 +70,6 @@ if str(ROOT) not in sys.path:
 
 from src.features.ssvep.fbcca_extraction import TARGET_FREQS, extract_fbcca_features  # noqa: E402
 from src.features.ssvep.fbcsp_extraction import DEFAULT_SUBBANDS, filter_subbands  # noqa: E402
-from src.features.ssvep.window_mask import CHANNEL_FAIL_FRACTION  # noqa: E402
 from src.io.subject_data import CLASS_CODES, QUALITY_MODES, discover_subjects, is_built, load_subject  # noqa: E402
 from src.models.classical.benchmark_runner import (  # noqa: E402
   add_protocol_args, channel_summary, legacy_header_lines, load_config, output_dir, print_trial_report,
@@ -254,15 +253,17 @@ def header_lines(d: dict, seed: int, cv: str, smoothing: str, thresholds: dict, 
 def evaluate_subject(root: Path, subject: str, m: int = 1, fs: Optional[float] = None, seed: int = SEED,
                      cv: str = "grouped", smoothing: Optional[str] = None, quality: str = "shared",
                      repeats: int = 1, thresholds: Optional[dict] = None,
-                     fail_fraction: float = CHANNEL_FAIL_FRACTION, bank: str = "base", classes: int = 5,
+                     fail_fraction: Optional[float] = None, bank: str = "base", classes: int = 5,
                      allow_fs_override: bool = False) -> dict:
   """One subject: load once, flagship out-of-fold. Returns `{"subject", "row" or None, "log", "kept", "dropped",
   "header", "approximate", "built", "seed0"}`; a subject that cannot be evaluated has `row = None` and its reason
   in `log`. Console text is collected in `log` (printed in order by the caller, so parallel jobs do not interleave).
-  `thresholds` (the four limits) are required, never defaulted (R5, C-2). ValueError: `fs` on a built root without
+  `thresholds` (the four limits) and `fail_fraction` are required, never defaulted (R5, C-2, P17 C-b). ValueError: `fs` on a built root without
   `allow_fs_override`; `bank` other than base or `classes=6` on a legacy root; unknown bank/classes."""
   if thresholds is None:
     raise ValueError("thresholds are required (R5): pass the four limits of the config quality: block")
+  if fail_fraction is None:
+    raise ValueError("fail_fraction is required (R5, P17 C-b): pass channel_fail_fraction of the config quality: block")
   thresholds = dict(thresholds)
   if bank not in BANKS or classes not in (5, 6):
     raise ValueError(f"bank must be one of {BANKS} and classes 5 or 6, got {bank!r}, {classes!r}")
@@ -404,6 +405,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
   t0 = time.time()
   print(f"Data source: windows of {_rel(processed)}/<S>/ via load_subject (OO session), stimulus windows only; "
         f"quality {args.quality}; subjects {', '.join(subjects)}; n_jobs {args.n_jobs}")
+  if args.classes == 6:   # P17 C-c
+    print(f"Data source (6 classes): stimulus windows 101-105 + rest class = fixation-cross windows (condition {REST_LABEL}) of "
+          f"{_rel(processed)}/<S>/ (OO session, built folders); cue windows 202 excluded (PF-13); CV groups = true trial ids")
   kw = dict(m=args.m, fs=args.fs, seed=args.seed, cv=args.cv, smoothing=args.smoothing, quality=args.quality,
             repeats=args.cv_repeats, thresholds=thresholds, fail_fraction=fail_fraction, bank=args.bank,
             classes=args.classes, allow_fs_override=args.allow_fs_override)
