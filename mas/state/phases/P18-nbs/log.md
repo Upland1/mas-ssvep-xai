@@ -1,0 +1,9 @@
+# P18 · Run log  (written by: orchestrator)
+
+| Step | Agent | Date | Outcome | Round | Sources cited | Reference consultations (R11) | Notes (cost, loops, what was caught) |
+|------|-------|------|---------|-------|---------------|-------------------------------|--------------------------------------|
+| 0 Preflight | orchestrator | 2026-10-28 | check OK | 1 | mas_status.py | none | |
+| 1 Open | orchestrator | 2026-10-28 | opened P18 from main 0038eec | 1 | | none | |
+| 2 Assignment | orchestrator | 2026-10-28 | 00_assignment.md READY | 1 | 03_ROADMAP P18 | none | |
+| 3 Research | orchestrator | 2026-10-28 | skipped (NBS fully specified in the roadmap task 1; no external source opened) | 1 | | none | |
+| 4 Plan | orchestrator | 2026-10-28 | 02_plan.md READY (auto); budget ≈ 100 / 120 min, human-run rule for the pairwise run | 1 | §6, PF-19/20/25/26 | none | |
