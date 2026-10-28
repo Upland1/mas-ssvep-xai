@@ -210,7 +210,7 @@ Verdict: **PASS**.
 
 ## Results review
 
-Verdict: **APPROVE**
+Verdict: APPROVE
 
 Read: `06_verify.md`, in both its first run (bd55527, FAIL, kept as the record) and its Round 2 re-verification (6bb9b81, PASS); `reports/v1_vs_v2/flagship.csv` and `connectivity.csv`; the six `reports/n_subjects_benchmark_<suffix>.csv` files; and the four `reports/connectivity_cohort_summary_<suffix>.csv` files. I judged them against criteria (1)–(5) of Round 1 and additions A and B of Round 2. Those criteria were fixed before the run, and none was changed afterwards.
 
