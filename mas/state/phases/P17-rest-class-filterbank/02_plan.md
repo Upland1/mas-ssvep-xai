@@ -112,6 +112,54 @@ $B --bank harm+mid --classes 5 --out-suffix p17_harmmid_5class
 $B --bank harm+mid --classes 6 --out-suffix p17_harmmid_6class
 ```
 
+### Run-list additions from the pre-run audit (07_review.md 25dca39, copied verbatim)
+
+Order: item 1 before step 1; items 2, 3, 4 after step 1 and before steps 2–7; item 1's
+hash again after step 7.
+
+1. **Pre-run state** (before step 1): `data/processed_continuous_p17` must not exist and `ls reports | grep -c p17`
+   must print 0 (stale same-name outputs). Pinned hash of the P16 root, computed here at `a1e49e4`:
+   `find data/processed_continuous -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum | sha256sum` ->
+   `c59c94b8ac90a77f57148f057698411f97690ec1174b1202237b37624144a54e` (65 files). The verifier runs the same command
+   before step 1 and after the last step; all three values must be equal.
+2. **D2 (after step 1, before the benchmarks): non-guard files and masks.**
+   ```bash
+   for s in S01 S02 S03 S04 S05; do for f in X_time_windows X_raw_windows X_bands_fbcca X_bands_fbcsp y_labels trial_ids window_starts sub_idx window_offsets valid_mask_no_guard; do cmp -s data/processed_continuous/$s/$f.npy data/processed_continuous_p17/$s/$f.npy || echo "DIFF $s $f"; done; done; echo done
+   .venv/bin/python -c "
+   import json, numpy as np
+   for s in ['S01','S02','S03','S04','S05']:
+     a, b = [f'data/{r}/{s}' for r in ('processed_continuous', 'processed_continuous_p17')]
+     y = np.load(a + '/y_labels.npy'); va = np.load(a + '/valid_mask.npy').astype(bool); vb = np.load(b + '/valid_mask.npy').astype(bool)
+     ga, gb = [json.load(open(p + '/windows_meta.json'))['quality']['guard_samples'] for p in (a, b)]
+     st, re = np.isin(y, [101, 102, 103, 104, 105]), y == 201
+     print(s, 'guard', ga, gb, 'valid', int(va.sum()), int(vb.sum()), 'stim', int(va[st].sum()), int(vb[st].sum()), 'rest', int(va[re].sum()), int(vb[re].sum()), 'p17-only', int((vb & ~va).sum()), 'stim mask equal', bool(np.array_equal(va[st], vb[st])))
+   "
+   ```
+   Expected: only `done` from the loop; guard 231 -> 268 on every subject; `p17-only 0`. The printed table is the
+   "valid counts p17 vs P16" of the report.
+3. **D1 (after step 1): real cross-trial gap.**
+   ```bash
+   .venv/bin/python -c "
+   import json, numpy as np
+   for s in ['S01','S02','S03','S04','S05']:
+     d = f'data/processed_continuous_p17/{s}'; m = json.load(open(d + '/windows_meta.json'))
+     y, ids, st = (np.load(f'{d}/{k}.npy') for k in ('y_labels', 'trial_ids', 'window_starts')); v = np.load(d + '/valid_mask.npy').astype(bool)
+     k = v & np.isin(y, [101, 102, 103, 104, 105, 201]); o = np.argsort(st[k], kind='stable'); s2, i2 = st[k][o], ids[k][o]
+     g = (s2[1:] - s2[:-1] - m['n_samples']) / m['fs']; ch = i2[1:] != i2[:-1]
+     print(s, 'min gap between windows of different trials (s):', round(float(g[ch].min()), 3))
+   "
+   ```
+   Expected ≥ 2.0 s on every subject (protocol: 3 s, 201 end to stimulus onset). Below 2.0 s: G2 fails.
+   Dry run of the same snippet on the P16 root (path `data/processed_continuous`): 2.969 s on all five subjects.
+   Starts are byte-identical (D2) and P17 valid ⊆ P16 valid, so the `_p17` value can only be ≥ 2.969 s; the run
+   confirms it.
+4. **D0 (after step 1): base regression on the new root.**
+   `.venv/bin/python -m scripts.benchmarks.feature_based.benchmark_n_subjects --data-root data/processed_continuous_p17 --quality shared --cv-repeats 5 --bank base --classes 5 --out-suffix p17_diag_base_5class_rep5`
+   Expected: for every subject with `stim mask equal True` in D2, `1.0s Acc (%)`, `2.0s Smoothed (%)`, `1.0s SD`,
+   `2.0s SD` and `Clean Windows` equal `reports/n_subjects_benchmark_v2cont.csv` exactly (CSV values identical).
+   A mismatch on such a subject is a regression: verifier FAIL. Subjects with a changed mask: report k removed
+   stimulus windows and Δ. Runtime ≈ 15 s.
+
 Estimate: rebuild ~1 min; P16 5-repeat built runs took < 30 s each; 10 repeats with up to
 5 + 15 + 4 bands and 6 classes, maybe 1–3 min each; total < 30 min plus the ~10 min
 suite, inside `LOCAL_RUN_BUDGET_MIN` 120.
