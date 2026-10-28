@@ -74,3 +74,24 @@ Two of my first mutants survived and exposed weak tests, now fixed: cross-trial 
 - The edge/centre ratio threshold of the tests is 3 (synthetic 15 Hz case); the real-data "much greater" threshold is the reviewer's pre-commit.
 - Flagship legacy-equals-pre-port and the connectivity legacy regressions rely on the builders' tests (not duplicated).
 - Ringing-time tolerance is 1 sample as in the plan.
+
+## Round 1
+
+Fixes covered: 0bd4376 (cv_groups by largest overlap; explicit gate thresholds, R5), 15a601e (connectivity passes GATE), f468113 (a', a't, wider regression check).
+
+Repaired: `test_loader_fs_meta_vs_legacy_vs_override` and `test_quality_modes_shared_nogaurd_perscript` now pass `thresholds` and `channel_fail_fraction` explicitly (shared `GATE` dict). The ml-engineer's 5-line edit to `test_compare_v1_v2_labels_connectivity_filter_mode_not_applicable` was reviewed and kept: with a' = 0.12, b = 0.20 the build step is b - a' = 0.08 and the fs step a' - a = 0.02, which are the correct values under the new table definition; the rest of that test is unchanged.
+
+New tests in `tests/test_p16_independent_known_answer.py` (file now 49 cases, 16 s):
+
+| Test | Known answer | Mutant killed |
+|---|---|---|
+| `test_cv_groups_pair_a_jittered_cue_window_...[8,-8,3]` | 202 window shifted by +-8/3 samples is grouped with the 201 window of largest hand-computed overlap (overlap = 256 - jitter), not an exact-start twin; stimulus groups stay disjoint | exact-start matching in `cv_groups` |
+| `test_r5_per_script_gate_needs_explicit_thresholds_and_fail_fraction` | ValueError for legacy and built per-script without either argument or with only one; shared modes need neither | defaulting thresholds / fail fraction |
+| `test_compare_v1_v2_decomposition_arithmetic_with_a_prime_and_a_prime_t` | 1.0 s: fs 20, build 4, filter 6, guard 3, total 30; 2.0 s: fs 15, smoothing 3, build b - a't = 5, filter 7, total 30; steps sum to c - a | build step taken from a' at 2.0 s |
+| `test_check_regression_*` (identical; one planted value in each of 4 CSVs; changed npz array; missing file; value-equal vs byte-equal) | exit 0 / 1; verdict text byte-equal vs value-equal only (CRLF copy exits 0) | details CSV skipped; byte-equal shortcut (value differences missed); npz result ignored |
+
+Mutants (one-line, reverted, `git status` clean): `cv_groups` exact start; per-script defaults in `_per_script_gate`; `d_build` from a'; `_verdict` always byte-equal; details CSV skipped; npz status ignored. All killed.
+
+Full suite `.venv/bin/python -m pytest tests -o addopts="" -q`: `1089 passed, 21 warnings in 609.52s (0:10:09)`.
+
+Status: READY

@@ -169,6 +169,7 @@ def test_ringing_time_takes_the_longest_filter():
   assert wq.ringing_time_sec([a], FS) > wq.ringing_time_sec([b], FS)         # the narrow band rings longest
 
 
+GATE = {"thresholds": {"vpp_min": 5.0, "vpp_max": 120.0, "std_min": 1.0, "std_max": 35.0}, "channel_fail_fraction": 0.5}
 PARAMS = {"vpp_min": 5.0, "vpp_max": 120.0, "std_min": 1.0, "std_max": 35.0, "channel_fail_fraction": 0.5,
           "artifact_block_sec": 1.0, "guard_sec": 2.0, "guard_rel_amplitude": 0.01}
 NAMES = ["PO3", "POz", "Oz", "O1"]
@@ -260,12 +261,12 @@ def test_loader_fs_meta_vs_legacy_vs_override(built, legacy):
   b = SD.load_subject(built / "S01")
   assert (b["fs"], b["fs_source"], b["built"]) == (256.0, "meta", True)
   assert SD.load_subject(built / "S01", fs_override=250)["fs"] == 250.0
-  l = SD.load_subject(legacy / "S03")
+  l = SD.load_subject(legacy / "S03", **GATE)
   assert (l["fs"], l["fs_source"], l["built"], l["smoothing"]) == (250.0, "legacy-assumed", False, "mod5")
-  lo = SD.load_subject(legacy / "S03", fs_override=256)
+  lo = SD.load_subject(legacy / "S03", fs_override=256, **GATE)
   assert (lo["fs"], lo["fs_source"]) == (256.0, "override") and np.array_equal(lo["X"], l["X"])
   with pytest.raises(ValueError):
-    SD.load_subject(legacy / "S03", bands=("fbcca",))                    # a legacy folder has no saved bands
+    SD.load_subject(legacy / "S03", bands=("fbcca",), **GATE)                    # a legacy folder has no saved bands
   with pytest.raises(ValueError):
     SD.load_subject(built / "S01", quality_mode="bogus")
 
@@ -274,7 +275,7 @@ def test_quality_modes_shared_nogaurd_perscript(built):
   sh = SD.load_subject(built / "S02", quality_mode="shared")
   ng = SD.load_subject(built / "S02", quality_mode="shared-no-guard")
   ps = SD.load_subject(built / "S02", quality_mode="per-script",
-                       thresholds={"vpp_min": 5.0, "vpp_max": 120.0, "std_min": 1.0, "std_max": 35.0})
+                       **GATE)
   assert len(sh["y"]) < len(ng["y"])                                      # the spike at 57.5 s costs guard windows
   lost = set(ng["window_starts"]) - set(sh["window_starts"])
   spike = int(57.5 * FS)
@@ -491,3 +492,122 @@ def test_compare_v1_v2_labels_connectivity_filter_mode_not_applicable(tmp_path):
   assert c.d_obs_diff_build == pytest.approx(0.08)      # b - a' (round 1 fix 3), not b - a
   assert c.d_obs_diff_fs == pytest.approx(0.02)
   assert "same input" in (rep / "v1_vs_v2/v1_vs_v2.md").read_text()
+
+
+# ---------------------------------------------------------------- round 1 fixes
+
+@pytest.mark.parametrize("jitter", [8, -8, 3])
+def test_cv_groups_pair_a_jittered_cue_window_with_the_201_window_it_overlaps_most(tmp_path, jitter):
+  S.write_built_subject(tmp_path, "S01", n_trials=10, seed=5, cue_jitter=jitter)
+  d = SD.load_subject(tmp_path / "S01", conditions=(101, 102, 103, 104, 105, 201, 202))
+  y, ids, grp, st = d["y"], d["trial_ids"], d["cv_groups"], d["window_starts"]
+  for i in np.flatnonzero(y == 202):
+    c = np.flatnonzero(y == 201)
+    ov = np.minimum(st[c], st[i]) + FS - np.maximum(st[c], st[i])        # overlap by hand
+    best = c[int(np.argmax(ov))]
+    assert ov.max() == FS - abs(jitter) and st[i] != st[best]            # not an exact-start twin
+    assert grp[i] == ids[best] == grp[best]
+  assert not set(grp[np.isin(y, STIM)]) & set(grp[~np.isin(y, STIM)])
+
+
+def test_r5_per_script_gate_needs_explicit_thresholds_and_fail_fraction(built, legacy):
+  th = GATE["thresholds"]
+  with pytest.raises(ValueError):
+    SD.load_subject(legacy / "S03")                                         # legacy: the gate always runs
+  with pytest.raises(ValueError):
+    SD.load_subject(legacy / "S03", thresholds=th)
+  with pytest.raises(ValueError):
+    SD.load_subject(legacy / "S03", channel_fail_fraction=0.5)
+  with pytest.raises(ValueError):
+    SD.load_subject(built / "S01", quality_mode="per-script")
+  with pytest.raises(ValueError):
+    SD.load_subject(built / "S01", quality_mode="per-script", thresholds=th)
+  SD.load_subject(built / "S01", quality_mode="per-script", **GATE)          # explicit: fine
+  SD.load_subject(built / "S01", quality_mode="shared")                       # shared decisions need neither
+  SD.load_subject(built / "S01", quality_mode="shared-no-guard")
+
+
+def _frames(vals):
+  return pd.DataFrame({"Subject": ["S01", "Mean"], "1.0s Acc (%)": [vals[0]] * 2, "1.0s SD": [1.0] * 2,
+                       "2.0s Smoothed (%)": [vals[1]] * 2, "2.0s SD": [1.0] * 2})
+
+
+def test_compare_v1_v2_decomposition_arithmetic_with_a_prime_and_a_prime_t(tmp_path):
+  base = tmp_path / "baselines/v1_2026-01-01/reports"
+  base.mkdir(parents=True)
+  _frames((50.0, 60.0)).to_csv(base / "n_subjects_benchmark.csv", index=False)
+  rep = tmp_path / "reports"
+  rep.mkdir()
+  # (1.0 s, 2.0 s) per variant
+  for sfx, v in (("v1rep5", (50.0, 60.0)), ("v1fs256", (70.0, 75.0)), ("v1fs256trial", (70.0, 78.0)),
+                 ("v2pw", (74.0, 83.0)), ("v2cont", (80.0, 90.0)), ("v2cont_noguard", (77.0, 86.0))):
+    _frames(v).to_csv(rep / f"n_subjects_benchmark_{sfx}.csv", index=False)
+  assert cmp.main(["--baselines-dir", str(tmp_path / "baselines"), "--reports-dir", str(rep)]) == 0
+  f = pd.read_csv(rep / "v1_vs_v2/flagship.csv").set_index(["subject", "window"])
+  r1, r2 = f.loc[("S01", "1.0s")], f.loc[("S01", "2.0s")]
+  assert (r1.d_fs, r1.d_build, r1.d_filter_mode, r1.d_guard, r1.d_total) == (20.0, 4.0, 6.0, 3.0, 30.0)
+  assert pd.isna(r1.d_smoothing)
+  # 2.0 s: smoothing rule separated: a' -> a't = +3, build is b - a't = +5 (not b - a' = +8)
+  assert (r2.d_fs, r2.d_smoothing, r2.d_build, r2.d_filter_mode, r2.d_guard, r2.d_total) == (15.0, 3.0, 5.0, 7.0, 4.0, 30.0)
+  assert r2.d_fs + r2.d_smoothing + r2.d_build + r2.d_filter_mode == r2.d_total      # the steps add up to c - a
+  assert r1.d_fs + r1.d_build + r1.d_filter_mode == r1.d_total
+
+
+def _regression_tree(tmp_path, change=None, bytes_only=False):
+  base = tmp_path / "baselines/v1_2026-01-01/reports"
+  rep = tmp_path / "reports"
+  (base / "connectivity_edges").mkdir(parents=True)
+  (rep / "connectivity_edges_v1check").mkdir(parents=True)
+  flag = "Subject,Clean Windows,1.0s Acc (%),2.0s Smoothed (%)\nS01,100,61.0,67.5\nMean,,61.0,67.5\n"
+  summ = "subject,method,condition,frequency_hz,obs_diff,n_edges_sig_fdr\nS01,coherence,101,24.0,0.1,3\n"
+  det = "subject,method,fs\nS01,coherence,250.0\n"
+  alpha = "subject,method,mean_difference\nS01,coherence,0.05\n"
+  for name, txt in (("n_subjects_benchmark", flag), ("connectivity_cohort_summary", summ),
+                    ("connectivity_cohort_summary_details", det), ("connectivity_alpha_diagnostic", alpha)):
+    (base / f"{name}.csv").write_text(txt)
+    new = name.replace("_details", "_v1check_details") if name.endswith("_details") else f"{name}_v1check"
+    t = txt
+    if change and change[0] == name:
+      t = t.replace(*change[1:])
+    if bytes_only and name == "n_subjects_benchmark":
+      t = t.replace("\n", "\r\n")                                         # same values, different bytes
+    (rep / f"{new}.csv").write_text(t)
+  np.savez(base / "connectivity_edges/S01_coherence.npz", a=np.arange(6.0))
+  np.savez(rep / "connectivity_edges_v1check/S01_coherence.npz", a=np.arange(6.0))
+  return tmp_path
+
+
+def _check(tmp_path, capsys):
+  rc = cmp.main(["--baselines-dir", str(tmp_path / "baselines"), "--reports-dir", str(tmp_path / "reports"),
+                 "--check-regression"])
+  return rc, capsys.readouterr().out
+
+
+def test_check_regression_passes_when_identical(tmp_path, capsys):
+  rc, out = _check(_regression_tree(tmp_path), capsys)
+  assert rc == 0 and out.count("byte-equal") == 4 and "1/1 npz" in out
+
+
+@pytest.mark.parametrize("name,old,new", [
+  ("n_subjects_benchmark", "61.0,67.5\nMean", "61.0,67.51\nMean"),                       # one 0.01 value
+  ("connectivity_cohort_summary", "0.1,3", "0.1,4"),
+  ("connectivity_cohort_summary_details", "250.0", "256.0"),
+  ("connectivity_alpha_diagnostic", "0.05", "0.06")])
+def test_check_regression_flags_one_planted_value_in_each_compared_file(tmp_path, capsys, name, old, new):
+  rc, out = _check(_regression_tree(tmp_path, (name, old, new)), capsys)
+  assert rc == 1 and "different" in out
+
+
+def test_check_regression_flags_one_changed_edge_array_and_a_missing_file(tmp_path, capsys):
+  t = _regression_tree(tmp_path)
+  np.savez(t / "reports/connectivity_edges_v1check/S01_coherence.npz", a=np.array([0, 1, 2, 3, 4, 5.5]))
+  rc, out = _check(t, capsys)
+  assert rc == 1 and "0/1 npz" in out
+  t2 = _regression_tree(tmp_path / "b")
+  (t2 / "reports/connectivity_alpha_diagnostic_v1check.csv").unlink()
+  assert _check(t2, capsys)[0] == 1
+
+
+def test_check_regression_distinguishes_value_equal_from_byte_equal(tmp_path, capsys):
+  rc, out = _check(_regression_tree(tmp_path, bytes_only=True), capsys)
+  assert rc == 0 and "value-equal only" in out and out.count("byte-equal") == 3
