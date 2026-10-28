@@ -28,7 +28,7 @@ from typing import Optional, Sequence
 import numpy as np
 
 from src.features.ssvep.spectral_power import LEGACY_FS_HZ
-from src.features.ssvep.window_mask import CHANNEL_FAIL_FRACTION, GATE_THRESHOLDS, channel_report, quality_gate
+from src.features.ssvep.window_mask import channel_report, quality_gate
 from src.io.channels import FULL_MONTAGE, resolve_channel_names, subject_channel_names  # noqa: F401 (re-export)
 from src.preprocessing.dataset.cv_utils import LEGACY_TRIAL_LENGTHS, build_trial_ids, trial_block_report
 
@@ -85,16 +85,19 @@ def _check_trial_order(trial_ids: np.ndarray, offsets: np.ndarray) -> None:
 
 
 def _per_script_gate(X: np.ndarray, y: np.ndarray, names: Sequence[str], thresholds: Optional[dict],
-                     channel_fail_fraction: float) -> dict:
+                     channel_fail_fraction: Optional[float]) -> dict:
   """The P07 two-tier gate on `X (n, C, T)` with explicit thresholds; the decision part of its result."""
-  th = dict(GATE_THRESHOLDS if thresholds is None else thresholds)
+  if thresholds is None or channel_fail_fraction is None:
+    raise ValueError("the per-script gate needs explicit `thresholds` and `channel_fail_fraction` (R5); "
+                     "none is inherited from a default")
+  th = dict(thresholds)
   return channel_report(quality_gate(X, y, list(names), th, channel_fail_fraction))
 
 
 def load_subject(sub_dir, conditions: Sequence[int] = CLASS_CODES, quality_mode: str = "shared",
                  bands: Sequence[str] = (), fs_override: Optional[float] = None,
                  scalp: Optional[Sequence[str]] = None, thresholds: Optional[dict] = None,
-                 channel_fail_fraction: float = CHANNEL_FAIL_FRACTION) -> dict:
+                 channel_fail_fraction: Optional[float] = None) -> dict:
   """Windows of one subject folder for the given condition codes (module docstring).
 
   Returns a dict with: `subject`, `sub_dir`, `built`, `source` (text for report headers), `filter_mode`
@@ -109,7 +112,8 @@ def load_subject(sub_dir, conditions: Sequence[int] = CLASS_CODES, quality_mode:
   gate (None for shared decisions); `per-script` thresholds
   otherwise) and `meta` (the metadata dict, `{}` on legacy folders).
 
-  `bands` names saved banks (`"fbcca"`, `"fbcsp"`, ...) and exists on built folders only. `scalp` names the
+  `thresholds` (the four limits) and `channel_fail_fraction` are REQUIRED whenever the per-script gate runs
+  (`quality_mode="per-script"`, and every mode on a legacy folder): ValueError otherwise (R5). `bands` names saved banks (`"fbcca"`, `"fbcsp"`, ...) and exists on built folders only. `scalp` names the
   channels of a legacy folder without `channels.json`. Raises ValueError for an unknown mode, FileNotFoundError
   for a missing file, RuntimeError for rows that violate the layout.
   """
@@ -159,7 +163,7 @@ def _load_built(d: Path, conds: list, mode: str, banks: tuple, fs_override, thre
     keep_local = np.asarray(dec["valid_mask"]).astype(bool)
     kept, dropped = list(dec["channels_kept"]), list(dec["channels_dropped"])
     source = "per-script P07 two-tier gate rerun on the built windows"
-    params = {**(thresholds or GATE_THRESHOLDS), "channel_fail_fraction": fail_fraction}
+    params = {**thresholds, "channel_fail_fraction": fail_fraction}
     rej = None
     guard, art = None, None
   else:
@@ -175,10 +179,13 @@ def _load_built(d: Path, conds: list, mode: str, banks: tuple, fs_override, thre
   ids, offs = ids_all[sel], offs_all[sel]
   _check_trial_order(ids, offs)
   starts_all = load("window_starts")
-  cv_groups = ids_all.copy()                      # PF-13: a 202 window is the second sample of its 201 twin
-  twin = {int(s): int(t) for s, t in zip(starts_all[y_all == 201], ids_all[y_all == 201])}
+  cv_groups = ids_all.copy()                      # PF-13: a 202 window overlaps a 201 window (same group)
+  i201 = np.flatnonzero(y_all == 201)
+  wlen = X_all.shape[2]
   for i in np.flatnonzero(y_all == 202):
-    cv_groups[i] = twin.get(int(starts_all[i]), ids_all[i])
+    ov = np.minimum(starts_all[i201], starts_all[i]) + wlen - np.maximum(starts_all[i201], starts_all[i])  # overlap
+    if len(ov) and ov.max() > 0:
+      cv_groups[i] = ids_all[i201[int(ov.argmax())]]
   out_bands = {}
   for b in banks:
     f = d / f"X_bands_{b}.npy"
@@ -242,5 +249,5 @@ def _load_legacy(d: Path, conds: list, mode: str, fs_override, scalp, thresholds
                 "channel_stats": dec.get("channel_stats"),
                 "channels_dropped": list(dec["channels_dropped"]), "rejections_by_label": None,
                 "guard_sec": None, "artifact_fraction": None,
-                "params": {**(thresholds or GATE_THRESHOLDS), "channel_fail_fraction": fail_fraction}},
+                "params": {**thresholds, "channel_fail_fraction": fail_fraction}},
     "meta": {}}

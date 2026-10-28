@@ -19,8 +19,9 @@ TARGETS = {101: 24.0, 102: 20.0, 103: 15.0, 104: 10.9091, 105: 8.5714}
 
 
 def make_block(n_trials: int = 10, seed: int = 0, fs: int = FS, tone_amp: float = 6.0, spike_s: Optional[float] = None,
-               bad_channel: Optional[str] = None, truncate_last: bool = False) -> np.ndarray:
-  """`(11, T)` float64 block. `spike_s`: a 500 uV one-sample spike on PO3 at that second; `bad_channel`: that
+               bad_channel: Optional[str] = None, truncate_last: bool = False, cue_jitter: int = 0) -> np.ndarray:
+  """`(11, T)` float64 block. `spike_s`: a 500 uV one-sample spike on PO3 at that second; `cue_jitter`: every 202 mark is moved by that many samples (real cue windows sit up to 8 samples off
+  their 201 twin); `bad_channel`: that
   channel gets noise of std 80 uV (fails the shared gate in every window)."""
   rng = np.random.default_rng(seed)
   codes = rng.permutation(np.tile(np.arange(101, 106), int(np.ceil(n_trials / 5))))[:n_trials]
@@ -31,7 +32,7 @@ def make_block(n_trials: int = 10, seed: int = 0, fs: int = FS, tone_amp: float 
   for i, c in enumerate(codes):
     s = 5 + 15 * i
     for off, code in ((0, 201), (2, 202), (5, int(c))):
-      mark[int((s + off) * fs)] = code
+      mark[int((s + off) * fs) + (cue_jitter if code == 202 else 0)] = code
     a, b = int((s + 5) * fs), int((s + 10) * fs)
     x[:, a:b] += tone_amp * np.sin(2 * np.pi * TARGETS[int(c)] * t[a:b])[None]
   if spike_s is not None:
@@ -74,7 +75,7 @@ def build_params(filter_mode: str = "continuous", banks=("fbcca", "fbcsp"), guar
 def write_built_subject(root: Path, subject: str = "S01", filter_mode: str = "continuous", **kw) -> Path:
   """Build the synthetic recording with the real code and save it as `<root>/<subject>/`."""
   from scripts import build_windows as bw
-  block = make_block(**{k: v for k, v in kw.items() if k in ("n_trials", "seed", "spike_s", "bad_channel", "tone_amp")})
+  block = make_block(**{k: v for k, v in kw.items() if k in ("n_trials", "seed", "spike_s", "bad_channel", "tone_amp", "cue_jitter")})
   params = build_params(filter_mode, banks=kw.get("banks", ("fbcca", "fbcsp")), guard_sec=kw.get("guard_sec", "auto"))
   built = bw.build_subject(block[:8], block[10], float(FS), params)
   meta = bw.build_meta(built, params, float(FS), subject, "OO.ebr", "test")
