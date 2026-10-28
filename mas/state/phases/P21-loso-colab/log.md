@@ -15,3 +15,4 @@
 | 4 Plan (run list) | orchestrator | 2026-10-28 | 02_plan.md measured runtimes added; resume check on summary/per_subject/predictions/confusion | 1 | handoffs | none | |
 | 7 Pre-run audit | scientific-reviewer | 2026-10-28 | FAIL (7facac5): one privacy fix for the orchestrator only (decisions.md P21 row cited the local instructions file by name); code, tests, notebook PASS; B1–B11, P1–P5 copied into 02_plan.md | 1 | R1, R2, R5, R8, PF-31..40 | none | fbcca equality must be per window on matched channels (S02 55, S05 7 mismatches with 8-channel within) |
 | 7 Fix round 1 | orchestrator | 2026-10-28 | source cell replaced by "AGENTS.md compute rules"; HEAD vendor-term scan 0 | 1 | gate rule | none | my own wording error |
+| 7 Pre-run audit round 2 | scientific-reviewer | 2026-10-28 | PASS (8cfa30b): privacy re-scan 0, copy into plan verbatim (76 lines), no code change | 2 | gate rule | none | stray read-only check job stopped by orchestrator |
