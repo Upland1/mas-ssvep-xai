@@ -1,6 +1,6 @@
 # P20 · 07 · Scientific review
 
-Status: READY (pre-run audit); results review pending
+Status: READY (pre-run audit PASS; results review ACCEPT)
 Author: scientific-reviewer
 Reads: 00, 02, 03_changes_* (incl. "Build fix" sections), 04 and every changed file (pre-run); 05, 06 and the CSVs (results)
 
@@ -116,18 +116,171 @@ None (code). Item A is a run-list change.
 
 ## Results review
 
-Verdict: APPROVE / REJECT
+Read: 05_run.md, 06_verify.md (PASS, 8fd6cb0), every log in `reports/logs/P20/` named below, and the CSVs
+`reports/window_sweep/{summary,predictions}.csv`, `reports/nn_sweep/folds.csv`,
+`reports/dynamic_stopping/{per_subject,best_threshold}.csv`, `reports/pseudo_online/{summary,decisions}_ccnn_*.csv`.
+What ran equals what I audited: `git diff --stat db474b6 HEAD -- src scripts tests configs` prints nothing (only
+phase-folder markdown changed since the audit). The P09/P10 test files and their model code are untouched by P20
+(`git diff --stat main...HEAD -- tests/test_p09_compact_shallow.py tests/test_p10_augmentation.py src/models/cnn/`
+lists only the NEW `ccnn.py`, `training.py`).
 
-### Deviations from references
+### Numbers recomputed (read-only)
 
-| Ref | Expected | Obtained (log) | Δ | Within tolerance? | Explanation | Accepted? |
-|---|---|---|---|---|---|---|
-| | | | | | | |
+- Cohort means of `reports/window_sweep/summary.csv` (`groupby(['Method','Window (s)'])` mean): all 36 Acc/ITR
+  values of the 06 cohort table reproduce exactly (e.g. lda 81.80 / 84.37 at 0.5 s; cnn 83.10 / 21.56 at 4 s).
+- `P_2b = 7.0 × 526.1 / 60 = 61.378` (`.venv/bin/python -c "print(7*526.1/60)"`; sum from `nn_sweep/folds.csv`).
+- Pseudo-online summaries: every per-subject and Mean value of the 06 table matches
+  `summary_ccnn_{5,6}class.csv`. The 6-class ITR uses N = 5 (S04: 84.96 in both tags at Acc 100 %, Time 1.14 s), so
+  missed periods count as errors and the rest class earns no bits; the scribe states this.
+- `reports/dynamic_stopping/per_subject.csv`: max `Forced (%)` of lda, threshold 0.5, S03–S05 = 0.0 (P5 holds).
+- R-P9: 16/55 = 29.09 % (5 classes).
+
+### Verifier point 1: hash-pinned P09/P10 tests (determinism)
+
+Diagnosis (my commands, synthetic smoke only):
+`OMP_NUM_THREADS=$t .venv/bin/python -m pytest tests/test_p09_compact_shallow.py::test_eegnet_regression_after_refactor -q -o addopts=""`
+for t = 1, 2, 4, 8, 12, 16 gives hashes `017ccd7b…`, `85bc5950…`, `50934fd3…`, `69bfd29b…`, **pass** (pinned
+`adf2cc7d…`), `2ae23a96…`. `torch.get_num_threads()` in this venv = 12. The hash of the failed run
+(`2ae23a96…`, `pytest_full.log:32,45`) is exactly the 16-thread hash. So the failure is not load-induced randomness:
+the CPU EEGNet smoke output is deterministic for a fixed intra-op thread count and differs bit-wise across thread
+counts (float reduction order). The first suite run executed with 16 intra-op threads (mechanism not recoverable from
+the logs; nothing in `src/ scripts/ tests/ configs/` sets thread counts, `grep -rn "NUM_THREADS\|set_num_threads"`
+empty). The pin is therefore valid only for 12 threads on this machine.
+
+Judgement: a test-design fragility of P09/P10 tests, not a determinism defect of P20 code. P20's own determinism
+evidence is check E (GPU, same machine: sweep cnn 1 s vs NN-sweep compact_eegnet, max |Δp| = 0.0 over 3329 rows).
+No P20 fix; carry-forward C-1 below.
+
+### Verifier point 3: cnn (compact_eegnet) collapse
+
+Per-fold lines (`window_sweep_2b_w4.log:4-17`, `window_sweep_2b_w0.5.log:11-16`):
+
+| Cell | Fold: train % / val % / best epoch / epochs run |
+|---|---|
+| S02 4 s (Acc 39.56) | f0 29.31 / 25.00 / **1** / 26; f1 100 / 46.67 / 106 / 131; f2 100 / 43.33 / 35 / 60; f3 95.69 / 46.67 / 20 / 45; f4 42.74 / 26.67 / **2** / 27 |
+| S02 0.5 s (Acc 42.96) | f0 30.50 / 15.04 / **2** / 27; f1 87.53 / 48.87 / 44 / 69; f2 66.36 / 45.86 / 20 / 45; f3 96.19 / 65.55 / 74 / 99; f4 29.24 / 23.68 / **3** / 28 |
+| S01 4 s (Acc 77.00) | train 100 in all folds; val 88.57, 85.71, **57.14**, 97.14, 94.29 |
+
+Cohort-wide, only four folds restored a state from epoch ≤ 5 (`grep -c "best epoch [1-5]/"` per 2b log: w0.5 2,
+w1 0, w1.5 0, w2 0, w3 0, w4 2), all S02, at the two endpoint lengths. In those folds the validation loss was lowest
+after 1–3 epochs, patience 25 then stopped training, and `fit_network` restored a near-untrained network (train acc
+29–43 %, chance 20 %). This is an early-stopping / model-selection artefact on a low-SNR subject with small
+validation sets (S02 4 s: 182 windows, ~146 training, ~30 validation of ~6 trials), not a capacity limit of
+compact_eegnet at 4 s and not a leak (a leak raises accuracy). S01 4 s is ordinary overfitting with 160 training
+windows (one fold val 57 %). The S02 0.5 s cell (42.96 %), which the verifier did not flag, has the same cause and
+must be worded the same way. Both 4 s logs (w3, w4) also show a CUDA caching-allocator OOM *warning*
+(`window_sweep_2b_w3.log:14`, `w4.log:13`); `training.py` has no OOM handler or CPU fallback, so an unrecovered OOM
+would have raised; the folds completed, and this is a non-fatal allocator retry.
+
+Wording (binding for the scribe): "cnn (compact_eegnet) cells for S02 at 0.5 s and 4 s include two folds each in
+which early stopping restored the epoch-1–3 state (train accuracy 29–43 %); these cells, single-repeat (no seed
+variance, R-P2), measure a failure of the validation-loss early-stopping rule on S02, not the network's accuracy
+at those lengths. The cohort cnn drop at 4 s is driven by S02 (39.56 %) and S01 (77.00 %)." Never "CNNs degrade
+at long windows". Without S02 the cnn cohort mean is 90.19 % at 0.5 s and 93.98 % at 4 s (lda 87.09 / 98.75); this is
+a sensitivity line, not a replacement row (`s[s.Method.str.startswith('cnn') & (s.Subject != 'S02')].groupby('Window (s)')['Acc (%)'].mean()` on
+`reports/window_sweep/summary.csv`, same for `lda`).
+
+Effect on conclusions:
+- P1 cnn endpoint (83.10 > 80.75) holds as worded, but both endpoints carry the S02 failure; report "holds,
+  uninformative about window length". It also holds without S02 (93.98 > 90.19).
+- P3 cnn vs lda at 4 s: −14.94 pp with per-subject signs −18.00, −55.60, −1.08, 0, 0 (3 negative, 2 zero). By R-P5
+  (≥ 4 of 5 same sign) this is **not a difference**; 06's phrase "cnn is 14.94 pp lower" must carry "not
+  distinguishable by R-P5 (3 of 5 negative, single CNN repeat)". At 1 s cnn − lda = +2.19 (5 of 5 positive) is < 3 pp:
+  not distinguishable.
+- P2 for cnn holds regardless (ITR max at 0.5 s); the dynamic-stopping cnn rows at 4 s (82.34 %, Forced 20.28 %)
+  and 0.5 s inherit the failure and carry the same note.
+- No fbcca, lda, NN-sweep or pseudo-online conclusion depends on these cells.
+
+### A-priori directions (outcomes as pre-committed, not re-worded)
+
+| Prediction | Outcome | Basis (06_verify.md, CSVs) |
+|---|---|---|
+| P1 fbcca, lda | holds | strict rise 0.5→2 s; 2→3→4 s no fall > 1 pp; 0 per-subject decreases > 2 pp |
+| P1 cnn endpoints | holds (uninformative, see point 3) | 83.10 > 80.75 |
+| P2 | holds | 4 s below max for all three; lda cohort peak 0.5 s; lda peaks S03–S05 0.5 s, S01/S02 1.0 s |
+| P3 lda ≥ fbcca | holds | every length; 5/5 subjects at 1 s and 2 s; no cnn gain ≥ 5 pp (max +2.19), no leak check triggered |
+| P4 | holds | all > 20 %; ccnn 91.25 ≥ eegnet 89.69 (not a difference by R-P5: 2 positive, 1 negative, 2 zero); Train ≥ Val for all |
+| P5 | holds | G invariants; Forced 0.0 at thr 0.5 for S03–S05; lda best-threshold vs time-matched 61.53 vs 60.23 (0.5 s), 53.73 vs 53.48 (1 s) |
+| P6(a) | **fails as worded** (holds in 4 of 5) | S04 0.0 vs 0.0 with 40 scored rest periods: not lower. Floor effect (no 5-class false activation to remove), but the prediction said "in every subject with ≥ 1 scored rest period", so it fails |
+| P6(b) | holds | Acc6 ≤ Acc5 in 5/5 (S04 equal) |
+| P6(c) | holds | min(S03–S05) 97.50 > max(S01, S02) 90.00 |
+
+P6(a) is recorded as a failed pre-registered prediction with the reason (floor); the report must not reword it to
+"lower or equal". P5's time-matched margin (1.30 and 0.25 bits/min) is smaller than the optimism of choosing the
+best of 6 thresholds in-sample while the comparator involves no selection: "holds" is reported with that caveat and
+is not evidence that dynamic stopping beats a fixed window.
 
 ### Interpretation check
 
-### Decisions for decisions.md
+- **Sweep (R-P1–R-P3, R-P11).** Directions accuracy↑ with L and ITR peak at short L hold for every method. ITR is a
+  window-level rate (T = L + 0.5 s on windows pooled over all offsets), not a trial-level online rate. No R-16
+  numbers exist; stride 0.25 s vs earlier 1 s builds named in any comparison. lda vs fbcca is a difference
+  (R-P5) at 0.5–2 s only.
+- **Dynamic stopping (R-P4, R-P6).** Thresholds are chosen per method and window on the reported data: "selected
+  in-sample, descriptive", never the system ITR; the CSV column `Best (ITR)` is an in-sample flag. Several choices
+  sit on the grid edge (cnn 0.5 at 0.5–2 s, the grid minimum; lda 0.95 at 1.5–3 s, the grid maximum), so the
+  in-sample optimum may lie outside the grid; state it. Against the roadmap fixed-window ITR, dynamic stopping is
+  lower (61.53 vs 84.37 at 0.5 s), which is the comparator's time accounting (pre-run note), not a loss.
+- **Pseudo-online 5 vs 6 (R-P7, R-P9, R-P12).** The rest class trades stimulus detection for fewer false
+  activations: mean False act. 27.5 → 5.0 %, mean Acc 89.0 → 74.0 %. R-P12 pooled: Acc5 − Acc6 = 15.0 pp = 17.5
+  (correct5, wrong6; of which 16.0 missed, 1.5 wrong class) − 2.5 (wrong5, correct6). The drop is almost entirely
+  stimulus periods absorbed by the rest class, concentrated in S01 (Missed 50.0 %) and S02 (52.5 %); in S03–S05 the
+  cost is ≤ 5 pp with false activations → 0. Words: "the 6-class detector converts false activations into missed
+  stimulus periods in low-SNR subjects", never "6 classes is worse/better" without both numbers. ITR6 uses N = 5
+  (above). R-P9: every false activation in both tags occurs at `time_sec` ≤ 2 s into the [o − 5, o) segment, i.e. in
+  the fixation part, not during the cue (2–4 s); the cue-contamination concern of the pre-run audit is therefore not
+  supported by timing. The next-target share is 29.1 % (16/55, 5 classes; one-sided binomial vs 20 %, p = 0.069) and
+  60 % (6/10, 6 classes; p = 0.0064), `scipy.stats.binomtest(...,alternative='greater')`; post hoc, n = 10:
+  descriptive only, no mechanism claimed. Pseudo-online accuracies are cross-session period-level decisions and are
+  not compared with within-session window-level CV (R-P7). The channel check dropped nothing (`Dropped at check` 0);
+  R-P8 not applicable; no fallback subject.
+- **R9.** Every per-subject table carries its data source (sweep, NN sweep, dynamic stopping: "continuous build
+  (w<L>_s0.25/<S>), session OO"; pseudo-online: "OO->mOO …, session files"); the sweep reports 1.0 s and 2.0 s per
+  subject (unsmoothed by roadmap design, which the scribe states instead of "smoothed").
+- **R11.** Access log 42 lines, last entry P19 scribe (07:41:21); no P20 entry; handoffs state none. Consistent.
+- **Traceability.** Every number above comes from the named CSV/log or a shown command; 06's derived values come
+  from `reports/logs/P20/analysis_*.txt`.
 
-## Sources spot-check
+### Accepted deviations (copy into decisions.md)
+
+| ID | Deviation | Why accepted |
+|---|---|---|
+| D-1 | First full-suite run `2 failed, 1295 passed` (P09/P10 EEGNet hash pins); isolated re-run `1297 passed` | Cause shown: the pinned hash is the 12-thread output; the failed run used 16 intra-op threads (hash `2ae23a96…` = 16-thread hash). P09/P10 code unchanged by P20. Not a P20 defect |
+| D-2 | P6(a) fails as worded (S04 0.0 vs 0.0) | Pre-registered; recorded as failed with the floor-effect reason; holds in 4 of 5 |
+| D-3 | cnn (compact_eegnet) S02 cells at 0.5 s and 4 s are early-stopping failures (two folds each restored epoch 1–3); S01 4 s overfitting | Single-repeat cells reported with the binding wording above; no conclusion rests on them; cnn vs lda at 4 s not a difference by R-P5 |
+| D-4 | Dynamic-stopping thresholds selected in-sample, several at the grid edge | Pre-registered as descriptive (R-P4) |
+| D-5 | CUDA allocator OOM warnings in 2b w3/w4 logs | Non-fatal allocator retry; no fallback path exists; folds completed, check E exact at 1 s |
+| D-6 | `sweep_config.json` holds only the last 2b invocation's window list | Pre-run note 2; provenance in 05_run.md |
+
+### Carry-forwards
+
+| ID | Owner | Lesson / action |
+|---|---|---|
+| C-1 | synthetic-tester (next phase touching tests) | Bit-exact CPU hash pins (`EEGNET_SMOKE_PROBA_SHA256` and any similar) depend on the intra-op thread count. Pin inside a fixed `torch.set_num_threads(1)` context (restored after), re-derive the hash from `main` code (P09 lesson), and add a tolerance comparison of `proba` as the semantic check. Verifier: run the full suite alone and record `torch.get_num_threads()` |
+| C-2 | deep-learning (P21+ CNN/GNN) | Log and flag folds whose restored best epoch ≤ 5 or whose restored train accuracy < chance + 10 pp; report the count per cell. Any rule change (min epochs before selection, larger validation share) is a pre-registered method change, not a retro-fix of P20 |
+| C-3 | orchestrator / reviewer | CNN cells with 1 repeat cannot separate an optimisation failure from seed variance; when a single CNN cell drives a cohort change > 5 pp, request ≥ 3 repeats of that cell before interpreting it |
+| C-4 | scribe | Dynamic-stopping thresholds at the grid edge are named as such; ITR6 uses N = 5 |
+| C-5 | open (P17 C-d, C-e; B003) | P17 ablation and rates-by-position questions stay open; B003 must be resolved before P21 opens |
+
+### Binding items for the scribe (mas/state/reports/P20.md)
+
+1. Point 3 wording verbatim; S02 0.5 s cell named as well as 4 s; sensitivity line without S02 labelled as such.
+2. P6(a) "fails as worded (S04 0.0 vs 0.0, floor)"; P1 cnn "holds, uninformative".
+3. cnn vs lda at 4 s and ccnn vs eegnet: "not distinguishable (R-P5, single CNN repeat)".
+4. Dynamic stopping: "selected in-sample, descriptive", grid-edge thresholds named, time-matched margin caveat.
+5. Pseudo-online: both accuracy and false-activation changes, R-P12 decomposition, R-P9 timing result, ITR6 N = 5,
+   no cross-session vs within-session comparison.
+6. Pre-run note 4 (R10, "Bjorck-Golub equivalence") still applies.
+
+### Sources spot-check
+
+Opened this run: `mas/state/phases/P20-detection-online/02_plan.md` (settled points 4, 5, 7, 9, 10; A–I, S, P1–P6,
+R-P1–R-P12), `05_run.md`, `06_verify.md`, `src/models/cnn/training.py:70-176` (`predict_proba`, `fit_network`
+best-state restore, no OOM handler), `scripts/benchmarks/benchmark_window_sweep.py:245-262` (device, cudnn
+deterministic), `scripts/benchmarks/pseudo_online.py` lines 73, 150-161, 209-223, 244-262 (REST_SEC segment,
+`time_sec` = offset + window), `tests/test_p09_compact_shallow.py:23,94-97`. No reference code opened; no external
+source cited.
+
+Verdict: ACCEPT
 
 ## Questions
