@@ -189,6 +189,25 @@ Non-blocking:
 - **A (a′t):** per subject, the a′t `1.0s Acc (%)` and `1.0s SD` equal those of a′ exactly. The smoothing changes the 2.0 s column only, and the splits and models are identical. The Clean and Rejected Windows are equal between a, a′ and a′t. The Round 1 binding check stands: `d_smoothing` = 0.00 exactly on S01 and S05.
 - **B (connectivity a′):** the `n_stim_windows` and `n_baseline_windows` counts and the `trial_ids_approximate` flags in `_details` are equal between a′ and the frozen a, for every subject, method and condition. The fs override does not touch the gate or the ids (consistent with `test_legacy_cohort_fs256_flag_changes_only_the_axis`). The identity cells of Round 1 (PLV/wPLI at 101/102/105 and coherence at 105: identical `obs_diff`, `p_one_tailed` and `n_edges_sig_fdr`) apply to the a vs a′ pair as written.
 
+## Pre-run audit — Round 2 (post-verify fix)
+
+Verdict: **PASS**.
+
+**What the verifier found.** `06_verify.md` (bd55527) failed criterion (2) on one point only. Fifteen of the 20 identical edge npz files hold NaN diagonals (coherence, PLV and wPLI, 5 subjects each), and plain `np.array_equal` treats NaN ≠ NaN. All four CSVs were byte-equal.
+
+**What the fix changes.** The fix is 9b297c0, documented in 45a1d79. `git diff 9b297c0~1 45a1d79 -- scripts src` touches only `scripts/diagnostics/compare_v1_v2.py` (+9/−2). The new `_arrays_equal`:
+- requires equal shape and equal dtype, which is stricter than before;
+- then calls `np.array_equal(..., equal_nan=True)`, for float/complex dtypes only.
+
+**Why this does not loosen anything.**
+- `equal_nan` is aligned by position and stays exact everywhere else: `[nan, 1]` vs `[nan, 1]` → True, `[nan, 1]` vs `[1, nan]` → False, and a difference of 1e-12 → False (command: `.venv/bin/python -c "...np.array_equal(..., equal_nan=True)..."` → `True False False`).
+- The CSV verdicts (byte-equal / value-equal only / different), the missing-file handling and the key-set check are unchanged.
+- The tester's Round 2 cases cover NaN vs number in both directions, 0.5 and 1e-12 differences, shape, dtype, extra key and missing key. These kill the `equal_nan=False`, no-dtype-check and `allclose` mutants. The surviving "no explicit shape check" mutant is equivalent, because `array_equal` already returns False on a shape mismatch.
+
+**Criterion (2) is unchanged.** I wrote "array_equal per key" to mean exact identity of every value. A diagonal NaN means "no value" and is not part of the data being compared. Reading NaN at the same position as equal is therefore what I intended; I did not intend plain `array_equal` NaN semantics. A NaN at a position where the other file holds a number still counts as a difference.
+
+**Rerun scope is sufficient.** The fix touches no producer, and `compare_v1_v2` only reads files. The only output that depends on it is `reports/v1_vs_v2/`. So rerunning the full suite, command 17 (`--check-regression`) and command 18 (the table) on the same outputs covers everything. Command 17 must now exit 0 and report 20/20 npz equal together with the four CSV byte-equal verdicts. If it does, criterion (2) is met.
+
 ## Results review
 
 Verdict: APPROVE / REJECT
