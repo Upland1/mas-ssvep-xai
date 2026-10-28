@@ -111,3 +111,25 @@ None. `reference/ssvep-eeg-xai/` was not opened.
 1. `mas/01_DATA_SPEC.md` §3, §5, §6; `mas/02_REQUIREMENTS.md` §3, §6 (opened in this run).
 2. `mas/05_PITFALLS.md` PF-04, PF-13, PF-14 (opened via the plan's table) and P05/P07 code in `src/` (opened in this run).
 3. Chen et al. 2015, J. Neural Eng. 12:046008 (FBCCA bank), as cited in `src/features/ssvep/fbcca_extraction.py`.
+
+## Round 1 fixes
+
+Commit: see `git log` entry "fix: cv_groups pair 202 with its 201 twin by overlap; load_subject requires explicit gate thresholds (R5)" and the handoff commit after it.
+
+1. **R1/PF-13 (`src/io/subject_data.py`)**: `cv_groups` gives a 202 window the id of the 201 window it overlaps most (window length from `X_time_windows`), no longer an exact start match; a 202 window with no overlapping 201 window keeps its own id. `tests/p16_synth.make_block` gained `cue_jitter` (moves every 202 mark). New test `test_cv_groups_pair_a_jittered_cue_window_by_overlap` (8-sample jitter; fails with exact-start matching).
+2. **R5**: `load_subject(..., thresholds=None, channel_fail_fraction=None)` now raises `ValueError` ("explicit") whenever the per-script gate runs: `quality_mode="per-script"` on any folder, and every mode on a legacy folder. `shared` / `shared-no-guard` on a built folder need neither. `GATE_THRESHOLDS` / `CHANNEL_FAIL_FRACTION` are no longer imported. New test `test_per_script_gate_without_explicit_thresholds_raises_r5`; my tests pass thresholds explicitly.
+
+Targeted run: `pytest tests/test_p16_*.py` -> my modules (`test_p16_subject_data`, `windowing`, `window_quality`, `build_windows`, `freeze_baseline`, `edge_effects`) pass. 8 failures in other owners' tests, all from fix 2 (expected, they fix them):
+- `tests/test_p16_connectivity_port.py`: `test_legacy_loader_equals_pre_port_loader[False/True]`, `test_legacy_cohort_equals_pre_port_flow[trial/window]`, `test_legacy_single_subject_and_other_scripts_equal_pre_port`, `test_legacy_fs_override_changes_only_the_axis` (via `load_condition_windows`).
+- `tests/test_p16_independent_known_answer.py`: `test_loader_fs_meta_vs_legacy_vs_override` (legacy `load_subject` without thresholds, lines 263-265), `test_quality_modes_shared_nogaurd_perscript` (line 276 passes `thresholds` but not `channel_fail_fraction`).
+
+Callers of `load_subject` (grep of `src`, `scripts`, `tests`):
+
+| Caller | Passes thresholds and fail fraction? |
+|---|---|
+| `scripts/benchmarks/feature_based/benchmark_n_subjects.py:198` | yes (`thresholds=thresholds, channel_fail_fraction=fail_fraction`) |
+| `src/features/connectivity/connectivity_extraction.py:312` (`load_condition_windows`) | **no**: needs both; this is the single entry used by `analyze_connectivity.py`, `analyze_connectivity_cohort.py`, `test_connectivity_frequency_differences.py::load_subject_groups` and `check_power_alpha_confound.py` (any caller of `load_condition_windows` must forward them) |
+| `tests/test_p16_flagship_port.py:60` | yes; lines 93, 111, 123-127, 182 use built folders with `shared` modes (no gate needed) |
+| `tests/test_p16_connectivity_port.py:152,176,177` | built `shared` / `shared-no-guard` (no gate needed); other tests there reach the legacy gate through `load_condition_windows` (fail now) |
+| `tests/test_p16_independent_known_answer.py:246-276,345-356,451` | built `shared` calls fine; legacy calls at 263-265 and per-script at 276 fail (see above) |
+| `tests/test_p16_subject_data.py` (mine) | yes |
