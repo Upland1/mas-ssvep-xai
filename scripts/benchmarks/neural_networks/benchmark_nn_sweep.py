@@ -100,7 +100,7 @@ def run_subject_model(d: dict, model: str, window: float, args, dev: str, thresh
   """CV of one subject x model. Returns `(summary_row, fold_rows, prediction_frame, confusion_counts)`."""
   classes, to_idx = label_maps(d["y"])
   yi = np.array([to_idx[int(c)] for c in d["y"]])
-  groups, ids, offs = np.asarray(d["cv_groups"]), np.asarray(d["trial_ids"]), np.asarray(d["offsets"])
+  groups, ids, offs = np.asarray(d["cv_groups"]), np.asarray(d["trial_ids"]), np.asarray(d["offsets"]) / float(d["fs"])  # window_offsets.npy are samples
   X, fs = d["X"], float(d["fs"])
   n_cls = len(classes)
   accs, fold_rows, preds, runs_pred = [], [], [], []

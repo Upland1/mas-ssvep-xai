@@ -109,3 +109,10 @@ Estimates for 5 subjects x 5 folds = 25 folds (windows per trial before quality 
 | (for reference) eegnet at all L | | 57.6 min | 38.4 min |
 
 Budget consequence: commands 2-cnn + 3 = about 150 min worst case (100 min typical) against `LOCAL_RUN_BUDGET_MIN` 120 and `MAX_GPU_HOURS_PER_PHASE` 2 (GPU hours: 2.5 worst, 1.7 typical), before the LDA/FBCCA part and the builds. The plan's budget clause applies: the CNN part of the window sweep is a candidate human run; command 3 alone fits (20-31 min). compact_eegnet is GPU-bound (96 filters, batch 16, small kernels); lowering batch count is not possible without changing the settled batch 16.
+
+## Build fix
+
+`benchmark_nn_sweep.py` wrote `offset_sec` from `load_subject(...)["offsets"]`, which are in samples (`window_offsets.npy`). Now `offsets / d["fs"]` (same fix as the window sweep, 54156df). New test `test_nn_sweep_offset_sec_is_in_seconds` (`tests/test_p20_networks.py`) runs the CLI on a synthetic built folder and checks `predictions.csv` offsets are seconds; it fails on the old line. P20 tests: 19 passed.
+
+Suite (`.venv/bin/python -m pytest tests/ -q -o addopts=""`, log `mas/state/scratch/suite_p20_dl2.log`):
+`1276 passed, 22 warnings in 806.36s (0:13:26)`

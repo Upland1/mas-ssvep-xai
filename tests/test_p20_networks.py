@@ -191,3 +191,19 @@ def test_nn_sweep_cli_synthetic(tmp_path, capsys):
   assert {"Val Acc (%)", "Best Epoch", "Train Acc (%)", "ITR (bits/min)"} <= set(df.columns)
   pr = pd.read_csv(tmp_path / "out" / "predictions.csv")
   assert {"trial_id", "offset_sec", "p_101", "p_105"} <= set(pr.columns)
+
+
+def test_nn_sweep_offset_sec_is_in_seconds(tmp_path):
+  """Built folders store window offsets in samples (multiples of fs/4 here); predictions.csv must give seconds."""
+  import pandas as pd
+  from scripts.benchmarks.neural_networks import benchmark_nn_sweep as B
+  from src.io.subject_data import load_subject
+  from tests import p16_synth as S
+  S.write_built_subject(tmp_path / "w1_s0.25", "S01", n_trials=20)
+  d = load_subject(tmp_path / "w1_s0.25" / "S01", quality_mode="shared")
+  assert np.asarray(d["offsets"]).max() > 100  # samples
+  assert B.main(["--data-root", str(tmp_path), "--windows", "1", "--models", "eegnet", "--max-epochs", "1",
+                 "--max-folds", "1", "--device", "cpu", "--out-dir", str(tmp_path / "out")]) == 0
+  pr = pd.read_csv(tmp_path / "out" / "predictions.csv")
+  assert pr["offset_sec"].max() <= 5.0
+  assert set(np.round(pr["offset_sec"], 6)) <= set(np.round(np.unique(d["offsets"]) / d["fs"], 6))
