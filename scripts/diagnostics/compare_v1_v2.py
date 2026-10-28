@@ -9,7 +9,8 @@ Flagship (`reports/n_subjects_benchmark_<suffix>.csv`, 5 repeats, seeds 42+r), p
   c'   continuous, shared-no-guard, suffix v2cont_noguard   guard effect     = c - c'
 Connectivity (`reports/connectivity_cohort_summary_<suffix>.csv`, joined on subject, method, condition,
 frequency): a = frozen `baselines/v1_*/reports/connectivity_cohort_summary.csv`, b = v2pw, c = v2cont,
-c' = v2cont_noguard; obs_diff, p_one_tailed, n_edges_sig_fdr per variant and the differences c - b, c - c', b - a.
+c' = v2cont_noguard; obs_diff, p_one_tailed, n_edges_sig_fdr per variant and the differences b - a and c - c'; the filter-mode column is "not applicable (same input)" (both build modes filter the
+broadband windows continuously; the effect is flagship only).
 
 Outputs in `--out-dir` (default reports/v1_vs_v2): flagship.csv, connectivity.csv, v1_vs_v2.md. A file that does not
 exist leaves its columns empty and is named on the console. `--check-regression` instead compares
@@ -41,6 +42,7 @@ if str(ROOT) not in sys.path:
 FLAGSHIP_VARIANTS = {"a": "v1rep5", "a_prime": "v1fs256", "b": "v2pw", "c": "v2cont", "c_prime": "v2cont_noguard"}
 CONN_VARIANTS = {"b": "v2pw", "c": "v2cont", "c_prime": "v2cont_noguard"}
 FLAG_METRICS = {"1.0s": ("1.0s Acc (%)", "1.0s SD"), "2.0s": ("2.0s Smoothed (%)", "2.0s SD")}
+NOT_APPLICABLE = "not applicable (same input)"
 CONN_KEY = ["subject", "method", "condition", "frequency_hz"]
 CONN_VALUES = ["obs_diff", "p_one_tailed", "n_edges_sig_fdr"]
 
@@ -103,7 +105,7 @@ def connectivity_table(frozen: Optional[pd.DataFrame], variants: dict) -> pd.Dat
         merged[f"{v}_{k}"] = np.nan
   for v in CONN_VALUES:
     merged[f"d_{v}_build"] = merged[f"{v}_b"] - merged[f"{v}_a"]
-    merged[f"d_{v}_filter_mode"] = merged[f"{v}_c"] - merged[f"{v}_b"]
+    merged[f"d_{v}_filter_mode"] = NOT_APPLICABLE   # connectivity reads the broadband windows: same input in b and c
     merged[f"d_{v}_guard"] = merged[f"{v}_c"] - merged[f"{v}_c_prime"]
   return merged.sort_values(["method", "frequency_hz", "subject"]).reset_index(drop=True)
 
@@ -126,14 +128,14 @@ def markdown(flag: pd.DataFrame, conn: pd.DataFrame) -> str:
     out.append("")
   if len(conn):
     out += ["## Connectivity (cohort summary; edges significant after FDR / one-tailed global p)", "",
-            "| Subject | Method | Hz | FDR a | FDR b | FDR c | FDR c' | p a | p b | p c | p c' | dFDR filter mode | dFDR guard |",
+            "| Subject | Method | Hz | FDR a | FDR b | FDR c | FDR c' | p a | p b | p c | p c' | filter mode | dFDR guard |",
             "|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for _, r in conn.iterrows():
       g = lambda k: "" if pd.isna(r[k]) else f"{r[k]:.0f}"
       p = lambda k: "" if pd.isna(r[k]) else f"{r[k]:.3f}"
       out.append(f"| {r['subject']} | {r['method']} | {r['frequency_hz']:g} | {g('n_edges_sig_fdr_a')} | {g('n_edges_sig_fdr_b')} | "
                  f"{g('n_edges_sig_fdr_c')} | {g('n_edges_sig_fdr_c_prime')} | {p('p_one_tailed_a')} | {p('p_one_tailed_b')} | "
-                 f"{p('p_one_tailed_c')} | {p('p_one_tailed_c_prime')} | {g('d_n_edges_sig_fdr_filter_mode')} | "
+                 f"{p('p_one_tailed_c')} | {p('p_one_tailed_c_prime')} | n/a (same input) | "
                  f"{g('d_n_edges_sig_fdr_guard')} |")
     out.append("")
   return "\n".join(out)

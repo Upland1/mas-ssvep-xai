@@ -42,9 +42,10 @@ def test_effects_are_plain_differences(tmp_path):
   c = pd.read_csv(t / "reports" / "v1_vs_v2" / "connectivity.csv")
   q = c[c["method"] == "plv"].iloc[0]
   assert (q["n_edges_sig_fdr_a"], q["n_edges_sig_fdr_b"], q["n_edges_sig_fdr_c"], q["n_edges_sig_fdr_c_prime"]) == (2, 3, 5, 4)
-  assert (q["d_n_edges_sig_fdr_filter_mode"], q["d_n_edges_sig_fdr_guard"], q["d_n_edges_sig_fdr_build"]) == (2, 1, 1)
+  assert (q["d_n_edges_sig_fdr_guard"], q["d_n_edges_sig_fdr_build"]) == (1, 1)
+  assert (c["d_n_edges_sig_fdr_filter_mode"] == "not applicable (same input)").all()   # decision: same input in b and c
   md = (t / "reports" / "v1_vs_v2" / "v1_vs_v2.md").read_text()
-  assert "## 1.0s window" in md and "## Connectivity" in md and "| S01 | 60.00 | 60.00 (1.50) | 70.00 (1.50)" in md
+  assert "## 1.0s window" in md and "## Connectivity" in md and "| S01 | 60.00 | 60.00 (1.50) | 70.00 (1.50)" in md and "n/a (same input)" in md
 
 
 def test_missing_variant_leaves_empty_columns(tmp_path):
