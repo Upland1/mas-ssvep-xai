@@ -1,4 +1,5 @@
-# config v2 (P07): all 8 scalp channels; the quality gate decides which are kept (PF-05).
+# config v3 (P16, final): 1-90 Hz + 60 Hz notch, shared quality block, filter-bank block (used from P17).
+# P07: all 8 scalp channels; the quality gate decides which are kept (PF-05).
 project:
   name: "ssvep-eeg-xai"
   target_conditions: [201, 202, 101, 102, 103, 104, 105]
@@ -15,7 +16,9 @@ channels:
   auxiliary: ["TIMESTAMP", "FLASHINGTIME"]
 preprocessing:
   lowcut_hz: 1.0
-  highcut_hz: 60.0
+  highcut_hz: 90.0     # keep harmonics up to 72 Hz (the legacy P02 script pins 60 Hz)
+  notch_hz: 60.0       # mains
+  notch_q: 30.0
   filter_order: 4
   sub_window_sec: 1.0
   vpp_thresh_uv: 200.0
@@ -26,6 +29,17 @@ preprocessing:
     stimulus_duration_sec: 5.0
     pre_stim_cross_sec: 2.0
     cue_lookback_sec: 1.0
+quality:
+  vpp_range_uv: [5.0, 120.0]
+  std_range_uv: [1.0, 35.0]
+  channel_fail_fraction: 0.5
+  artifact_block_sec: 0.25
+  guard_sec: auto                # = longest filter ringing time
+  guard_rel_amplitude: 0.01
+  source: filtered               # P19 changes the default to: both
+filter_bank:                     # P17
+  harmonics:    {enabled: true, n_harmonics: 3, half_width_hz: 1.0, order: 2}
+  intermediate: {enabled: true, half_width_hz: 1.0, order: 2}
 features:
   psd_range_hz: [5.0, 35.0]
   plotting_range_hz: [1.0, 60.0]
