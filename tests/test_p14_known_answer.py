@@ -661,7 +661,8 @@ def test_subject_rows_use_o1_oz_o2_by_name_with_a_dropped_channel(monkeypatch):
   stim[104][:, [0, 2], :] -= 0.9 * np.sin(2 * np.pi * F_T1091 * np.arange(256) / FS)   # PO3, POz would give < 0
   w = np.concatenate([stim[c] for c in sorted(stim)] + [base])
   y = np.concatenate([np.full(n_t, c) for c in sorted(stim)] + [np.full(n_b, 201)])
-  monkeypatch.setattr(c3, "load_gated_conditions", lambda root, s: dict(windows=w, y=y, channels_kept=kept))
+  monkeypatch.setattr(c3, "load_condition_windows",
+                      lambda root, s, q, fs: dict(windows=w, y=y, channels_kept=kept, fs=float(FS)))
   rows = pd.DataFrame(c3.subject_rows(Path("."), "S01", FS)).set_index("condition")
   assert rows.loc[104, "channels_used"] == "O1;O2"
   assert rows.loc[104, "target_snr_db"] == pytest.approx(6.0, abs=0.5)

@@ -1,8 +1,10 @@
 """Split-half reliability and pairwise frequency tests of connectivity deltas (P14.2, R4, R7, PF-19, PF-22).
 
-Methods: coherence, PLV, wPLI (PDC excluded, directed). Data source: legacy folders <data-root>/<S>/ (P02, raw
-windows), conditions 101-105 and 201; ONE P07 two-tier gate per subject (the P13 loader); trial ids from the
-pre-gate labels (PF-03; S02/S04 are approximate, P11 D-2, flagged in the CSV); fs-250 axis (PF-04, labelled).
+Methods: coherence, PLV, wPLI (PDC excluded, directed). Data source (P16.7, through `load_subject`): the legacy
+root `data/processed` by default (P02 raw windows, conditions 101-105 and 201; ONE P07 two-tier gate per subject;
+trial ids from the pre-gate labels (PF-03; S02/S04 are approximate, P11 D-2, flagged in the CSV); fs-250 axis
+(PF-04, labelled); outputs equal the pre-P16 ones) or a built root (fs from the metadata, true trial ids, shared
+quality mask of `--quality`); `--fs` overrides the axis.
 
 Per subject and method:
 - trial-level split-half reliability of each delta matrix (stimulus AND baseline trials halved, 10 random
@@ -30,7 +32,6 @@ resolution effect, not an independent replication (P13 D-4).
 
 import argparse
 import itertools
-import re
 import sys
 import time
 from pathlib import Path
@@ -57,8 +58,9 @@ from src.features.connectivity.comparison import (  # noqa: E402
   SEED, disattenuate, fisher_combined_p, pairwise_permutation_test, reliability_ceiling, responders_from_benchmark,
   split_half_delta_reliability)
 from src.features.connectivity.connectivity_extraction import (  # noqa: E402
-  BASELINE_CONDITION, CONDITION_FREQS, GATE, LEGACY_FS_HZ, band_for_condition, gate_selection,
-  load_legacy_selection, compute_condition_coherence)
+  BASELINE_CONDITION, CONDITION_FREQS, GATE, band_for_condition, compute_condition_coherence,
+  load_condition_windows, source_text)
+from src.io.subject_data import QUALITY_MODES, discover_subjects, is_built  # noqa: E402
 from src.features.connectivity.permutation import benjamini_hochberg, derive_seed  # noqa: E402
 from src.features.connectivity.phase_connectivity import compute_condition_plv, compute_condition_wpli  # noqa: E402
 
@@ -95,6 +97,11 @@ def flips_path(reports: Path, a: str, b: str) -> Path:
   return out_dir(reports) / f"pairwise_flips_{a or 'final'}_vs_{b or 'final'}.csv"
 
 
+def _head(data_root: Path, subjects: Sequence[str]) -> str:
+  built = bool(subjects) and is_built(Path(data_root) / subjects[0])
+  return "built windows (load_subject; fs, true ids and quality per subject)" if built else SOURCE
+
+
 def build_parser() -> argparse.ArgumentParser:
   p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
   p.add_argument("--methods", nargs="+", choices=list(METHODS), default=list(METHODS))
@@ -111,29 +118,29 @@ def build_parser() -> argparse.ArgumentParser:
   p.add_argument("--threshold", type=float, default=80.0)
   p.add_argument("--alpha", type=float, default=0.05)
   p.add_argument("--random-state", type=int, default=SEED)
-  p.add_argument("--fs", type=float, default=LEGACY_FS_HZ, help="frequency axis, legacy 250 (PF-04)")
+  p.add_argument("--fs", type=float, default=None,
+                 help="override the frequency axis; default: the folder's (metadata 256 on built roots, "
+                      "legacy-assumed 250 on data/processed, PF-04)")
+  p.add_argument("--quality", choices=list(QUALITY_MODES), default="shared",
+                 help="built roots: shared mask, shared-no-guard or per-script gate; legacy roots always per-script")
   p.add_argument("--data-root", type=Path, default=ROOT / "data" / "processed")
   p.add_argument("--reports-dir", type=Path, default=ROOT / "reports")
   return p
 
 
-def discover_subjects(data_root: Path) -> list:
-  return sorted(d.name for d in Path(data_root).iterdir() if d.is_dir() and re.fullmatch(r"S\d+", d.name))
-
-
-def load_subject_groups(data_root: Path, subject: str) -> dict:
-  """Gated windows per condition with their trial ids; ONE gate decision for 101-105 and 201 (PF-03)."""
-  sel = load_legacy_selection(data_root, subject)
-  q = gate_selection(sel)
-  mask = np.asarray(q["valid_mask"]).astype(bool)
-  w, y, ids = q["windows_clean"], q["y_clean"], np.asarray(sel["trial_ids"])[mask]
+def load_subject_groups(data_root: Path, subject: str, quality_mode: str = "shared",
+                        fs_override: Optional[float] = None) -> dict:
+  """Clean windows per condition with their trial ids; ONE quality decision for 101-105 and 201 (PF-03, R5)."""
+  sel = load_condition_windows(data_root, subject, quality_mode, fs_override)
+  w, y, ids = sel["windows"], sel["y"], sel["trial_ids"]
   groups = {c: (w[y == c], ids[y == c]) for c in list(CONDITIONS) + [BASELINE_CONDITION] if (y == c).any()}
-  return dict(groups=groups, approximate=bool(sel["trial_ids_approximate"]), kept=list(q["channels_kept"]),
-              dropped=list(q["channels_dropped"]), n_total=int(len(sel["y"])), n_clean=int(len(y)))
+  return dict(groups=groups, approximate=bool(sel["trial_ids_approximate"]), kept=list(sel["channels_kept"]),
+              dropped=list(sel["channels_dropped"]), n_total=int(sel["n_total_windows"]), n_clean=int(len(y)),
+              fs=sel["fs"], source=source_text(sel, SOURCE))
 
 
 def reliability_table(subject: str, method: str, groups: dict, fs: float, n_splits: int, random_state: int,
-                      approximate: bool) -> tuple:
+                      approximate: bool, source: str = SOURCE) -> tuple:
   fn = METHODS[method]
   base, base_ids = groups[BASELINE_CONDITION]
   rel_rows, det_rows, rel = [], [], {}
@@ -150,7 +157,7 @@ def reliability_table(subject: str, method: str, groups: dict, fs: float, n_spli
     det_rows.append(dict(subject=subject, method=method, condition=c, frequency=CONDITION_FREQS[c],
                          r_fisher_uncorrected=r["r_fisher"], spearman_brown_applied=r["corrected"],
                          n_valid_splits=r["n_valid"], label=label, n_stim_windows=len(w), n_baseline_windows=len(base),
-                         fs=fs, source=SOURCE))
+                         fs=fs, source=source))
   return rel_rows, det_rows, rel
 
 
@@ -213,33 +220,33 @@ def run(args) -> dict:
     resp, _ = responders_from_benchmark(args.benchmark, args.threshold)
   groups = {"responders": [s for s in subjects if s in set(resp)],
             "non_responders": [s for s in subjects if s not in set(resp)]}
-  print(f"Data source: {SOURCE}; subjects {subjects}; methods {args.methods}; {args.permutations} trial-level "
-        f"permutations (null = exchangeability of the a/b trials, each scored in its own band against the fixed "
+  print(f"Data source: {_head(args.data_root, subjects)}; subjects {subjects}; methods {args.methods}; {args.permutations} trial-level "
+        f"permutations (quality {args.quality}; root {args.data_root}; null = exchangeability of the a/b trials, each scored in its own band against the fixed "
         f"matched baseline; NOT D_a = D_b, see <m>_pairwise_null); gate {GATE}; responders {groups['responders']}, non-responders {groups['non_responders']}")
   t0 = time.time()
   rel_rows, det_rows, rel, approx, jobs = [], [], {}, {}, []
   for s in subjects:
-    d = load_subject_groups(args.data_root, s)
+    d = load_subject_groups(args.data_root, s, args.quality, args.fs)
     approx[s] = d["approximate"]
     print(f"[{s}] kept {d['kept']} dropped {d['dropped'] or 'none'}; clean {d['n_clean']}/{d['n_total']}; trial ids "
           f"{'APPROXIMATE' if d['approximate'] else 'exact'}")
     g = d["groups"]
     base, _ = g[BASELINE_CONDITION]
     for m in args.methods:
-      a_, b_, r_ = reliability_table(s, m, g, args.fs, args.splits, args.random_state, d["approximate"])
+      a_, b_, r_ = reliability_table(s, m, g, d["fs"], args.splits, args.random_state, d["approximate"], d["source"])
       rel_rows += a_
       det_rows += b_
       rel[(s, m)] = r_
       for a, b in itertools.combinations([c for c in CONDITIONS if c in g], 2):
-        jobs.append((s, m, a, b, g[a][0], g[a][1], g[b][0], g[b][1], base))
+        jobs.append((s, m, a, b, g[a][0], g[a][1], g[b][0], g[b][1], base, d["fs"]))
   print(f"reliability done ({time.time() - t0:.1f} s); {len(jobs)} pairwise jobs")
   t1 = time.time()
   # one job per (subject, method, pair); every job carries its own derived seed, so the result does not
   # depend on n_jobs or on the job order
   jobs_out = Parallel(n_jobs=args.n_jobs)(
-    delayed(_pair_job)(s, m, a, b, wa, ia, wb, ib, base, args.fs, args.permutations,
+    delayed(_pair_job)(s, m, a, b, wa, ia, wb, ib, base, fs, args.permutations,
                        derive_seed(args.random_state, s, m, "pair", a, b), args.alpha)
-    for (s, m, a, b, wa, ia, wb, ib, base) in jobs)
+    for (s, m, a, b, wa, ia, wb, ib, base, fs) in jobs)
   print(f"pairwise permutation tests done ({time.time() - t1:.1f} s)")
   tables = pairwise_tables(jobs_out, rel, approx, args.alpha)
   nulls = null_table(jobs_out)
