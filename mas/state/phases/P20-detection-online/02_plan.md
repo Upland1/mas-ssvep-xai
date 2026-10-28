@@ -178,8 +178,10 @@ P=".venv/bin/python -m"
 # 0. hash data/processed_continuous/S0* (before)
 # 1. sweep data (one per window length)
 for W in 0.5 1 1.5 2 3 4; do $P scripts.build_windows --filter-mode continuous --subjects S01 S02 S03 S04 S05 --session OO --banks fbcca fbcsp --quality-source both --window-sec $W --stride-sec 0.25; done
-# 2. window sweep
-$P scripts.benchmarks.benchmark_window_sweep --data-root data/processed_continuous --windows 0.5 1 1.5 2 3 4 --stride 0.25 --methods fbcca lda cnn --cv-repeats 5 --cnn-repeats 1 --out-dir reports/window_sweep
+# 2a. window sweep, classical part (≈ 2 min)
+$P scripts.benchmarks.benchmark_window_sweep --data-root data/processed_continuous --windows 0.5 1 1.5 2 3 4 --stride 0.25 --methods fbcca lda --cv-repeats 5 --out-dir reports/window_sweep
+# 2b. window sweep, cnn part (≈ 80–120 min GPU; human-run candidate) — merges into the same out-dir
+$P scripts.benchmarks.benchmark_window_sweep --data-root data/processed_continuous --windows 0.5 1 1.5 2 3 4 --stride 0.25 --methods cnn --cnn-repeats 1 --out-dir reports/window_sweep
 # 3. NN sweep at 1 s
 $P scripts.benchmarks.neural_networks.benchmark_nn_sweep --data-root data/processed_continuous --windows 1 --models ccnn compact eegnet --out-dir reports/nn_sweep
 # 4. dynamic stopping
@@ -190,8 +192,7 @@ $P scripts.benchmarks.pseudo_online --train-session OO --test-session mOO --mode
 # 7. hash data/processed_continuous/S0* (after)
 ```
 
-The exact flag names may follow the builders' handoffs; the builders put the final list in
-their `03_changes_*.md` and the orchestrator copies it here before the audit.
+Final CLIs copied from the three handoffs (2026-10-28). Measured estimates: builds < 1 min (≈ 4.3 GB), 2a ≈ 2 min, 2b ≈ 80–120 min, 3 ≈ 20–31 min, 4 seconds, 5–6 ≈ 2.5 min, suite ≈ 13.5 min. Order for the verifier: 0, 1, 2a, 3, 4 (on lda; re-run after 2b), 5, 6, 7; 2b and the dynamic-stopping re-run are the human-run request if 2b does not fit the remaining budget.
 
 **Budget.** `LOCAL_RUN_BUDGET_MIN` 120 and `MAX_GPU_HOURS_PER_PHASE` 2.
 - The sweep CNN (6 lengths × 5 subjects × 5 folds) and the NN sweep (3 models × 5 × 5)
