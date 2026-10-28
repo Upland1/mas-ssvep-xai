@@ -1,6 +1,6 @@
 # P20 · 07 · Scientific review
 
-Status: READY (pre-run audit PASS; results review ACCEPT)
+Status: READY (pre-run audit PASS; results review APPROVE)
 Author: scientific-reviewer
 Reads: 00, 02, 03_changes_* (incl. "Build fix" sections), 04 and every changed file (pre-run); 05, 06 and the CSVs (results)
 
@@ -281,6 +281,7 @@ deterministic), `scripts/benchmarks/pseudo_online.py` lines 73, 150-161, 209-223
 `time_sec` = offset + window), `tests/test_p09_compact_shallow.py:23,94-97`. No reference code opened; no external
 source cited.
 
-Verdict: ACCEPT
+Verdict: APPROVE
+ACCEPT in the first commit was the orchestrator's wording; the contract term is APPROVE.
 
 ## Questions
