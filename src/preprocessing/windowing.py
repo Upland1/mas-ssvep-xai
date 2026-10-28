@@ -35,7 +35,11 @@ from src.features.ssvep.psd_extraction import find_event_onsets
 from src.io import ebr_parser
 
 MODES = ("continuous", "per_window")
-BANK_NAMES = ("fbcca", "fbcsp")
+BASE_BANKS = ("fbcca", "fbcsp")
+NARROW_BANKS = ("harmonic", "intermediate")
+BANK_NAMES = BASE_BANKS + NARROW_BANKS
+STIM_FREQS = (24.0, 20.0, 15.0, 10.91, 8.57)   # Hz of the targets 101..105 (01_DATA_SPEC section 2)
+NARROW_DEFAULTS = {"n_harmonics": 3, "half_width_hz": 1.0, "order": 2, "max_hz": 90.0, "exclude_hz": (60.0,)}
 
 
 # --- recording and events -----------------------------------------------------------
@@ -192,13 +196,84 @@ def fbcsp_filter_bank(fs: float, subbands: Sequence[tuple] = tuple(DEFAULT_SUBBA
   return out
 
 
-def filter_bank(name: str, fs: float) -> list:
-  """`fbcca_filter_bank(fs)` or `fbcsp_filter_bank(fs)` by name; ValueError for any other name."""
+def harmonic_centers(n_harmonics: int = 3, freqs: Sequence[float] = STIM_FREQS) -> list:
+  """Centres `k * f` for `f` in `freqs` (given order) and `k = 1..n_harmonics`, target-major: `[f1, 2 f1, 3 f1,
+  f2, ...]` (15 centres for the 5 targets and 3 harmonics). ValueError for `n_harmonics < 1`."""
+  if n_harmonics < 1:
+    raise ValueError(f"n_harmonics must be >= 1, got {n_harmonics}")
+  return [float(k * f) for f in freqs for k in range(1, int(n_harmonics) + 1)]
+
+
+def intermediate_centers(freqs: Sequence[float] = STIM_FREQS) -> list:
+  """Midpoints of neighbouring targets of `sorted(freqs)`, ascending (4 centres for the 5 targets)."""
+  f = sorted(float(v) for v in freqs)
+  return [(a + b) / 2.0 for a, b in zip(f[:-1], f[1:])]
+
+
+def narrow_filter_bank(fs: float, centers: Sequence[float], half_width: float = 1.0, order: int = 2,
+                       max_hz: float = 90.0, exclude_hz: Sequence[float] = (60.0,)) -> tuple:
+  """`(bank, bands_skipped)`: Butterworth band-pass of `order` on `[c - half_width, c + half_width]` per centre.
+
+  A centre is skipped (not built) when its band is above `min(max_hz, fs/2 - 1)`, has a non-positive lower
+  edge, or contains a frequency of `exclude_hz` (edges included). `bands_skipped` has one dict per skipped
+  band: `center, low, high, why`. `bank` is a list of `BandFilter` in the order of `centers`. ValueError for
+  a non-positive `fs`, `half_width` or `order`.
+  """
+  if not fs > 0 or not half_width > 0 or order < 1:
+    raise ValueError(f"fs, half_width and order must be positive, got {fs}, {half_width}, {order}")
+  cap = min(float(max_hz), fs / 2.0 - 1.0)
+  bank, skipped = [], []
+  for c in centers:
+    lo, hi = float(c) - half_width, float(c) + half_width
+    why = None
+    if lo <= 0:
+      why = "lower edge not positive"
+    elif hi > cap:
+      why = f"upper edge above {cap:g} Hz (min(max_hz, fs/2 - 1))"
+    else:
+      hit = [e for e in exclude_hz if lo <= e <= hi]
+      if hit:
+        why = f"contains excluded {hit[0]:g} Hz"
+    if why:
+      skipped.append({"center": float(c), "low": lo, "high": hi, "why": why})
+      continue
+    bank.append(BandFilter(f"butter{order}_{lo:.2f}-{hi:.2f}", lo, hi,
+                           butter(order, [lo, hi], btype="band", fs=fs, output="sos"),
+                           butter(order, [lo, hi], btype="band", fs=fs)))
+  return bank, skipped
+
+
+def band_overlaps(bank: Sequence[BandFilter]) -> list:
+  """Pairs of bands of `bank` whose `[low, high]` intervals overlap by more than 0 Hz: dicts `a, b` (names),
+  `low`, `high` (the shared interval) and `width_hz`, in bank order."""
+  out = []
+  for i, p in enumerate(bank):
+    for q in bank[i + 1:]:
+      lo, hi = max(p.low, q.low), min(p.high, q.high)
+      if hi > lo:
+        out.append({"a": p.name, "b": q.name, "low": lo, "high": hi, "width_hz": hi - lo})
+  return out
+
+
+def build_bank(name: str, fs: float, narrow: Optional[dict] = None) -> tuple:
+  """`(bank, bands_skipped)` of a named bank for `fs`; `narrow` overrides `NARROW_DEFAULTS` (config
+  `filter_bank:`: `n_harmonics`, `half_width_hz`, `order`, `max_hz`, `exclude_hz`). Only the narrow banks skip
+  bands. ValueError for any other name."""
   if name == "fbcca":
-    return fbcca_filter_bank(fs)
+    return fbcca_filter_bank(fs), []
   if name == "fbcsp":
-    return fbcsp_filter_bank(fs)
+    return fbcsp_filter_bank(fs), []
+  if name in NARROW_BANKS:
+    p = {**NARROW_DEFAULTS, **(narrow or {})}
+    centers = (harmonic_centers(int(p["n_harmonics"])) if name == "harmonic" else intermediate_centers())
+    return narrow_filter_bank(fs, centers, float(p["half_width_hz"]), int(p["order"]), float(p["max_hz"]),
+                              tuple(p["exclude_hz"]))
   raise ValueError(f"unknown filter bank {name!r}; choose from {BANK_NAMES}")
+
+
+def filter_bank(name: str, fs: float, narrow: Optional[dict] = None) -> list:
+  """The bands of `build_bank(name, fs, narrow)` (skipped bands dropped); ValueError for an unknown name."""
+  return build_bank(name, fs, narrow)[0]
 
 
 def band_windows(broadband: np.ndarray, starts: np.ndarray, n: int, bank: Sequence[BandFilter],

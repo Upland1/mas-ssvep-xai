@@ -159,13 +159,18 @@ def _num(v) -> Optional[float]:
   return x if np.isfinite(x) else None
 
 
-def summary_rows(snapshot: Path) -> list:
+LEGACY_MEAN_ROW_TAGS = ("v1",)   # tags frozen with the CSV "Mean" row kept as a subject (C-1); later tags skip it
+
+
+def summary_rows(snapshot: Path, skip_mean_row: bool = False) -> list:
   """Long-format rows `(pipeline, subject, metric, value)` from the CSVs inside the snapshot, plus MEAN rows.
 
   Flagship: n_subjects_benchmark; augmentation: augmentation_ab_<model>; GNN: gnn_benchmark (mean over
   repeats per subject and variant); gate: connectivity_gate_benchmark (mean over repeats per subject, set,
   k_select); connectivity: connectivity_cohort_summary (per method, condition: obs_diff and n_edges_sig_fdr).
   A missing CSV is skipped. `MEAN` = mean over subjects of each (pipeline, metric) (NaN values ignored).
+  `skip_mean_row=True` (C-1) drops the CSV's own `Mean` row, which is redundant with `MEAN` and was averaged in
+  as a subject by the v1 freeze; v1 keeps its frozen behaviour (`LEGACY_MEAN_ROW_TAGS`).
   """
   import pandas as pd
   rep = snapshot / "reports"
@@ -173,6 +178,8 @@ def summary_rows(snapshot: Path) -> list:
 
   def add(pipeline, subject, metric, value):
     v = _num(value)
+    if skip_mean_row and str(subject) == "Mean":
+      return
     if v is not None:
       rows.append((pipeline, str(subject), str(metric), v))
 
@@ -276,7 +283,7 @@ def freeze(root: Path, tag: str, note: str, date: Optional[str] = None, out_base
       if rel == CONFIG_REL:
         e["from_git_commit"] = cfg_commit or "working tree"
       entries.append(e)
-    rows = summary_rows(snap)
+    rows = summary_rows(snap, skip_mean_row=tag not in LEGACY_MEAN_ROW_TAGS)
     write_summary(rows, snap / "baseline_summary.csv")
     manifest = {
       "tag": tag, "date": date, "note": note,
