@@ -4,7 +4,7 @@ Status: READY
 Author: ml-engineer
 Reads: 00_assignment.md, 02_plan.md, 03_changes_deep-learning.md, mas/RULES.md
 Branch: phase/P20-detection-online
-Commit(s): see the end of this file
+Commit(s): ab72a51 (feat: sweep, vectorized FBCCA), 397fac1 (fix: C-b, C-c), 4d5c681 (test), 54c6fc3 (docs)
 
 ## Files
 
