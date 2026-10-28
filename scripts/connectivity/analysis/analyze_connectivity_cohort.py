@@ -1,8 +1,11 @@
 """Cohort connectivity with permutation statistics (P13.5): coherence, PLV, wPLI, PDC.
 
-Data source: legacy folders <data-root>/<S>/ (P02, raw windows, R3 era B), conditions 101-105 and 201;
-fs 250 on the frequency axis (legacy, PF-04). One P07 two-tier gate per subject; trial ids from
-`build_trial_ids` on the pre-gate labels then the gate mask (PF-03; S02/S04 may be approximate, P11 D-2).
+Data source (P16.7, through `load_subject`): `--data-root` is either the legacy root `data/processed` (default;
+P02 windows, raw, R3 era B, fs 250 on the frequency axis (legacy, PF-04), one P07 two-tier gate per subject,
+trial ids from `build_trial_ids` on the pre-gate labels then the gate mask: PF-03, S02/S04 approximate, P11
+D-2; with the defaults the outputs equal the pre-P16 ones) or a built root `data/processed_<filter_mode>`
+(`scripts/build_windows.py`: fs from the metadata, true trial ids in the trial-level permutations, the shared
+quality mask of `--quality`, the kept channels). `--fs` overrides the frequency axis. Conditions 101-105 and 201.
 Bands f_c +- 1 Hz; baseline = the same 201 windows re-scored in each band (PF-16).
 
 Statistics: stimulus minus matched baseline, permutations with the observed group sizes. Unit
@@ -17,7 +20,6 @@ reports/connectivity_cohort_flips.csv (cells crossing alpha on either criterion 
 """
 
 import argparse
-import re
 import sys
 import time
 from pathlib import Path
@@ -40,11 +42,12 @@ if str(ROOT) not in sys.path:
   sys.path.insert(0, str(ROOT))
 
 from src.features.connectivity.connectivity_extraction import (  # noqa: E402
-  CONDITION_FREQS, GATE, LEGACY_FS_HZ, compute_aligned_condition_coherence, compute_condition_coherence,
-  gate_selection, load_legacy_selection)
+  CONDITION_FREQS, GATE, compute_aligned_condition_coherence, compute_condition_coherence, load_condition_windows,
+  source_text)
 from src.features.connectivity.mvar_pdc import compute_condition_pdc  # noqa: E402
 from src.features.connectivity.permutation import SEED, extract_connectivity_by_condition  # noqa: E402
 from src.features.connectivity.phase_connectivity import compute_condition_plv, compute_condition_wpli  # noqa: E402
+from src.io.subject_data import QUALITY_MODES, discover_subjects, is_built  # noqa: E402
 
 METHODS = {"coherence": compute_condition_coherence, "plv": compute_condition_plv,
            "wpli": compute_condition_wpli, "pdc": compute_condition_pdc}
@@ -92,14 +95,15 @@ def build_parser() -> argparse.ArgumentParser:
                  help="flip list between two runs; use '' for the unsuffixed final run")
   p.add_argument("--alpha", type=float, default=0.05)
   p.add_argument("--random-state", type=int, default=SEED)
-  p.add_argument("--fs", type=float, default=LEGACY_FS_HZ, help="frequency axis, legacy 250 (PF-04)")
+  p.add_argument("--fs", type=float, default=None,
+                 help="override the frequency axis; default: the folder's (metadata 256 on built roots, "
+                      "legacy-assumed 250 on data/processed, PF-04)")
+  p.add_argument("--quality", choices=list(QUALITY_MODES), default="shared",
+                 help="built roots: shared mask, shared-no-guard (row c') or per-script gate; legacy roots always "
+                      "use the per-script P07 gate")
   p.add_argument("--data-root", type=Path, default=ROOT / "data" / "processed")
   p.add_argument("--reports-dir", type=Path, default=ROOT / "reports")
   return p
-
-
-def discover_subjects(data_root: Path) -> list:
-  return sorted(d.name for d in Path(data_root).iterdir() if d.is_dir() and re.fullmatch(r"S\d+", d.name))
 
 
 def label_for(c: int) -> str:
@@ -119,19 +123,24 @@ def run_cohort(args) -> dict:
   summ, det, alpha = [], [], []
   edir = edges_dir(reports, args.out_suffix)
   edir.mkdir(parents=True, exist_ok=True)
-  print(f"Data source: {SOURCE}; subjects {subjects}; methods {args.methods}; {args.permutations} "
-        f"{args.permutation_unit}-level permutations; gate {GATE}")
+  built_root = bool(subjects) and is_built(Path(args.data_root) / subjects[0])
+  head = "built windows (load_subject; fs, true ids and quality per subject below)" if built_root else SOURCE
+  print(f"Data source: {head if args.fs is None else head + f' (fs {args.fs:g} override)'}; "
+        f"subjects {subjects}; methods {args.methods}; {args.permutations} "
+        f"{args.permutation_unit}-level permutations; gate {GATE}; quality {args.quality}; root {args.data_root}")
   for s in subjects:
-    sel = load_legacy_selection(args.data_root, s)
-    quality = gate_selection(sel)  # one decision shared by every method and condition (R5 style)
+    sel = load_condition_windows(args.data_root, s, args.quality, args.fs)
+    quality = sel["quality"]  # one decision shared by every method and condition (R5)
+    fs = sel["fs"]
+    source = source_text(sel, SOURCE)
     ids = sel["trial_ids"] if args.permutation_unit == "trial" else None
     print(f"[{s}] kept {quality['channels_kept']} dropped {quality['channels_dropped'] or 'none'}; "
-          f"clean {len(quality['y_clean'])}/{len(sel['y'])}; trial ids "
-          f"{'APPROXIMATE' if sel['trial_ids_approximate'] else 'exact'}")
+          f"clean {len(sel['y'])}/{sel['n_total_windows']}; trial ids "
+          f"{'APPROXIMATE' if sel['trial_ids_approximate'] else 'exact'}; fs {fs:g} ({sel['fs_source']})")
     for m in args.methods:
       t0 = time.time()
       res = extract_connectivity_by_condition(
-        sel["windows"], sel["y"], args.fs, _method_fn(m, args.coherence_estimator), list(CONDITION_FREQS),
+        sel["windows"], sel["y"], fs, _method_fn(m, args.coherence_estimator), list(CONDITION_FREQS),
         sel["channel_names"], n_permutations=args.permutations, trial_ids=ids, quality=quality,
         n_jobs=args.n_jobs, random_state=args.random_state, alpha=args.alpha, seed_keys=(s, m))
       meta = res.pop("_meta")
@@ -148,7 +157,7 @@ def run_cohort(args) -> dict:
         det.append(dict(subject=s, method=m, condition=c, frequency_hz=CONDITION_FREQS[c],
                         p_two_tailed=r["p_two_tailed"], null_mean=r["null_mean"], null_std=r["null_std"],
                         null_ci_lo=r["null_ci"][0], null_ci_hi=r["null_ci"][1], n_permutations=r["n_permutations"],
-                        n_stim_windows=r["n_stim"], n_baseline_windows=r["n_base"], fs=args.fs, source=SOURCE,
+                        n_stim_windows=r["n_stim"], n_baseline_windows=r["n_base"], fs=fs, source=source,
                         trial_ids_approximate=sel["trial_ids_approximate"],
                         coherence_estimator=args.coherence_estimator if m == "coherence" else "n/a",
                         random_state=args.random_state))

@@ -22,6 +22,7 @@ from scipy.signal import coherence
 
 from src.features.ssvep.spectral_power import LEGACY_FS_HZ  # legacy label (PF-04)
 from src.io.channels import subject_channel_names
+from src.io.subject_data import QUALITY_MODES, load_subject
 from src.preprocessing.dataset.cv_utils import LEGACY_TRIAL_LENGTHS, build_trial_ids, trial_block_report
 from src.preprocessing.signal.quality_check import apply_artifact_quality_pipeline
 
@@ -228,7 +229,7 @@ def summary_rows(windows: np.ndarray, y: np.ndarray, fs: float = LEGACY_FS_HZ) -
 def meta_lines(rows: list, channels: Sequence[str], dropped: Sequence[str], fs: float, nperseg: int = NPERSEG) -> list:
   """Meta text shared by the demo and the analysis: column labels, bands with true bins, channel count."""
   out = [f"channels ({len(channels)}) = {list(channels)}; dropped = {list(dropped)}",
-         f"fs axis = {fs:g} Hz (legacy, PF-04); recordings are 256 Hz, so a bin at f on this axis is f*256/{fs:g} Hz"]
+         f"fs axis = {fs:g} Hz ({'true recording rate' if fs == 256.0 else 'legacy, PF-04'}); recordings are 256 Hz, so a bin at f on this axis is f*256/{fs:g} Hz"]
   for c in CONDITION_FREQS:
     b = band_for_condition(c)
     bins, true = band_bins(fs, nperseg, b)
@@ -285,3 +286,54 @@ def load_gated_conditions(processed_dir: Path, subject: str, channel_names: Opti
               channels_dropped=q["channels_dropped"], counts=counts, n_total_windows=len(y),
               trial_ids=sel["trial_ids"][np.asarray(q["valid_mask"]).astype(bool)],
               trial_ids_approximate=sel["trial_ids_approximate"])
+
+
+# ------------------------------------------------------------------ P16: the loader of every connectivity script
+
+CONNECTIVITY_CONDITIONS = tuple(CONDITION_FREQS) + (BASELINE_CONDITION,)
+
+
+def load_condition_windows(data_root, subject: str, quality_mode: str = "shared", fs_override: Optional[float] = None,
+                           scalp: Optional[Sequence[str]] = None) -> dict:
+  """Clean windows of 101-105 and 201 of `<data_root>/<subject>/` through `load_subject` (P16.7, R3, R5, R8).
+
+  `data_root` is a legacy root (`data/processed`: fs 250 assumed, ids reconstructed, per-script P07 gate, the
+  pre-P16 numbers) or a built root (`data/processed_<filter_mode>`: fs from the metadata, true trial ids,
+  the shared quality mask of `quality_mode`, the kept channels). On a legacy root this returns the same arrays
+  as `load_gated_conditions` + `load_legacy_selection` (tested), which stay as the pre-P16 reference.
+
+  Returns `windows (n, C', T)`, `y`, `trial_ids` (aligned with the windows; true ids on built folders),
+  `trial_ids_approximate`, `channels_kept`, `channels_dropped`, `channel_names` (= kept), `counts` (per condition
+  total / clean / rejected), `n_total_windows` (selected before the quality decision), `fs`, `fs_source`,
+  `built`, `source`, `filter_mode`, `quality_mode` and `quality` (an identity pass-through in the format of
+  `apply_artifact_quality_pipeline`: the decision was already taken, so `valid_mask` is all ones over the
+  returned windows and the ids are not masked a second time).
+  """
+  d = load_subject(Path(data_root) / subject, conditions=CONNECTIVITY_CONDITIONS, quality_mode=quality_mode,
+                   fs_override=fs_override, scalp=scalp)
+  y_all = np.load(Path(data_root) / subject / "y_labels.npy").astype(np.int64).reshape(-1)
+  y_sel = y_all[np.asarray(d["quality"]["rows"])]
+  y = np.asarray(d["y"])
+  counts = {}
+  for c in CONNECTIVITY_CONDITIONS:
+    n_tot, n_ok = int((y_sel == c).sum()), int((y == c).sum())
+    counts[c] = dict(total=n_tot, clean=n_ok, rejected=n_tot - n_ok)
+  approx = bool(d["trial_ids_approximate"])
+  if not d["built"]:  # the pre-P16 flag: block check on the full pre-gate labels (202 included in the walk)
+    ids_all = build_trial_ids(y_all, LEGACY_TRIAL_LENGTHS, warn=False)
+    approx = bool(trial_block_report(y_all, ids_all, LEGACY_TRIAL_LENGTHS)["approximate"])
+  kept, dropped = list(d["channel_names"]), list(d["channels_dropped"])
+  identity = dict(windows_clean=d["X"], y_clean=y, valid_mask=np.ones(len(y), dtype=np.int8),
+                  channels_kept=kept, channels_dropped=dropped)
+  return dict(windows=d["X"], y=y, trial_ids=np.asarray(d["trial_ids"]), trial_ids_approximate=approx,
+              channels_kept=kept, channels_dropped=dropped, channel_names=kept, counts=counts,
+              n_total_windows=int(len(y_sel)), fs=float(d["fs"]), fs_source=d["fs_source"], built=bool(d["built"]),
+              source=d["source"], filter_mode=d["filter_mode"], quality_mode=quality_mode, quality=identity)
+
+
+def source_text(sel: dict, legacy_text: str) -> str:
+  """Report header for a loaded subject: `legacy_text` unchanged for a legacy folder at the assumed fs, else the
+  build, the fs and where it came from, and the quality mode."""
+  if not sel["built"] and sel["fs_source"] == "legacy-assumed":
+    return legacy_text
+  return f"{sel['source']}; fs {sel['fs']:g} Hz ({sel['fs_source']}); quality {sel['quality_mode']}"
