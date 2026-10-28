@@ -129,12 +129,12 @@ phases:
     passed: '2026-10-27'
   P16:
     slug: continuous-filtering
-    status: in_progress
+    status: passed
     owner: orchestrator
     branch: phase/P16-continuous-filtering
-    commit: null
+    commit: 79f0eea75ad19eda16378746c517c44dada4db40
     opened: '2026-10-27'
-    passed: null
+    passed: '2026-10-28'
   P17:
     slug: rest-class-filterbank
     status: pending
