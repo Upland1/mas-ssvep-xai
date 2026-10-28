@@ -43,7 +43,7 @@ def write_recording(root, name, mult, amp, n_trials=40, seed=3):
 
 
 def run(root, name, bank, classes):
-  out = B.evaluate_subject(root, name, thresholds=TH, bank=bank, classes=classes, repeats=REPEATS)
+  out = B.evaluate_subject(root, name, thresholds=TH, fail_fraction=0.5, bank=bank, classes=classes, repeats=REPEATS)
   r = out["row"]
   assert r is not None, out["log"]
   return r, out

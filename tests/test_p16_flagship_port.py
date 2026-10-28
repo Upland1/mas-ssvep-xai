@@ -64,7 +64,7 @@ def test_legacy_root_defaults_equal_pre_port_code(legacy, subject):
 
 def test_legacy_root_cv_legacy_and_trial_smoothing_still_match(legacy):
   _, a1, a2 = pre_port(legacy, "S04", cv="legacy", smoothing="trial")
-  r = B.evaluate_subject(legacy, "S04", cv="legacy", smoothing="trial", thresholds=TH)["row"]
+  r = B.evaluate_subject(legacy, "S04", cv="legacy", smoothing="trial", thresholds=TH, fail_fraction=0.5)["row"]
   assert (r["1.0s Acc (%)"], r["2.0s Smoothed (%)"]) == (a1, a2)
 
 
@@ -84,7 +84,7 @@ def test_built_root_uses_saved_bands_and_trial_reset_smoothing(built, subject, m
   monkeypatch.setattr(B, "filter_subbands", boom)
   monkeypatch.setattr(FC, "get_chebyshev_subbands", boom)
   monkeypatch.setattr(FC, "filtfilt", boom)
-  out = B.evaluate_subject(built, subject, thresholds=TH)
+  out = B.evaluate_subject(built, subject, thresholds=TH, fail_fraction=0.5)
   r = out["row"]
   assert list(r)[:7] == ["Subject", "Channels Kept", "Channels Dropped", "Clean Windows", "Rejected Windows",
                          "Bank", "CSP Bands"]
@@ -136,7 +136,7 @@ def test_quality_layouts_full_rows_and_preselected_agree(built):
 
 
 def test_cv_repeats_columns_and_seeds(built, legacy):
-  r = B.evaluate_subject(legacy, "S04", repeats=3, thresholds=TH)
+  r = B.evaluate_subject(legacy, "S04", repeats=3, thresholds=TH, fail_fraction=0.5)
   row = r["row"]
   assert list(row)[-3:] == B.SD_COLUMNS and row["CV repeats"] == 3
   vals = [pre_port(legacy, "S04", seed=42 + k)[1:] for k in range(3)]

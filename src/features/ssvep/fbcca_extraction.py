@@ -82,6 +82,56 @@ def fbcca_band_scores(bands: np.ndarray, refs: Sequence[np.ndarray]) -> np.ndarr
   return scores
 
 
+def reference_bases(fs: float, n_samples: int, target_freqs: Sequence[float] = TARGET_FREQS,
+                    n_harmonics: int = 3) -> np.ndarray:
+  """Orthonormal reference bases `(K, T, 2H)` (P20): the sin/cos references of each target, mean-centred over time and
+  orthonormalised by QR (columns span the same space as the references, `Q^T Q = I`)."""
+  out = []
+  for f in target_freqs:
+    ref = generate_reference_signals(f, fs, n_samples, n_harmonics).T
+    q, r = np.linalg.qr(ref - ref.mean(axis=0, keepdims=True))
+    if np.abs(np.diag(r)).min() <= 1e-10 * np.abs(np.diag(r)).max():
+      raise ValueError(f"references of {f} Hz are rank deficient at fs {fs}, T {n_samples}")
+    out.append(q)
+  return np.stack(out)
+
+
+def _orthonormal_data_bases(x: np.ndarray, tol: float = 1e-10) -> np.ndarray:
+  """Orthonormal basis `(.., T, C)` of the column space of mean-centred `x (.., T, C)` by batched QR; columns of rank
+  deficient windows (a flat or duplicated channel) are re-derived from the SVD and the unused ones set to zero."""
+  q, r = np.linalg.qr(x)
+  d = np.abs(np.diagonal(r, axis1=-2, axis2=-1))
+  bad = d.min(axis=-1) <= tol * np.maximum(d.max(axis=-1), 1e-300)
+  bad |= d.max(axis=-1) <= 1e-12
+  if bad.any():
+    u, s, _ = np.linalg.svd(x[bad], full_matrices=False)
+    keep = (s > tol * np.maximum(s.max(axis=-1, keepdims=True), 1e-300)) & (s > 1e-12)
+    u = u * keep[..., None, :]
+    q[bad] = u
+  return q
+
+
+def fbcca_scores_vectorized(bands: np.ndarray, bases: np.ndarray, weights: Optional[np.ndarray] = None,
+                            chunk: int = 256) -> np.ndarray:
+  """FBCCA scores `(n, K)` of sub-band windows `(n, B, C, T)` against `bases (K, T, 2H)` (P20, vectorized).
+
+  Per window, band and target: centre the data, orthonormalise it (QR), `r` = top singular value of `Qx^T Qy` (the first
+  canonical correlation), clipped to [0, 1]; score = `sum_b w_b r_b^2` (`w_b = b^-1.25 + 0.25`). A window with a flat band
+  gets r = 0 for that band. Nothing is fitted, so the result of a window does not depend on the other windows (R2)."""
+  bands = np.asarray(bands, dtype=np.float64)
+  if bands.ndim != 4 or bases.shape[1] != bands.shape[-1]:
+    raise ValueError(f"bands {bands.shape} and bases {bases.shape} do not match (need (n, B, C, T), (K, T, R))")
+  w = fbcca_weights(bands.shape[1]) if weights is None else np.asarray(weights, dtype=float)
+  out = np.zeros((len(bands), len(bases)))
+  for lo in range(0, len(bands), chunk):
+    x = np.swapaxes(bands[lo:lo + chunk], -1, -2)                      # (n, B, T, C)
+    qx = _orthonormal_data_bases(x - x.mean(axis=-2, keepdims=True))
+    m = np.einsum("nbtc,ktr->nbkcr", qx, bases)
+    r = np.clip(np.linalg.svd(m, compute_uv=False)[..., 0], 0.0, 1.0)  # (n, B, K)
+    out[lo:lo + chunk] = np.einsum("b,nbk->nk", w, r ** 2)
+  return out
+
+
 def extract_fbcca_features(windows: np.ndarray, y: np.ndarray,
                            channel_names: Optional[Sequence[str]] = None, fs: float = LEGACY_FS_HZ,
                            target_freqs: Sequence[float] = TARGET_FREQS, n_harmonics: int = 3,

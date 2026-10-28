@@ -70,11 +70,11 @@ def test_bank_text_follows_the_metadata_band_edges(built):
 
 
 def test_bank_row_labels_and_feature_width(built):
-  out = B.evaluate_subject(built, "S01", thresholds=TH, bank="harm")
+  out = B.evaluate_subject(built, "S01", thresholds=TH, fail_fraction=0.5, bank="harm")
   r = out["row"]
   assert r["Bank"] == "fbcca+harm" and len(r["CSP Bands"].split()) == 19
   assert "p=" in out["log"] and "p=" + str(5 * 2 * 19 + 5) in out["log"]
-  base = B.evaluate_subject(built, "S01", thresholds=TH)["row"]
+  base = B.evaluate_subject(built, "S01", thresholds=TH, fail_fraction=0.5)["row"]
   assert base["Bank"] == "fbcca" and len(base["CSP Bands"].split()) == 5
   assert list(base) == B.BASE_COLUMNS + B.BUILT_COLUMNS + B.ACC_COLUMNS   # the P16 built layout is unchanged
 
@@ -133,7 +133,7 @@ def test_rest_trials_are_smoothed_inside_their_trial_only(built):
 
 
 def test_six_class_run_columns_sd_confusion(built):
-  out = B.evaluate_subject(built, "S01", thresholds=TH, classes=6, repeats=2)
+  out = B.evaluate_subject(built, "S01", thresholds=TH, fail_fraction=0.5, classes=6, repeats=2)
   r = out["row"]
   assert list(r) == (B.BASE_COLUMNS + B.BUILT_COLUMNS + B.ACC_COLUMNS + B.SD_COLUMNS + [REST_COLS[0]] + REST_COLS[1:]
                      + B.REST_SD_COLUMNS)
@@ -185,12 +185,12 @@ def test_no_threshold_fallback(built, legacy):
 
 def test_fs_on_a_built_root_needs_the_flag(built, tmp_path):
   with pytest.raises(ValueError, match="allow-fs-override"):
-    B.evaluate_subject(built, "S01", thresholds=TH, fs=250.0)
+    B.evaluate_subject(built, "S01", thresholds=TH, fail_fraction=0.5, fs=250.0)
   assert B.main(["--data-root", str(built), "--fs", "250", "--reports-dir", str(tmp_path)]) == 1
   assert not list(tmp_path.glob("*.csv"))
-  r = B.evaluate_subject(built, "S01", thresholds=TH, fs=250.0, allow_fs_override=True)
+  r = B.evaluate_subject(built, "S01", thresholds=TH, fail_fraction=0.5, fs=250.0, allow_fs_override=True)
   assert r["row"] is not None and "fs 250 (override)" in r["log"]
-  assert B.evaluate_subject(built, "S01", thresholds=TH)["row"] is not None   # default: metadata fs
+  assert B.evaluate_subject(built, "S01", thresholds=TH, fail_fraction=0.5)["row"] is not None   # default: metadata fs
 
 
 def test_fs_on_a_legacy_root_is_still_allowed(legacy):

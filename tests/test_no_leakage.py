@@ -74,6 +74,7 @@ KNOWN_SPLITTER_FILES = {
   "src/preprocessing/dataset/cv_utils.py": "leak-free",
   "scripts/training/train_models.py": "legacy",
   "src/models/cnn/spatial_spectral_cnn.py": "legacy",
+  "src/models/cnn/training.py": "leak-free",   # P20 inner grouped validation split of fit_network (PF-32); test in test_p20_networks.py
   "src/models/classical/legacy_eval.py": "legacy",
 }
 SPLITTER_NAMES = r"(StratifiedKFold|KFold|ShuffleSplit|StratifiedShuffleSplit|GroupKFold|StratifiedGroupKFold|" \

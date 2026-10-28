@@ -149,7 +149,7 @@ def test_six_classes_use_201_only_with_uniform_priors_and_true_trial_groups(buil
     seen["groups"].append(np.asarray(groups).copy())
     return orig_guard(splits, groups)
   monkeypatch.setattr(B, "assert_no_shared_trials", spy_guard)
-  out = B.evaluate_subject(built, "S01", thresholds=TH, classes=6, repeats=2)
+  out = B.evaluate_subject(built, "S01", thresholds=TH, fail_fraction=0.5, classes=6, repeats=2)
   cls, cm = out["confusion"]
   assert cls == [101, 102, 103, 104, 105, 201]                    # no 202 column
   assert seen["priors"] and all(p.shape == (6,) and np.allclose(p, 1 / 6) for p in seen["priors"])
@@ -174,7 +174,7 @@ def test_five_classes_keep_the_default_prior(built, monkeypatch):
     priors.append(np.asarray(self.priors_).copy())
     return out
   monkeypatch.setattr(LinearDiscriminantAnalysis, "fit", spy_fit)
-  B.evaluate_subject(built, "S01", thresholds=TH, classes=5)
+  B.evaluate_subject(built, "S01", thresholds=TH, fail_fraction=0.5, classes=5)
   assert priors and all(p.shape == (5,) for p in priors)
 
 
@@ -203,7 +203,7 @@ def test_metrics_on_a_hand_built_confusion():
 
 
 def test_row_metrics_are_the_definitions_applied_to_the_summed_confusion(built):
-  out = B.evaluate_subject(built, "S01", thresholds=TH, classes=6, repeats=1)
+  out = B.evaluate_subject(built, "S01", thresholds=TH, fail_fraction=0.5, classes=6, repeats=1)
   cls, cm = out["confusion"]
   r, rest, stim = out["row"], cls.index(201), [i for i, c in enumerate(cls) if c != 201]
   assert cm.sum() == len(_load(built, "base", 6)["y"])            # one repeat: every window once
@@ -250,9 +250,9 @@ def test_c2_no_threshold_fallback_and_fs_override_guard(built, legacy, tmp_path)
   with pytest.raises(ValueError):
     B.evaluate_subject(built, "S01")                                # thresholds=None
   with pytest.raises(ValueError):
-    B.evaluate_subject(built, "S01", thresholds=TH, fs=250.0)       # built root: metadata fs only
+    B.evaluate_subject(built, "S01", thresholds=TH, fail_fraction=0.5, fs=250.0)       # built root: metadata fs only
   assert B.main(["--data-root", str(built), "--fs", "250", "--reports-dir", str(tmp_path)]) == 1
-  ok = B.evaluate_subject(built, "S01", thresholds=TH, fs=250.0, allow_fs_override=True)
+  ok = B.evaluate_subject(built, "S01", thresholds=TH, fail_fraction=0.5, fs=250.0, allow_fs_override=True)
   assert ok["row"] is not None
   assert B.evaluate_subject(legacy, "S03", thresholds=TH, fail_fraction=0.5, fs=250.0)["row"] is not None
 

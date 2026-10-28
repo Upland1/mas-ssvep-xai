@@ -181,7 +181,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
   args = build_parser().parse_args(argv)
-  ba = bw.build_parser().parse_args(["--session", args.session, "--banks", "fbcca", "fbcsp"])
+  # P19 C-1: the source is explicit (`filtered`, the P16 decision this demo reports), not the config default `both`
+  ba = bw.build_parser().parse_args(["--session", args.session, "--banks", "fbcca", "fbcsp",
+                                     "--quality-source", "filtered"])
   try:
     cfg = bw.load_build_config(args.config)
     params = bw.resolve_params(cfg, ba)

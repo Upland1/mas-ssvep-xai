@@ -199,7 +199,7 @@ def _load_built(d: Path, conds: list, mode: str, banks: tuple, fs_override, thre
                       "valid": int(((y_all[rows] == lab) & keep_local).sum()),
                       "own_gate": int(((y_all[rows] == lab) & (reason == 1)).sum()),
                       "guard": int(((y_all[rows] == lab) & (reason == 2) & ~keep_local).sum()),
-                      "raw": int(((y_all[rows] == lab) & (reason == 3)).sum())}
+                      "raw": int(((y_all[rows] == lab) & (reason == 3) & ~keep_local).sum())}   # P19 C-2
            for lab in sorted(set(int(v) for v in y_all[rows]))}
   return {
     "subject": d.name, "sub_dir": str(d), "built": True,
