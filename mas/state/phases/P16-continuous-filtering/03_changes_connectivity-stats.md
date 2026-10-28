@@ -95,3 +95,9 @@ None. `reference/ssvep-eeg-xai/` was not opened.
 
 1. `mas/state/phases/P16-continuous-filtering/02_plan.md`, `03_changes_data-signal.md`, `mas/RULES.md` (opened in this run).
 2. Project code read in this run: `src/io/subject_data.py`, `src/features/connectivity/*`, `tests/p16_synth.py`, the five connectivity scripts.
+
+## Round 1 fixes
+
+- Fix 2 (R5): `load_condition_windows` now passes `thresholds` (vpp 5-120 uV, std 1-35 uV) and `channel_fail_fraction` (0.5) explicitly, taken from the P13 `GATE` constant, to `load_subject`; every connectivity script goes through it. Legacy outputs are unchanged (same values as before; the four-way equality tests of `tests/test_p16_connectivity_port.py` pass again).
+- Fix 3: row a' is `analyze_connectivity_cohort ... --fs 256 --out-suffix v1fs256` on the legacy root. New test `test_legacy_cohort_fs256_flag_changes_only_the_axis`: windows, ids, gate and permutation counts equal the `v1check` run, details `fs` 256.0 and `source` marked override. No real smoke run.
+- Tests: `test_p16_connectivity_port.py` + p12/p13/p14 known-answer: 108 passed (143.8 s). `tests/test_p16_*.py`: 109 passed, 4 failed outside my files (`test_p16_flagship_port.py::test_smoothing_trial_on_a_legacy_root_is_the_a_prime_t_row`, `test_p16_independent_known_answer.py` 3 tests), owned by the ml-engineer / synthetic-tester.

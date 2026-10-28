@@ -213,3 +213,17 @@ def test_built_downstream_scripts_use_suffix_and_responders_from_accuracy_only(b
   assert len(pt) == 10 and not pt["trial_ids_approximate"].any()
   det = pd.read_csv(out / "coherence_split_half_details_v2x.csv")
   assert (det["fs"] == 256.0).all()
+
+
+def test_legacy_cohort_fs256_flag_changes_only_the_axis(tmp_path):
+  """Row a' (`--fs 256 --out-suffix v1fs256` on the legacy root): same windows, ids and gate, fs 256 in the details."""
+  _legacy_tree(tmp_path / "root")
+  common = ["--methods", "coherence", "--permutations", "9", "--n-jobs", "1", "--data-root", str(tmp_path / "root"),
+            "--reports-dir", str(tmp_path / "rep")]
+  assert cohort.main(common + ["--out-suffix", "v1check"]) == 0
+  assert cohort.main(common + ["--fs", "256", "--out-suffix", "v1fs256"]) == 0
+  a = pd.read_csv(tmp_path / "rep" / "connectivity_cohort_summary_v1check_details.csv")
+  b = pd.read_csv(tmp_path / "rep" / "connectivity_cohort_summary_v1fs256_details.csv")
+  assert (a["fs"] == 250.0).all() and (b["fs"] == 256.0).all() and "override" in b["source"].iloc[0]
+  cols = ["n_stim_windows", "n_baseline_windows", "trial_ids_approximate", "n_permutations"]
+  pd.testing.assert_frame_equal(a[cols], b[cols])

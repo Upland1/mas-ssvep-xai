@@ -310,7 +310,9 @@ def load_condition_windows(data_root, subject: str, quality_mode: str = "shared"
   returned windows and the ids are not masked a second time).
   """
   d = load_subject(Path(data_root) / subject, conditions=CONNECTIVITY_CONDITIONS, quality_mode=quality_mode,
-                   fs_override=fs_override, scalp=scalp)
+                   fs_override=fs_override, scalp=scalp,
+                   thresholds={k: GATE[k] for k in ("vpp_min", "vpp_max", "std_min", "std_max")},
+                   channel_fail_fraction=GATE["channel_fail_fraction_thresh"])  # R5: explicit, the P13 GATE
   y_all = np.load(Path(data_root) / subject / "y_labels.npy").astype(np.int64).reshape(-1)
   y_sel = y_all[np.asarray(d["quality"]["rows"])]
   y = np.asarray(d["y"])
