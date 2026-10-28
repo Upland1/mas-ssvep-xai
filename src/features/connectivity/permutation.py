@@ -173,7 +173,7 @@ def compute_permutation_test(stim: np.ndarray, base: np.ndarray, band: tuple, fs
     observed_diff=obs, stim_matrix=stim_m, base_matrix=base_m, obs_diff=obs_global,
     p_one_tailed=float(p_one), p_lower_tailed=float(p_low), p_two_tailed=float(p_two), significant_uncorrected=bool(p_one < alpha),
     null_mean=float(null_global.mean()), null_std=float(null_global.std()), null_ci=(float(lo), float(hi)),
-    null_distribution=null_global, edge_p_one_tailed=p_mat_one, edge_p_two_tailed=p_mat_two,
+    null_distribution=null_global, null_matrices=null, edge_p_one_tailed=p_mat_one, edge_p_two_tailed=p_mat_two,
     fdr_significant=fdr, n_edges_sig_uncorrected=int((pe_one < alpha).sum()),
     n_edges_sig_fdr=int(fdr.sum()), total_edges=int(emask.sum()), directed=directed,
     permutation_unit="window" if ids is None else "trial", n_permutations=int(n),

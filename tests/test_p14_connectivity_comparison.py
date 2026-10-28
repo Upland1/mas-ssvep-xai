@@ -305,7 +305,7 @@ def test_pairwise_script_schema_and_njobs_independence(tmp_path):
   df = outs[0]
   assert list(df.columns) == ["subject", "method", "freq_a", "freq_b", "t_mag", "p_mag", "d_pat", "p_pat", "r_obs",
                               "n_edges_fdr", "n_edges", "reliability_ceiling", "r_disattenuated",
-                              "trial_ids_approximate", "sig_bh_mag", "sig_bh_pat"]
+                              "trial_ids_approximate", "sig_bh_mag", "sig_bh_pat", "nbs_max_size", "nbs_p", "n_edges_nbs", "fs"]
   assert len(df) == 10 and (df["n_edges"] == 21).all() and (df["p_mag"] >= 1 / 10).all()
   rel = pd.read_csv(c2.csv_path(tmp_path / "a", "plv", "split_half_reliability", "t"))
   assert list(rel.columns) == ["subject", "method", "condition", "frequency", "split_half_reliability"] and len(rel) == 5

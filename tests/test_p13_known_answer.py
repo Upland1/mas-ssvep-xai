@@ -528,7 +528,7 @@ def test_cohort_summary_and_npz_schema(tmp_path, capsys):
   out = capsys.readouterr().out
   assert "(A)" in out and "(B)" in out
   df = pd.read_csv(rep / "connectivity_cohort_summary.csv")
-  assert list(df.columns) == SUMMARY_COLS_S6
+  assert list(df.columns[:len(SUMMARY_COLS_S6)]) == SUMMARY_COLS_S6 and list(df.columns) == cohort.SUMMARY_COLUMNS  # P18 appends the NBS columns
   assert len(df) == 10 and set(df["condition"]) == {101, 102, 103, 104, 105}
   assert set(df["permutation_unit"]) == {"trial"}
   assert sorted(df["frequency_hz"].unique().round(2)) == [8.57, 10.91, 15.0, 20.0, 24.0]
@@ -541,7 +541,7 @@ def test_cohort_summary_and_npz_schema(tmp_path, capsys):
   for m in ("plv", "pdc"):
     z = np.load(rep / "connectivity_edges" / f"S01_{m}.npz")
     expected = {"channels_kept"} | {f"{k}_{c}" for c in (101, 102, 103, 104, 105)
-                                    for k in ("stim", "base", "diff", "p", "fdr")}
+                                    for k in ("stim", "base", "diff", "p", "fdr", "nbs")}
     assert set(z.files) == expected
     assert z["stim_101"].shape == (7, 7) and z["fdr_101"].dtype == bool
     assert len(z["channels_kept"]) == 7
