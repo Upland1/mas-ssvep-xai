@@ -7,3 +7,4 @@
 | 2 Assignment | orchestrator | 2026-10-28 | 00_assignment.md READY; tasks P20.1–P20.6 + carry-forwards | 1 | 03_ROADMAP P20 | none | |
 | 3 Research | orchestrator | 2026-10-28 | skipped (CCNN, FBCCA, dynamic stopping specified in the roadmap) | 1 | | none | |
 | 4 Plan | orchestrator | 2026-10-28 | 02_plan.md READY (auto); settled 1–12; build order deep-learning → ml-engineer ∥ data-signal | 1 | PF-31/32/38/39 | none | CNN parts may become a human run |
+| 5 Build (deep-learning) | orchestrator | 2026-10-28 | deep-learning builder started (row 1) | 1 | 02_plan.md | | ml-engineer and data-signal follow in parallel |
