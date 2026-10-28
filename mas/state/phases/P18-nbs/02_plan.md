@@ -113,6 +113,43 @@ min, pairwise 1000 ≈ 45 min, suite ≈ 11 min: ≈ 100 min, inside `LOCAL_RUN_
 but close. The builder measures one subject; if the projected total exceeds 110 min, the
 orchestrator issues a human-run request for the pairwise run.
 
+### Pre-committed run checks V0–V8 (07_review.md 0044229, copied verbatim; binding for the verifier)
+
+- **V0 (budget, before and during the run).** Run the suite first, then commands 1–3. If cumulative wall time
+  after command 3 exceeds 69 min (120 − 51), command 4 (pairwise) and command 5 become a human-run request.
+  Record every command's runtime in 05_run.md.
+- **V1 (pre-state).** `find reports -name "*p18*" | wc -l` → 0 (0 at audit time; no stale same-name outputs). The
+  P16 root hash command above gives `c59c94b8…144a54e` with 65 files before command 1 and after the last command.
+- **V2 (columns and npz).** Every summary CSV has 33 columns: the 15 pre-P18 ones in order, then
+  `nbs_threshold, nbs_max_size, nbs_size_fraction, nbs_p, nbs_n_sig_edges, nbs_significant, nbs_size_z1.5,
+  nbs_size_z2, nbs_size_z2.5, nbs_size_z3, nbs_p_z1.5, nbs_p_z2, nbs_p_z2.5, nbs_p_z3, n_stim_windows,
+  n_baseline_windows, fs, source`. There are 100 rows (5 subjects × 4 methods × 5 conditions) with fs 256.0.
+  Each run has 20 edge npz files, each with `channels_kept` and `stim/base/diff/p/fdr/nbs_<c>` for the five
+  conditions. Every `nbs_<c>` is a boolean (C, C) array, symmetric, with a False diagonal, where C =
+  len(channels_kept). Pairwise CSVs have the 20 §6 columns and 50 rows per method (150 in total).
+- **V3 (settled point 6, exact).** For `connectivity_cohort_summary_p18_nbs_p200.csv` vs
+  `connectivity_cohort_summary_v2cont.csv`, sorted by (subject, method, condition): every one of the 15 columns
+  is equal. Floats must satisfy |Δ| ≤ 1e-12 with NaN aligned; strings and bools must be equal with
+  NaN = NaN (`channels_dropped` is empty for S02/S05). The same holds for the shared `_details.csv` columns and
+  for the `stim/base/diff/p/fdr` arrays of `connectivity_edges_p18_nbs_p200/` vs `connectivity_edges_v2cont/`
+  (`np.array_equal(..., equal_nan=True)`). Any difference is a FAIL of the regression claim: determinism
+  investigation, no reinterpretation.
+- **V4 (tables complete).** Each `connectivity_graph_size_<s>.csv` has 100 rows with `possible_edges_nbs` = 21
+  (S01/S03/S04) and 28 (S02/S05) for **all four methods** including PDC, and `total_edges_fdr` 21/28, or
+  42/56 for PDC. Each `connectivity_nbs_sweep_<s>.csv` has 400 rows (5 × 4 × 5 × 4 thresholds 1.5/2/2.5/3).
+  Both tables are printed in the log.
+- **V5 (internal consistency, every row).** `nbs_size_z2 == nbs_max_size` and `nbs_p_z2 == nbs_p`.
+  `nbs_significant == (nbs_p < 0.05)`. `nbs_size_fraction × possible == nbs_max_size`. p ≥ 1/(n+1).
+  If `nbs_significant` is False then `nbs_n_sig_edges == 0`, else `nbs_n_sig_edges ≥ nbs_max_size`. The sum of
+  `nbs_<c>` / 2 == `nbs_n_sig_edges`. In the sweep, `max_size` is non-increasing in the threshold for every
+  cell (guaranteed by construction; any violation is a bug).
+- **V6 (flips file).** `connectivity_cohort_flips_p18_nbs_p200_vs_p18_nbs.csv` exists, and its rows are exactly
+  the cells where A-FDR (≥ 1 edge), B (global p < 0.05) or A-NBS (`nbs_p < 0.05`) differ between the two
+  summaries. Recompute this from the summaries and compare.
+- **V7 (pairwise).** `nbs_p ≥ 1/1001`; `n_edges` = 21/28 by subject; `n_edges_nbs == 0` whenever
+  `nbs_p ≥ 0.05`; `--summary-only` output lines equal the corresponding lines of command 4's log.
+- **V8.** No file under `reports/` is edited by hand; logs go to `reports/logs/P18/`.
+
 ## Acceptance checks (for the verifier)
 
 | Criterion (verbatim) | How it is checked |
