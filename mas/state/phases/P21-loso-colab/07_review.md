@@ -173,6 +173,19 @@ channels as the LOSO run: cohort 5 `common` → S01, S03, S04; `all` → S02, S0
 
 Verdict: FAIL
 
+## Pre-run audit — Round 2
+
+Re-checked at e214117 (after ec48847 "docs: P21 decisions source name" and e214117 "chore: P21 pre-run checks in plan").
+
+| Check | Result | Evidence |
+|---|---|---|
+| Required fix 1 (privacy) | PASS | `P1="clau""de"; P2="anthrop""ic"; git grep -il "$P1\|$P2" HEAD -- .` prints nothing. Commit messages 7facac5..HEAD: 0 hits. The B003 P21 row's Sources cell now reads "B003, 03_ROADMAP P21, AGENTS.md compute rules" (`git diff 7facac5 HEAD -- mas/state/decisions.md`). |
+| No code changed | PASS | `git diff 7facac5 HEAD --stat` touches only `mas/state/decisions.md`, `02_plan.md` and `log.md`. src/, scripts/, tests/, notebooks/ and configs/ are unchanged, so the round-1 code verdicts stand. |
+| B1–B11 and P1–P5 copied verbatim into 02_plan.md | PASS | Each of the 76 non-empty, non-heading lines of this review, from "B1. **Pre-state.**" to the round-1 verdict, appears verbatim in `02_plan.md`: 0 missing, checked with a shown Python substring comparison. The plan diff deletes no lines. |
+| New decisions.md row | PASS | The round-1 outcome row names the file only as "the local instructions file". |
+
+Verdict: PASS
+
 ## Results review
 
 Verdict: APPROVE / REJECT
