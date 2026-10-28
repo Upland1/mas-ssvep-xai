@@ -468,3 +468,38 @@ Open
 - C-1 `scripts/diagnostics/demo_edge_effects.py` inherits `both`; C-2 `src/io/subject_data.py` raw count under `shared-no-guard`; C-3 P20 names `--quality-source`.
 
 Next phase: after the orchestrator's gate.
+
+## P20 — Detection: window length, ITR, CCNN, NN sweep, dynamic stopping, pseudo-online
+
+2026-10-28. Branch `phase/P20-detection-online`. Run state `5d9326d`; verifier PASS `8fd6cb0`; results review ACCEPT `1ec3c01`. Phase report: `mas/state/reports/P20.md`.
+
+Added
+- `src/models/cnn/ccnn.py`, `src/models/cnn/training.py` (NEW): CCNN; `fit_network` and `cnn_fold` (grouped validation, in-fold normalisation, best-validation-loss state).
+- `src/online/__init__.py`, `src/online/causal_filter.py` (NEW): stateful causal SOS filter (`zi` carried) and fixed-clock replay.
+- `scripts/benchmarks/benchmark_window_sweep.py` (NEW): `fbcca`, `lda`, `cnn (compact_eegnet)` over six window lengths; `summary.csv`, `predictions.csv`, `confusion.csv`, `timing.csv`.
+- `scripts/benchmarks/neural_networks/benchmark_nn_sweep.py` (NEW): `ccnn`, `compact_eegnet`, `eegnet` at 1 s.
+- `scripts/benchmarks/simulate_dynamic_stopping.py` (NEW); `scripts/benchmarks/pseudo_online.py` (NEW).
+- Tests (NEW): `tests/test_p20_window_sweep.py` (15), `tests/test_p20_networks.py` (19), `tests/test_p20_online.py` (8), `tests/test_p20_data_signal.py` (3), `tests/test_p20_independent_known_answer.py` (21).
+- Generated (ignored): `data/processed_continuous/w<L>_s0.25/` (six roots), `reports/window_sweep/`, `reports/nn_sweep/`, `reports/dynamic_stopping/`, `reports/dynamic_stopping_lda/`, `reports/pseudo_online/`, `reports/logs/P20/`.
+
+Changed
+- `src/features/ssvep/fbcca_extraction.py` (MODIFIED, additions only): vectorised FBCCA (`reference_bases`, `fbcca_scores_vectorized`); legacy functions untouched.
+- `scripts/benchmarks/feature_based/benchmark_n_subjects.py` (MODIFIED): `fail_fraction` required (P17 C-b); 6-class data-source line (P17 C-c).
+- `src/io/subject_data.py` (MODIFIED): raw count `& ~keep_local` (P19 C-2). `scripts/diagnostics/demo_edge_effects.py` (MODIFIED): `--quality-source filtered` passed explicitly (P19 C-1).
+- `tests/test_no_leakage.py` (MODIFIED): registry line for `training.py`. `tests/test_p16_flagship_port.py`, `tests/test_p16_independent_known_answer.py`, `tests/test_p17_benchmark.py`, `tests/test_p17_independent_known_answer.py`, `tests/test_p17_leak_controls.py` (MODIFIED): `fail_fraction=0.5` passed explicitly.
+- No configuration change (`configs/` unchanged).
+
+Result
+- Sweep, cohort mean: lda 81.80 → 98.03 % and fbcca 69.16 → 96.86 % from 0.5 to 4 s; window-level ITR highest at 0.5 s for all three methods [11].
+- cnn (compact_eegnet) at 4 s: 83.10 %, driven by S02 and S01. Two S02 folds at each endpoint restored an early-stopping state from epoch 1–3 (single repeat) [10].
+- 1 s networks: ccnn 91.25 %, compact_eegnet 92.08 %, eegnet 89.69 %; not distinguishable [12].
+- Dynamic stopping: lda cohort ITR 61.53 bits/min at 0.5 s (in-sample threshold 0.70) against 60.23 for the time-matched window; per-subject split mixed [13].
+- Pseudo-online, OO → mOO, ccnn, 0.5 s window: 5 classes 89.00 %, 6 classes 74.00 %; false activations 27.5 % → 5.0 % [14].
+
+Review
+- Pre-run audit PASS (`db474b6`), no code fix. Results review ACCEPT (`1ec3c01`): D-1 to D-6 and C-1 to C-5 in the report.
+
+Open
+- B003 must be resolved before P21 opens. Carry-forwards C-1 to C-3 and C-5 (report §9).
+
+Next phase: after the orchestrator's gate.

@@ -433,3 +433,27 @@ Sources: `reports/compact_cnn_benchmark_cpu.csv`, `reports/shallow_convnet_bench
 **R11.** One verifier metadata listing of the read-only answer-key directory, with no content read; disclosed and not an R11 consultation (D-2) [5, 7]. The access log has 41 lines in total, one dated 2026-10-28 [12].
 
 **Open.** C-1 (`scripts/diagnostics/demo_edge_effects.py` now inherits `both`), C-2 (`src/io/subject_data.py:202` raw count needs `& ~keep_local` and a test) and C-3 (P20 build commands name `--quality-source`) are open. C-4 is closed (the raw guard reuses the filters' ringing time, a design choice under PF-14). Blocker B003 is due before P20. Merge pending, by the orchestrator, who also deletes the scratch build `mas/state/scratch/p19_filtered`.
+
+## P20 — Detection: window length, ITR, CCNN, NN sweep, dynamic stopping, pseudo-online
+
+2026-10-28. Branch `phase/P20-detection-online`; run state `5d9326d`; verifier PASS `8fd6cb0`; results review ACCEPT `1ec3c01`; decisions `f9e049e`. Phase report: `mas/state/reports/P20.md`.
+
+**Aim.** Roadmap P20 [1]: treat SSVEP as a detection problem. Accuracy and window-level ITR against window length (0.5–4 s, stride 0.25 s) for FBCCA, in-fold FBCSP+FBCCA LDA and a CNN (`compact_eegnet`); a 1 s comparison of `ccnn`, `compact_eegnet` and `eegnet` under grouped early stopping; dynamic stopping on the window probabilities; a causal pseudo-online detector trained on OO and replayed on mOO at 5 and 6 classes [1, 2]. No numeric target exists (R-16) [2].
+
+**Data source.** OO session, S01–S05 (B003: both options coincide, so S01–S05 are used; B003 stays open [2, 15]). Continuous builds `data/processed_continuous/w<L>_s0.25/` for L = 0.5–4 s, `--quality-source both` [10, 11]. Channels kept: 7 on S01, S03, S04 and 8 on S02, S05, identical at all lengths [10]. Protected root `data/processed_continuous/S0*` (65 files, hash `c6e72a79…2aec`) unchanged before and after [10].
+
+**Result (sweep, cohort mean Acc / window-level ITR, `reports/window_sweep/summary.csv`).** lda 81.80 → 98.03 % and 84.37 → 28.93 bits/min from 0.5 to 4 s; fbcca 69.16 → 96.86 %. The window-level ITR is highest at 0.5 s for all three methods (fbcca 57.50, lda 84.37, cnn 87.25 bits/min) [11]. The cnn cohort value at 4 s (83.10 %) is driven by S02 (39.56 %) and S01 (77.00 %). Two S02 folds at 0.5 s and two at 4 s restored an early-stopping state from epoch 1–3; these single-repeat cells measure an early-stopping failure on S02, not the network's accuracy at those lengths [9, 10].
+
+**Result (1 s networks, `reports/nn_sweep/summary.csv`).** Cohort mean Acc: ccnn 91.25 %, compact_eegnet 92.08 %, eegnet 89.69 %. All differences are below 3 pp: not distinguishable (single repeat) [12].
+
+**Result (dynamic stopping, `reports/dynamic_stopping/best_threshold.csv`).** Thresholds are selected in-sample and are descriptive. lda reaches 61.53 bits/min at 0.5 s against 60.23 for the time-matched single window; the per-subject split is mixed (S04 negative) and several thresholds sit on the grid edge [9, 13].
+
+**Result (pseudo-online, `reports/pseudo_online/summary_ccnn_{5class,6class}.csv`).** Mean accuracy 89.00 % (5 classes) and 74.00 % (6 classes); mean false activations 27.5 % → 5.0 %. The 6-class drop is missed stimulus periods in S01 (50.00 %) and S02 (52.50 %), and the 6-class ITR uses N = 5 [14].
+
+**Checks.** A–I met; acceptance 1–7 met; causal-filter test `PASSED`; protected hashes unchanged; all six cnn windows ran locally (phase commands 80.95 min; GPU 1.30 h; stop rule S: 84.53 ≤ 120) [7–10]. Suite: first run `2 failed, 1295 passed` (two P09/P10 hash-pinned tests, explained by the intra-op thread count, not P20 code); isolated re-run `1297 passed` [8, 9, 10].
+
+**Directions (P1–P6).** P1, P2, P3 (fbcca and lda), P4, P5 (cohort means), P6(b) and P6(c) hold. P6(a) fails as worded (S04 0.0 vs 0.0, floor). P1 cnn endpoints hold but are uninformative about window length [9].
+
+**R11.** None; the access log has no P20 entry [19].
+
+**Open.** B003 must be resolved before P21 opens. Carry-forwards C-1 (hash-pinned tests pin the thread count), C-2 (deep-learning flags folds with restored epoch ≤ 5 or train accuracy below chance + 10 pp; 4 folds flagged in P20), C-3 (≥ 3 repeats before interpreting a single CNN cell that moves a cohort by > 5 pp) and C-5 (P17 C-d, C-e) are open [9]. Merge pending, by the orchestrator.
