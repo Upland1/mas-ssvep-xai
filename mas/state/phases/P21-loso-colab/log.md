@@ -7,3 +7,4 @@
 | 2 Assignment | orchestrator | 2026-10-28 | 00_assignment.md READY; tasks P21.1–P21.3 + P20 C-1, C-2 | 1 | 03_ROADMAP P21 | none | |
 | 3 Research | orchestrator | 2026-10-28 | skipped (LOSO, Colab specified in the roadmap and PF-33..40) | 1 | | none | |
 | 4 Plan | orchestrator | 2026-10-28 | 02_plan.md READY (auto); settled 1–12; order ml-engineer → deep-learning ∥ data-signal | 1 | PF-31..37, PF-40, R-16 | none | 40-subject network LOSO ≈ 16 h → human run; needs S06–S40 placed by Sebastian |
+| 5 Build (ml-engineer) | ml-engineer | 2026-10-28 | 03_changes READY (566b058, d1c4b91 + docs); suite `1320 passed` (13.6 min); classical LOSO S01–S05 11.7 s CPU, 40-subject extrapolation ≈ 30–35 min, ≈ 4.5 GB peak | 1 | PF-33..37, R-16 | none | memory fix (pooling frees per-subject bands) found by 20-subject replication; deviations: mismatched fold config refused by default (`--allow-config-mismatch`), fbcca equality only on matched channels, load_subject channels= option |
