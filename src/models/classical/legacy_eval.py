@@ -122,13 +122,14 @@ def oof_space(space: FeatureSpace, subbands: Optional[np.ndarray], y: np.ndarray
   sorted label order, each window predicted exactly once by a model that never saw it; `errors[name]`
   holds the first exception text of a model that failed in some fold (that model has no result).
   Each model is a `Pipeline(StandardScaler, clone(model))` fitted on the training fold only.
-  `splits=None` is a LEGACY-ONLY fallback (window-level StratifiedKFold, leaky, PF-01) kept for the frozen
-  P05 scripts; every leak-free caller passes `splits_for("grouped", ...)` (R1).
+  `splits` is required (P11 N1, fixed in P16): there is no silent window-level fallback. Leak-free callers pass
+  `splits_for("grouped", ...)` (R1); the frozen P05 scripts pass `splits_for("legacy", ...)` explicitly (PF-01).
   """
+  if splits is None:
+    raise ValueError("oof_space needs explicit splits: splits_for('grouped', y, groups, seed) (R1) or, for the "
+                     "labelled legacy protocol, splits_for('legacy', y, None, seed) (PF-01)")
   y = np.asarray(y)
   classes = np.unique(y)
-  if splits is None:
-    splits = list(legacy_cv(seed).split(np.zeros((len(y), 1)), y))
   out = {n: {"pred": np.zeros(len(y), dtype=y.dtype), "scores": np.zeros((len(y), len(classes)))}
          for n in models}
   errors: dict = {}

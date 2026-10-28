@@ -1,7 +1,9 @@
 """Descriptive cross-frequency comparison of connectivity DELTA matrices (P14.1, PF-24 to PF-26).
 
-Data source: the P13 final edge files `reports/connectivity_edges/<S>_<method>.npz` (keys `diff_<c>`,
-`fdr_<c>`, `channels_kept`); only the delta matrices are read (PF-24). Every matrix is embedded in the 8 x 8
+Data source: the cohort edge files `<edges-dir>/<S>_<method>.npz` (keys `diff_<c>`, `fdr_<c>`, `channels_kept`;
+default the P13 final `reports/connectivity_edges`, or `reports/connectivity_edges_<suffix>` of a P16 run);
+only the delta matrices are read (PF-24). `--out-suffix` appends `_<suffix>` to every CSV and figure name so a
+v2 run never overwrites the v1 files (P16.7). Every matrix is embedded in the 8 x 8
 montage with NaN for missing channels (PF-26); the directed PDC is symmetrized `(M + M.T) / 2` before every
 undirected statistic (PF-25), while its FDR count stays over the 42 directed edges.
 
@@ -72,6 +74,7 @@ def build_parser() -> argparse.ArgumentParser:
   p.add_argument("--figures-dir", type=Path, default=ROOT / "outputs" / "figures" / "connectivity_comparison")
   p.add_argument("--no-figures", action="store_true")
   p.add_argument("--random-state", type=int, default=SEED)
+  p.add_argument("--out-suffix", default="", help="suffix of every output file, e.g. v2cont")
   return p
 
 
@@ -163,7 +166,7 @@ def _heat(ax, m, labels, vmin, vmax, cmap, title):
 
 
 def make_figures(method: str, all_deltas: dict, sim: pd.DataFrame, nodes: pd.DataFrame, groups: dict,
-                 fig_dir: Path) -> list:
+                 fig_dir: Path, sfx: str = "") -> list:
   """Similarity matrices, node strength and delta matrices per group; one colour limit per method."""
   import matplotlib
   matplotlib.use("Agg")
@@ -187,7 +190,7 @@ def make_figures(method: str, all_deltas: dict, sim: pd.DataFrame, nodes: pd.Dat
       mat[i, j] = mat[j, i] = r["r"]
     im = _heat(ax, mat, flab, -1, 1, "RdBu_r", s)
   fig.colorbar(im, ax=axes[0].tolist(), shrink=0.7, label="Pearson r of delta matrices")
-  p = fig_dir / f"{method}_frequency_similarity.png"
+  p = fig_dir / f"{method}_frequency_similarity{sfx}.png"
   fig.savefig(p, dpi=130, bbox_inches="tight")
   plt.close(fig)
   saved.append(p)
@@ -203,7 +206,7 @@ def make_figures(method: str, all_deltas: dict, sim: pd.DataFrame, nodes: pd.Dat
     ax.set_yticks(range(len(MONTAGE)), MONTAGE, fontsize=6)
     ax.set_title(f"{g} (n={len(groups[g])})", fontsize=7)
   fig.colorbar(im, ax=axes[0].tolist(), shrink=0.7, label="node strength (delta)")
-  p = fig_dir / f"{method}_node_strength.png"
+  p = fig_dir / f"{method}_node_strength{sfx}.png"
   fig.savefig(p, dpi=130, bbox_inches="tight")
   plt.close(fig)
   saved.append(p)
@@ -218,7 +221,7 @@ def make_figures(method: str, all_deltas: dict, sim: pd.DataFrame, nodes: pd.Dat
       im = _heat(ax, mean, MONTAGE, -lim, lim, "RdBu_r", f"{CONDITION_FREQS[c]:.2f} Hz")
     fig.colorbar(im, ax=axes.tolist(), shrink=0.8, label=f"delta ({method}, shared limit +-{lim:.3f})")
     fig.suptitle(f"{method}: {g} (n={len(groups[g])})", fontsize=8)
-    p = fig_dir / f"{method}_delta_matrices_{g}.png"
+    p = fig_dir / f"{method}_delta_matrices_{g}{sfx}.png"
     fig.savefig(p, dpi=130, bbox_inches="tight")
     plt.close(fig)
     saved.append(p)
@@ -237,7 +240,8 @@ def run(args) -> dict:
     resp, _ = responders_from_benchmark(args.benchmark, args.threshold)
     src = f"{args.benchmark.name}, 2.0 s smoothed >= {args.threshold:g} %"
   groups = group_members(subjects, resp)
-  print(f"Data source: {SOURCE}; subjects {subjects}; methods {list(args.methods)}; QAP {args.qap_permutations} "
+  sfx = f"_{args.out_suffix}" if args.out_suffix else ""
+  print(f"Data source: {SOURCE if not args.out_suffix else f'edge files {args.edges_dir}'}; subjects {subjects}; methods {list(args.methods)}; QAP {args.qap_permutations} "
         f"permutations; responders {groups['responders']} (from {src}); non-responders {groups['non_responders']}")
   out = {}
   for m in args.methods:
@@ -252,17 +256,17 @@ def run(args) -> dict:
     sim = pd.DataFrame(sims, columns=SIM_COLUMNS)
     nd = pd.DataFrame(nodes, columns=NODE_COLUMNS)
     gd = pd.DataFrame(globs, columns=GLOBAL_COLUMNS)
-    sim.to_csv(reports / f"{m}_frequency_similarity.csv", index=False)
-    nd.to_csv(reports / f"{m}_node_strength.csv", index=False)
-    gd.to_csv(reports / f"{m}_global_delta.csv", index=False)
-    group_similarity(sim, groups).to_csv(reports / f"{m}_frequency_similarity_groups.csv", index=False)
+    sim.to_csv(reports / f"{m}_frequency_similarity{sfx}.csv", index=False)
+    nd.to_csv(reports / f"{m}_node_strength{sfx}.csv", index=False)
+    gd.to_csv(reports / f"{m}_global_delta{sfx}.csv", index=False)
+    group_similarity(sim, groups).to_csv(reports / f"{m}_frequency_similarity_groups{sfx}.csv", index=False)
     group_means(nd, groups, ["channel", "condition", "frequency"], "node_strength").to_csv(
-      reports / f"{m}_node_strength_groups.csv", index=False)
+      reports / f"{m}_node_strength_groups{sfx}.csv", index=False)
     group_means(gd, groups, ["condition", "frequency"], "mean_delta").to_csv(
-      reports / f"{m}_global_delta_groups.csv", index=False)
+      reports / f"{m}_global_delta_groups{sfx}.csv", index=False)
     print("\n".join(summary_lines(m, sim)))
     if not args.no_figures:
-      make_figures(m, deltas, sim, nd, groups, args.figures_dir)
+      make_figures(m, deltas, sim, nd, groups, args.figures_dir, sfx)
     out[m] = dict(similarity=sim, node=nd, global_delta=gd)
   print(f"saved CSVs in {reports}; figures in {args.figures_dir}")
   return out

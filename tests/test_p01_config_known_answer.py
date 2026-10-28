@@ -38,6 +38,14 @@ V1 = {
 V2 = {**V1, "channels": {**V1["channels"], "excluded": [],
                          "scalp": ["PO7", "PO3", "POz", "PO4", "PO8", "O1", "Oz", "O2"]}}
 
+# P16 (final config, mas/02_REQUIREMENTS.md section 3): highcut 90, notch, quality and filter_bank blocks.
+V3 = {**V2, "preprocessing": {**V2["preprocessing"], "highcut_hz": 90.0, "notch_hz": 60.0, "notch_q": 30.0},
+      "quality": {"vpp_range_uv": [5.0, 120.0], "std_range_uv": [1.0, 35.0], "channel_fail_fraction": 0.5,
+                  "artifact_block_sec": 0.25, "guard_sec": "auto", "guard_rel_amplitude": 0.01,
+                  "source": "filtered"},
+      "filter_bank": {"harmonics": {"enabled": True, "n_harmonics": 3, "half_width_hz": 1.0, "order": 2},
+                      "intermediate": {"enabled": True, "half_width_hz": 1.0, "order": 2}}}
+
 
 def _spec_v1_text():
   text = REQ.read_text(encoding="utf-8")
@@ -66,12 +74,12 @@ def test_hand_typed_matches_spec_block():
   assert yaml.safe_load(_spec_v1_text()) == V1
 
 
-@pytest.mark.parametrize("key", sorted(_flatten(V2)))
+@pytest.mark.parametrize("key", sorted(_flatten(V3)))
 def test_config_v1_key_by_key(key):
   """Known answer [REQ §3]: each leaf of v1 has the spec value and YAML type
   (int vs float preserved, e.g. lowcut_hz 1.0 float, cv_splits 5 int). Exact."""
   got = _flatten(_loaded())
-  exp = _flatten(V2)[key]
+  exp = _flatten(V3)[key]
   assert key in got
   assert got[key] == exp
   assert type(got[key]) is type(exp)
@@ -81,22 +89,22 @@ def test_config_v1_key_by_key(key):
 
 def test_config_v1_no_extra_keys():
   """Known answer [REQ §3]: no key beyond v1 (P07/P16 keys absent)."""
-  assert set(_flatten(_loaded())) == set(_flatten(V2))
-  assert _loaded() == V2
+  assert set(_flatten(_loaded())) == set(_flatten(V3))
+  assert _loaded() == V3
 
 
-def test_config_v2_text_equals_spec_block_with_p07_override():
-  """Known answer [REQ §3] 'P07: scalp = all 8 channels in montage order, excluded: []':
-  the file text equals the v1 block with exactly the two channel lines replaced (plus the
-  version comment line)."""
-  norm = lambda s: [l.rstrip() for l in s.strip("\n").splitlines()]
-  got = norm(CONFIG.read_text(encoding="utf-8"))
-  assert got[0].startswith("# config v2 (P07)")
-  exp = norm(_spec_v1_text())
-  i = next(k for k, l in enumerate(exp) if l.strip().startswith("scalp:"))
-  exp[i] = '  scalp: ["PO7", "PO3", "POz", "PO4", "PO8", "O1", "Oz", "O2"]'
-  exp[i + 1] = "  excluded: []"
-  assert got[1:] == exp
+def test_config_v3_text_is_v2_plus_the_p16_lines():
+  """Known answer [REQ §3] 'P16 (final) adds/changes': dropping the P16 additions and restoring highcut 60
+  gives the v2 dict (P07 channel lines); the header names the version."""
+  got = CONFIG.read_text(encoding="utf-8").splitlines()
+  assert got[0].startswith("# config v3 (P16")
+  cfg = _loaded()
+  for k in ("quality", "filter_bank"):
+    cfg.pop(k)
+  for k in ("notch_hz", "notch_q"):
+    cfg["preprocessing"].pop(k)
+  cfg["preprocessing"]["highcut_hz"] = 60.0
+  assert cfg == V2
 
 
 def test_config_v2_po7_restored_pf05():

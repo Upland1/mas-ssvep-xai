@@ -311,7 +311,8 @@ def test_qda_rank_failure_is_caught_and_other_models_survive():
   y = np.repeat(np.arange(101, 106), 20)
   X = rng.normal(size=(100, 210)) + (y[:, None] - 103) * 0.3
   models = {k: v for k, v in get_sklearn_model_suite().items() if k in ("QDA", "Ridge")}
-  res, errs = le.oof_space(le.FeatureSpace("wide", [X]), None, y, models)
+  res, errs = le.oof_space(le.FeatureSpace("wide", [X]), None, y, models,
+                           splits=le.splits_for("legacy", y, None, 42))   # explicit since P16 (N1)
   assert "QDA" in errs and "Ridge" in res and "QDA" not in res
 
 

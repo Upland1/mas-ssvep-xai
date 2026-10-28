@@ -43,7 +43,7 @@ from src.models.classical.benchmark_runner import (  # noqa: E402
   discover_subjects, legacy_header_lines, load_config, prepare_subject)
 from src.models.classical.feature_spaces import benchmark_spaces  # noqa: E402
 from src.models.classical.legacy_eval import (  # noqa: E402
-  CV_LABEL, SEED, SMOOTH_LABEL, accuracies, oof_space, space_width)
+  CV_LABEL, SEED, SMOOTH_LABEL, accuracies, oof_space, space_width, splits_for)
 from src.models.classical.sklearn_models import get_sklearn_model_suite  # noqa: E402
 
 DEFAULT_CONFIG = ROOT / "configs" / "pipeline_config.yaml"
@@ -103,7 +103,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
       header = legacy_header_lines(args.fs, b["thresholds"], args.seed, CV_LABEL, SMOOTH_LABEL, b["fbcca_channels"])
       print("\n".join(header))
     space = [sp for sp in benchmark_spaces(b, args.m) if sp.name == SPACE][0]
-    res, errs = oof_space(space, b["subbands"], b["y"], {MODEL: get_sklearn_model_suite(args.seed)[MODEL]}, args.seed)
+    res, errs = oof_space(space, b["subbands"], b["y"], {MODEL: get_sklearn_model_suite(args.seed)[MODEL]}, args.seed,
+                          splits_for("legacy", b["y"], None, args.seed))   # legacy PF-01, explicit since P16 (N1)
     if errs:
       print(f"[x] {s}: {MODEL} failed: {errs[MODEL]}")
       continue

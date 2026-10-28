@@ -26,7 +26,7 @@ from scipy.linalg import eigh
 from scipy.signal import butter, filtfilt
 
 from src.features.ssvep.spectral_power import LEGACY_FS_HZ
-from src.features.ssvep.window_mask import CHANNEL_FAIL_FRACTION, channel_report, quality_gate
+from src.features.ssvep.window_mask import CHANNEL_FAIL_FRACTION, channel_report, loader_decision, quality_gate
 
 DEFAULT_SUBBANDS = [(7, 12), (13, 17), (18, 26), (27, 36), (38, 52)]
 CSP_REG = 1e-6
@@ -122,7 +122,8 @@ def extract_fbcsp_features(windows: np.ndarray, y: np.ndarray,
                            subbands: Sequence[tuple] = tuple(DEFAULT_SUBBANDS), m: int = 1,
                            precomputed: Optional[dict] = None, thresholds: Optional[dict] = None,
                            channel_fail_fraction: float = CHANNEL_FAIL_FRACTION,
-                           verbose: bool = False) -> tuple:
+                           verbose: bool = False, subband_windows: Optional[np.ndarray] = None,
+                           quality: Optional[dict] = None) -> tuple:
   """FBCSP features of the accepted windows: `(X (n_clean, 5 * 2m * B), y_clean, valid_mask, channel_report)`.
 
   The two-tier gate (`window_mask.quality_gate`) runs first, or `precomputed` (an earlier
@@ -131,11 +132,29 @@ def extract_fbcsp_features(windows: np.ndarray, y: np.ndarray,
   and label given, so the features of a window depend on its own label. Benchmarks must use
   `FBCSPTransformer` fitted on the training fold. legacy (R3/PF-14, PF-04): per-window
   filtering, fs 250.
+
+  P16: `subband_windows (n, B, C, T)` (the continuous `fbcsp` bank saved by `build_windows.py`, rows and
+  channels as `windows`) are used as they are, nothing is refiltered (R3); `quality` (a
+  `load_subject(...)["quality"]` dict) replaces the gate (R5; see `window_mask.loader_decision`).
   """
   w = np.asarray(windows, dtype=np.float64)
   y = np.asarray(y)
   if w.ndim != 3 or len(w) != len(y):
     raise ValueError(f"windows {w.shape} and y {y.shape} do not match")
-  q = quality_gate(w, y, channel_names, thresholds, channel_fail_fraction, precomputed, verbose)
-  sw = filter_subbands(q["windows_clean"], fs, subbands)
-  return FBCSPTransformer(m).fit_transform(sw, q["y_clean"]), q["y_clean"], q["valid_mask"], channel_report(q)
+  sb = None
+  if subband_windows is not None:
+    sb = np.asarray(subband_windows, dtype=np.float64)
+    if sb.ndim != 4 or sb.shape[0] != len(w) or sb.shape[2:] != w.shape[1:]:
+      raise ValueError(f"subband_windows {sb.shape} do not match windows {w.shape} (need (n, B, C, T))")
+  if quality is not None:
+    rows, idx, rep = loader_decision(quality, len(w), w.shape[1], channel_names)
+    y_c, valid = y[rows], rep["valid_mask"]
+    sw = sb[rows][:, :, idx, :] if sb is not None else filter_subbands(w[rows][:, idx, :], fs, subbands)
+  else:
+    q = quality_gate(w, y, channel_names, thresholds, channel_fail_fraction, precomputed, verbose)
+    y_c, valid, rep = q["y_clean"], q["valid_mask"], channel_report(q)
+    if sb is None:
+      sw = filter_subbands(q["windows_clean"], fs, subbands)
+    else:
+      sw = sb[np.asarray(valid).astype(bool)][:, :, q["channels_kept_idx"], :]
+  return FBCSPTransformer(m).fit_transform(sw, y_c), y_c, valid, rep

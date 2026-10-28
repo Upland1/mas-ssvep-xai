@@ -1,7 +1,10 @@
 """How much of the connectivity delta follows target SSVEP power and alpha change? (P14.3, PF-23, PF-27)
 
-Data source: legacy folders <data-root>/<S>/ (P02, raw windows), conditions 101-105 and 201 after ONE P07
-two-tier gate per subject (the P13 loader, PF-03); fs-250 axis (legacy, PF-04). Hann periodograms per window on
+Data source (P16.7, through `load_subject`): the legacy root `data/processed` by default (P02 raw windows,
+conditions 101-105 and 201 after ONE P07 two-tier gate per subject, PF-03; fs-250 axis, legacy, PF-04; outputs
+equal the pre-P16 ones) or a built root (fs from the metadata, shared quality mask of `--quality`, kept
+channels); `--fs` overrides the axis. `--out-suffix` appends `_<suffix>` to every output name and reads
+`<method>_global_delta_<suffix>.csv`. Hann periodograms per window on
 the occipital channels O1, Oz, O2 that survive the gate, averaged over windows and channels (linear power).
 
 Per subject and frequency (stimulus vs the SAME gated 201 baseline windows):
@@ -21,7 +24,6 @@ original (`..._cofound`) is deliberately not created (PF-27).
 """
 
 import argparse
-import re
 import sys
 from pathlib import Path
 from typing import Optional, Sequence
@@ -45,7 +47,8 @@ if str(ROOT) not in sys.path:
   sys.path.insert(0, str(ROOT))
 
 from src.features.connectivity.connectivity_extraction import (  # noqa: E402
-  BASELINE_CONDITION, CONDITION_FREQS, LEGACY_FS_HZ, load_gated_conditions)
+  BASELINE_CONDITION, CONDITION_FREQS, load_condition_windows, source_text)
+from src.io.subject_data import QUALITY_MODES, discover_subjects, is_built  # noqa: E402
 
 METHODS = ("coherence", "plv", "wpli", "pdc")
 OCCIPITAL = ("O1", "Oz", "O2")
@@ -93,8 +96,10 @@ def power_metrics(w_stim: np.ndarray, w_base: np.ndarray, channel_idx: Sequence[
   return dict(target_snr_db=db_ratio(ps[tm].mean(), pb[tm].mean()), alpha_change_db=alpha)
 
 
-def subject_rows(data_root: Path, subject: str, fs: float) -> list:
-  d = load_gated_conditions(data_root, subject)
+def subject_rows(data_root: Path, subject: str, fs: Optional[float] = None, quality_mode: str = "shared") -> list:
+  """Rows of one subject; `fs=None` takes the folder's rate (metadata, or the legacy-assumed 250)."""
+  d = load_condition_windows(data_root, subject, quality_mode, fs)
+  fs = d["fs"]
   kept = list(d["channels_kept"])
   idx = [kept.index(c) for c in OCCIPITAL if c in kept]
   used = [kept[i] for i in idx]
@@ -178,10 +183,10 @@ def s05_table(cells: pd.DataFrame, subject: str = "S05") -> pd.DataFrame:
   return pd.DataFrame(rows)
 
 
-def load_global_deltas(comp_dir: Path, methods: Sequence[str]) -> pd.DataFrame:
+def load_global_deltas(comp_dir: Path, methods: Sequence[str], sfx: str = "") -> pd.DataFrame:
   parts = []
   for m in methods:
-    p = Path(comp_dir) / f"{m}_global_delta.csv"
+    p = Path(comp_dir) / f"{m}_global_delta{sfx}.csv"
     if not p.is_file():
       raise SystemExit(f"{p} is missing: run compare_connectivity_frequencies first")
     parts.append(pd.read_csv(p))
@@ -224,11 +229,21 @@ def scatter_figure(cells: pd.DataFrame, path: Path) -> Path:
   return Path(path)
 
 
+def _head(data_root: Path, subjects: Sequence[str]) -> str:
+  built = bool(subjects) and is_built(Path(data_root) / subjects[0])
+  return "built windows (load_subject; fs, true ids and quality per subject)" if built else SOURCE
+
+
 def build_parser() -> argparse.ArgumentParser:
   p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
   p.add_argument("--subjects", nargs="+", default=None, help="default: every S<digits> folder in the data root")
   p.add_argument("--methods", nargs="+", choices=list(METHODS), default=list(METHODS))
-  p.add_argument("--fs", type=float, default=LEGACY_FS_HZ, help="frequency axis, legacy 250 (PF-04)")
+  p.add_argument("--fs", type=float, default=None,
+                 help="override the frequency axis; default: the folder's (metadata 256 on built roots, "
+                      "legacy-assumed 250 on data/processed, PF-04)")
+  p.add_argument("--quality", choices=list(QUALITY_MODES), default="shared",
+                 help="built roots: shared mask, shared-no-guard or per-script gate; legacy roots always per-script")
+  p.add_argument("--out-suffix", default="", help="suffix of every output file, e.g. v2cont")
   p.add_argument("--data-root", type=Path, default=ROOT / "data" / "processed")
   p.add_argument("--reports-dir", type=Path, default=ROOT / "reports")
   p.add_argument("--figures-dir", type=Path, default=ROOT / "outputs" / "figures" / "connectivity_comparison")
@@ -240,21 +255,21 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
   args = build_parser().parse_args(argv)
   comp = Path(args.reports_dir) / "connectivity_comparison"
   comp.mkdir(parents=True, exist_ok=True)
-  subjects = args.subjects or sorted(d.name for d in Path(args.data_root).iterdir()
-                                     if d.is_dir() and re.fullmatch(r"S\d+", d.name))
-  print(f"Data source: {SOURCE}; subjects {subjects}; O1/Oz/O2 Hann periodograms; target f0 +- {TARGET_HALF_WIDTH:g} Hz; "
+  subjects = args.subjects or discover_subjects(args.data_root)
+  sfx = f"_{args.out_suffix}" if args.out_suffix else ""
+  print(f"Data source: {_head(args.data_root, subjects)}; subjects {subjects}; O1/Oz/O2 Hann periodograms; target f0 +- {TARGET_HALF_WIDTH:g} Hz; "
         f"alpha {ALPHA_BAND[0]:g}-{ALPHA_BAND[1]:g} Hz without f0 +- {ALPHA_EXCLUDE:g} Hz (PF-23)")
-  power = pd.DataFrame([r for s in subjects for r in subject_rows(args.data_root, s, args.fs)], columns=TABLE_COLUMNS)
-  power.to_csv(comp / "power_confound_table.csv", index=False)
-  deltas = load_global_deltas(comp, args.methods)
+  power = pd.DataFrame([r for s in subjects for r in subject_rows(args.data_root, s, args.fs, args.quality)], columns=TABLE_COLUMNS)
+  power.to_csv(comp / f"power_confound_table{sfx}.csv", index=False)
+  deltas = load_global_deltas(comp, args.methods, sfx)
   cells = merge_cells(power, deltas[deltas["subject"].isin(subjects)])
-  cells.to_csv(comp / "power_vs_connectivity_cells.csv", index=False)
+  cells.to_csv(comp / f"power_vs_connectivity_cells{sfx}.csv", index=False)
   st = confound_statistics(cells)
-  st["correlations"].to_csv(comp / "power_confound_correlations.csv", index=False)
-  st["ols"].to_csv(comp / "power_confound_ols.csv", index=False)
-  st["alpha_split"].to_csv(comp / "power_confound_alpha_split.csv", index=False)
+  st["correlations"].to_csv(comp / f"power_confound_correlations{sfx}.csv", index=False)
+  st["ols"].to_csv(comp / f"power_confound_ols{sfx}.csv", index=False)
+  st["alpha_split"].to_csv(comp / f"power_confound_alpha_split{sfx}.csv", index=False)
   s05 = s05_table(cells)
-  s05.to_csv(comp / "power_confound_s05.csv", index=False)
+  s05.to_csv(comp / f"power_confound_s05{sfx}.csv", index=False)
   fmt = {"float_format": lambda v: f"{v:.3f}"}
   print(power.drop(columns=["channels_used"]).to_string(index=False, **fmt))
   print("\nSpearman (descriptive; cells are not independent):")
@@ -267,7 +282,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     print("\nS05 (P13 D-3, exploratory):")
     print(s05.drop(columns=["subject"]).to_string(index=False, **fmt))
   if not args.no_figures:
-    print(f"saved {scatter_figure(cells, Path(args.figures_dir) / 'connectivity_delta_vs_power.png')}")
+    print(f"saved {scatter_figure(cells, Path(args.figures_dir) / ('connectivity_delta_vs_power' + sfx + '.png'))}")
   print(f"saved CSVs in {comp}")
   return 0
 

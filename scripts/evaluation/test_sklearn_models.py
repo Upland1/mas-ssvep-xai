@@ -43,7 +43,7 @@ from src.models.classical.benchmark_runner import (  # noqa: E402
   DEFAULT_SUBJECT, legacy_header_lines, load_config, prepare_subject)
 from src.models.classical.feature_spaces import benchmark_spaces  # noqa: E402
 from src.models.classical.legacy_eval import (  # noqa: E402
-  CV_LABEL, SEED, SMOOTH_LABEL, accuracies, oof_space, space_width)
+  CV_LABEL, SEED, SMOOTH_LABEL, accuracies, oof_space, space_width, splits_for)
 from src.models.classical.sklearn_models import get_sklearn_model_suite  # noqa: E402
 
 DEFAULT_CONFIG = ROOT / "configs" / "pipeline_config.yaml"
@@ -92,7 +92,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
   rows, failures = [], []
   for space in [s for s in benchmark_spaces(b, args.m) if s.name in SPACES]:
     p = space_width(space, n_bands=b["subbands"].shape[1])
-    res, errs = oof_space(space, b["subbands"], y, models, args.seed)
+    res, errs = oof_space(space, b["subbands"], y, models, args.seed,
+                          splits_for("legacy", y, None, args.seed))   # legacy PF-01, explicit since P16 (N1)
     for name, r in res.items():
       a1, a2 = accuracies(y, r["pred"], r["scores"])
       rows.append({"Subject": args.subject, "Feature space": space.name, "p": p, "Model": name,

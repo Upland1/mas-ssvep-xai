@@ -83,6 +83,9 @@ ROOT_SUBJECT = "S03"
 # legacy: lower Vpp limit of the P02 raw gate (roadmap P02.3). Config v1 has no key for it;
 # passed explicitly so the shared default vpp_min=5.0 never reaches the legacy gate (PF-07).
 LEGACY_VPP_MIN_UV = 0.5
+# legacy: the P02 band-pass is 1-60 Hz. Config v3 (P16) moved preprocessing.highcut_hz to 90 for the built
+# windows (scripts/build_windows.py); this legacy script pins 60 so the frozen arrays stay reproducible.
+LEGACY_HIGHCUT_HZ = 60.0
 # P07 tier 1: chronic-noise limits on non-overlapping 1 s windows of the filtered recording
 # (roadmap P07.4; wider than the window gate: a channel is dropped only if it is noisy throughout).
 CHANNEL_NOISE_LIMITS = {"vpp_min": 5.0, "vpp_max": 200.0, "std_min": 0.5, "std_max": 60.0}
@@ -140,7 +143,7 @@ def resolve_params(cfg: dict, args: argparse.Namespace) -> dict:
     "cross_condition": cross,
     "cue_condition": cue,
     "lowcut": float(pick(args.lowcut, pre["lowcut_hz"])),
-    "highcut": float(pick(args.highcut, pre["highcut_hz"])),
+    "highcut": float(pick(args.highcut, LEGACY_HIGHCUT_HZ)),
     "order": int(pick(args.order, pre["filter_order"])),
     "sub_window_sec": float(pick(args.sub_window_sec, pre["sub_window_sec"])),
     "vpp_thresh": float(pick(args.vpp_max, pre["vpp_thresh_uv"])),
@@ -405,7 +408,8 @@ def build_parser() -> argparse.ArgumentParser:
   p.add_argument("--no-figures", action="store_true", help="skip the figures")
   g = p.add_argument_group("overrides of configs/pipeline_config.yaml")
   g.add_argument("--lowcut", type=float, default=None, help="preprocessing.lowcut_hz")
-  g.add_argument("--highcut", type=float, default=None, help="preprocessing.highcut_hz")
+  g.add_argument("--highcut", type=float, default=None,
+                 help=f"band-pass upper edge (default: legacy {LEGACY_HIGHCUT_HZ:g} Hz, not preprocessing.highcut_hz)")
   g.add_argument("--order", type=int, default=None, help="preprocessing.filter_order")
   g.add_argument("--sub-window-sec", type=float, default=None, help="preprocessing.sub_window_sec")
   g.add_argument("--vpp-max", type=float, default=None, help="preprocessing.vpp_thresh_uv")
