@@ -187,6 +187,20 @@ $P scripts.benchmarks.benchmark_loso --data-root data/processed_continuous --win
 # 8. hash S01–S05 folders (after) — must equal 0
 ```
 
+**Measured (builders' handoffs, 2026-10-28).**
+- Classical LOSO, S01–S05, CPU: 11.7 s; rerun 2.8 s with 15 `[skip]`.
+- Classical LOSO, 40 subjects (from a 20-subject replica): ≈ 30–35 min, ≈ 4.5 GB peak.
+- Networks, GPU:
+  - ms per training-window-epoch: 0.137 (ccnn), 0.456 (compact_eegnet), 0.247 (eegnet).
+  - Cohort 5: ≈ 1.7 + 9.6 + 3.8 min, ≈ 15 min.
+  - 40 subjects: ≈ 2.2 + 12.5 + 4.9 h, ≈ 19.6 h, so command 7 is a human run.
+- Resume check (command 4): compare `summary.csv`, `per_subject.csv`, `predictions.csv` and
+  `confusion.csv`. Do not compare `folds.csv`, whose `Seconds` is wall clock (04_tests.md).
+- Suite ≈ 13–15 min, run alone.
+- Colab: the notebook clones `BRANCH` from `REPO_URL`, so the branch must be on GitHub, and
+  pushing is Sebastian's step. The notebook's within reference goes to
+  `reports/window_sweep_colab`.
+
 **Budget.** `LOCAL_RUN_BUDGET_MIN` 120 and `MAX_GPU_HOURS_PER_PHASE` 2.
 - Estimate from P20 `reports/nn_sweep/folds.csv`: 0.115, 0.458 and 0.218 ms per
   training-window-epoch (ccnn, compact_eegnet, eegnet); mean epochs 66, 86, 107; ~660
