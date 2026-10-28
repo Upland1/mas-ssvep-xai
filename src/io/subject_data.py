@@ -105,7 +105,8 @@ def load_subject(sub_dir, conditions: Sequence[int] = CLASS_CODES, quality_mode:
   `channels_dropped`, `channels_all`, `smoothing` (`"trial"` | `"mod5"`), `n_trials`, `n_selected` (rows of the
   conditions before the quality decision), `n_rejected`, `quality` (`mode`, `source`, `valid_mask` over the
   selected rows, `rows` folder rows of the selected conditions, `channels_kept`, `channels_dropped`,
-  `rejections_by_label`, `guard_sec`, `artifact_fraction`, `params` when built; `per-script` thresholds
+  `rejections_by_label`, `guard_sec`, `artifact_fraction`, `params` when built; `channel_stats` of the per-script
+  gate (None for shared decisions); `per-script` thresholds
   otherwise) and `meta` (the metadata dict, `{}` on legacy folders).
 
   `bands` names saved banks (`"fbcca"`, `"fbcsp"`, ...) and exists on built folders only. `scalp` names the
@@ -238,6 +239,7 @@ def _load_legacy(d: Path, conds: list, mode: str, fs_override, scalp, thresholds
     "trial_block_report": rep,
     "quality": {"mode": mode, "source": "per-script P07 two-tier gate (legacy folders have no shared decision)",
                 "valid_mask": keep.astype(np.int8), "rows": rows, "channels_kept": list(dec["channels_kept"]),
+                "channel_stats": dec.get("channel_stats"),
                 "channels_dropped": list(dec["channels_dropped"]), "rejections_by_label": None,
                 "guard_sec": None, "artifact_fraction": None,
                 "params": {**(thresholds or GATE_THRESHOLDS), "channel_fail_fraction": fail_fraction}},

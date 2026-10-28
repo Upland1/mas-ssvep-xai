@@ -17,7 +17,7 @@ two-tier gate: vpp 5-120 uV, std 1-35 uV, channel dropped if failing in > 50 % o
 
 CV protocol (P11): `--cv grouped` (default) = StratifiedGroupKFold(5, shuffle, seed) over trial ids (R1);
 `--cv legacy` = the P05-P10 leaky window-level StratifiedKFold (output under <reports-dir>/legacy_leaky/, not
-comparable). `--smoothing` defaults to `trial` on built roots and `mod5` on legacy roots (R8 era clause).
+comparable). `--smoothing` (parser default mod5) is `trial` on built roots unless given explicitly (R8 era clause).
 `--cv-repeats N` repeats the split with seeds `--seed + r` (42 + r) and reports the mean and the sample SD (ddof 1)
 of the N accuracies; the seed-42 values are printed too.
 
@@ -103,7 +103,6 @@ def build_parser() -> argparse.ArgumentParser:
   p.add_argument("--cv-repeats", type=int, default=1,
                  help="repeat the CV with seeds seed+r (r = 0..N-1) and report mean and SD columns (default 1)")
   add_protocol_args(p)
-  p.set_defaults(smoothing=None)   # None = the rule of the folder: trial (built) / mod5 (legacy)
   return p
 
 
@@ -146,6 +145,19 @@ def run_cv(space: FeatureSpace, sub: np.ndarray, d: dict, cv: str, smoothing: st
       raise RuntimeError(errs[MODEL])
     out.append(accuracies(d["y"], res[MODEL]["pred"], res[MODEL]["scores"], d["trial_ids"], smoothing))
   return out
+
+
+def print_channel_report(d: dict) -> None:
+  """Per-channel report of the per-script gate (as P07 printed it); shared decisions list kept/dropped only (R9)."""
+  stats, q = d["quality"].get("channel_stats"), d["quality"]
+  print(f"[quality] {q['source']}")
+  for n in d["channels_all"]:
+    s = (stats or {}).get(n)
+    if s is None:
+      print(f"  {n}{'  -> DROPPED' if n in d['channels_dropped'] else ''}")
+      continue
+    print(f"  {n}: fail {s['fail_fraction']:.1%} ({s['n_failed']}/{d['n_selected']}), mean Vpp {s['mean_vpp']:.2f} uV, "
+          f"mean std {s['mean_std']:.2f} uV{'  -> DROPPED' if n in d['channels_dropped'] else ''}")
 
 
 def header_lines(d: dict, seed: int, cv: str, smoothing: str, thresholds: dict, fail_fraction: float,
@@ -192,6 +204,7 @@ def evaluate_subject(root: Path, subject: str, m: int = 1, fs: Optional[float] =
     rule = smoothing or d["smoothing"]
     out["header"] = header_lines(d, seed, cv, rule, thresholds, fail_fraction, repeats)
     out["approximate"], out["built"], out["filter_mode"] = d["trial_ids_approximate"], built, d["filter_mode"]
+    print_channel_report(d)
     if not built:
       print(f"Trial blocks of {subject} (stimulus windows before the quality gate):")
       from src.preprocessing.dataset.cv_utils import format_block_report
@@ -254,6 +267,9 @@ def derived_suffix(built: bool, filter_mode: Optional[str], quality: str, fs: Op
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
   args = build_parser().parse_args(argv)
+  explicit = any(a == "--smoothing" or a.startswith("--smoothing=") for a in (sys.argv[1:] if argv is None else argv))
+  if not explicit:
+    args.smoothing = None   # the rule of the folder: trial (built roots) / mod5 (legacy roots, the parser default)
   if args.cv_repeats < 1:
     print("[x] --cv-repeats must be >= 1")
     return 1
