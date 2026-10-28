@@ -163,6 +163,32 @@ After fixes 3–4 the run is: freeze (< 1 min, 39 MB copied), demo, 2 builds, fl
 
 Suite on the branch head (78a56ce), run by me: `.venv/bin/python -m pytest tests -o addopts="" -q -p no:cacheprovider` → `1072 passed, 21 warnings in 602.73s (0:10:02)`. That equals the tester's count (04_tests.md).
 
+## Pre-run audit — Round 2
+
+Verdict: **PASS**. The run may start with the command list in `02_plan.md` (5f6eb04).
+
+Reviewed: `git diff 58c578c..HEAD -- src scripts` (0bd4376, 15a601e, f468113), the Round 1 sections of the three `03_changes_*` files and of `04_tests.md`, the amended run list in `02_plan.md`, and the new decisions.md row. I ran `pytest tests/test_p16_*.py -o addopts="" -q` on HEAD (ccb8d6e): `125 passed in 180.18s`. The tester's full suite gave `1089 passed, 21 warnings in 609.52s` (04_tests.md).
+
+| Fix | Result | Evidence |
+|---|---|---|
+| 1 R1/PF-13 cv_groups by overlap | PASS | `src/io/subject_data.py` (`_load_built`): overlap = `min(s201, s202) + wlen − max(s201, s202)`, and the 201 window with the largest overlap wins. With no overlap, the window keeps its own id. The formula is correct for equal-length windows. The tester's `test_cv_groups_pair_a_jittered_cue_window_...[8,-8,3]` and the data-signal jitter test cover my Round 1 case. The exact-start mutant is killed. |
+| 2 R5 explicit thresholds | PASS | `_per_script_gate` raises unless both `thresholds` and `channel_fail_fraction` are given. The `GATE_THRESHOLDS` and `CHANNEL_FAIL_FRACTION` imports are gone from the loader. `load_condition_windows` passes the P13 `GATE` limits and `channel_fail_fraction_thresh` (`connectivity_extraction.py:312-315`). This is the only connectivity entry point. `grep -rn "load_subject(" scripts src` finds two callers, and both pass thresholds explicitly. The legacy-equality tests pass. Note R2-N1 below. |
+| 3 connectivity a′ | PASS | `CONN_VARIANTS` gains `a_prime: v1fs256`. `d_*_fs = a′ − a` and `d_*_build = b − a′`. The filter mode stays "not applicable". Run command 13 is `--fs 256 --out-suffix v1fs256` on the legacy root. |
+| 4 flagship a′t | PASS | `d_smoothing = a′t − a′` at 2.0 s only, and `d_build` = b − a′ (1.0 s) or b − a′t (2.0 s) (`compare_v1_v2.py:86-87`). The arithmetic test checks that the steps sum to c − a. I had asked for an in-script assertion that a′t 1.0 s = a′; it is a unit test instead (`test_smoothing_trial_on_a_legacy_root_is_the_a_prime_t_row`). For the real run it becomes a verifier check (addition A below). |
+| 5 regression scope | PASS | `--check-regression` covers the flagship CSV, the cohort summary, the `_v1check_details` file, the alpha diagnostic, and every edge npz (array_equal per key). It prints byte-equal / value-equal only / different and exits 1 on "different" or on a missing file. The file names match the connectivity naming (`connectivity_cohort_summary_<suffix>_details.csv`). The mutants for skipping details, ignoring npz results and always reporting byte-equal are killed. |
+| 6 run list | PASS | 18 commands, in order. Freeze first, with `--configs-git-rev 97a29be`, and its log goes to `mas/state/scratch/p16_freeze.log` until it exits. The flags match the Round 1 handoffs: flagship a/a′/a′t/b/c/c′ with suffixes `v1rep5`, `v1fs256`, `v1fs256trial`, `v2pw`, `v2cont`, `v2cont_noguard` (the compare defaults); connectivity `v1check`, `v1fs256`, `v2pw`, `v2cont`, `v2cont_noguard`. The downstream commands are excluded. Budget: about 40 min of commands (5 connectivity cohorts × ~7 min, 7 flagship runs < 30 s each) plus a suite of about 10 min, so about 52 min out of 120. |
+| Decisions row (guard in both modes, cv_groups by overlap, pins) | PASS | It is in decisions.md, as I wrote it. |
+
+Process: the ml-engineer edited 5 lines of the tester's test file. The tester reviewed and kept them, and the new values (a′ = 0.12, b = 0.20 → build 0.08, fs 0.02) are correct under the new definitions. Accepted.
+
+Non-blocking:
+- R2-N1: `benchmark_n_subjects.evaluate_subject` still has `thresholds = dict(GATE_THRESHOLDS if thresholds is None else thresholds)` as a function-level fallback. The CLI always passes the config values, so the run is unaffected. Remove it at the next touch (same R5 pattern, script-local).
+- Round 1 notes N1–N7 still apply. N1 (FDR counts as a fraction of `total_edges` when the channel sets differ) is binding for the results review.
+
+**Pre-committed criteria (1)–(5) of Round 1 are unchanged.** I add two checks for the new rows. They follow from the code, not from any number:
+- **A (a′t):** per subject, the a′t `1.0s Acc (%)` and `1.0s SD` equal those of a′ exactly. The smoothing changes the 2.0 s column only, and the splits and models are identical. The Clean and Rejected Windows are equal between a, a′ and a′t. The Round 1 binding check stands: `d_smoothing` = 0.00 exactly on S01 and S05.
+- **B (connectivity a′):** the `n_stim_windows` and `n_baseline_windows` counts and the `trial_ids_approximate` flags in `_details` are equal between a′ and the frozen a, for every subject, method and condition. The fs override does not touch the gate or the ids (consistent with `test_legacy_cohort_fs256_flag_changes_only_the_axis`). The identity cells of Round 1 (PLV/wPLI at 101/102/105 and coherence at 105: identical `obs_diff`, `p_one_tailed` and `n_edges_sig_fdr`) apply to the a vs a′ pair as written.
+
 ## Results review
 
 Verdict: APPROVE / REJECT
