@@ -159,9 +159,16 @@ def _verdict(new: Path, old: Path) -> str:
     return f"different: {str(exc).splitlines()[0]}"
 
 
+def _arrays_equal(a: np.ndarray, b: np.ndarray) -> bool:
+  """Same shape, dtype and values; NaN counts as equal only where both arrays hold NaN (coherence/PLV/wPLI diagonals)."""
+  if a.shape != b.shape or a.dtype != b.dtype:
+    return False
+  return bool(np.array_equal(a, b, equal_nan=np.issubdtype(a.dtype, np.inexact)))
+
+
 def check_regression(reports: Path, snapshot: Path, suffix: str = "v1check") -> int:
   """Compares the `_v1check` outputs with the frozen ones (settled point 4): flagship CSV, connectivity cohort summary
-  and its `_details`, the alpha diagnostic, and every `connectivity_edges_<suffix>/*.npz` (array_equal per key).
+  and its `_details`, the alpha diagnostic, and every `connectivity_edges_<suffix>/*.npz` (per key: shape, dtype, values; aligned NaN equal).
   Prints byte-equal / value-equal only / different per file; returns 0 when none is different."""
   import numpy as np
   status = 0
@@ -188,7 +195,7 @@ def check_regression(reports: Path, snapshot: Path, suffix: str = "v1check") -> 
         bad.append(fn)
         continue
       with np.load(new_dir / fn, allow_pickle=False) as x, np.load(old_dir / fn, allow_pickle=False) as y:
-        if set(x.files) != set(y.files) or not all(np.array_equal(x[k], y[k]) for k in y.files):
+        if set(x.files) != set(y.files) or not all(_arrays_equal(x[k], y[k]) for k in y.files):
           bad.append(fn)
     print(f"[{'x' if bad else '+'}] connectivity_edges: {len(files) - len(bad)}/{len(files)} npz files equal per key"
           + (f"; different or missing: {bad[:5]}" if bad else ""))

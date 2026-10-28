@@ -96,3 +96,66 @@ def test_regression_check_flags_a_changed_summary(tmp_path):
     (t / "reports" / f"{name}_v1check.csv").write_bytes((snap / f"{name}.csv").read_bytes())
   args = ["--baselines-dir", str(t / "baselines"), "--reports-dir", str(t / "reports"), "--check-regression"]
   assert C.main(args) == 1          # details / alpha files are missing: not silently skipped
+
+
+def regression_tree(tmp_path):
+  """Byte-equal CSVs and an edges folder in both trees; returns (snap edges dir, new edges dir, args)."""
+  t = tree(tmp_path)
+  snap, rep = t / "baselines" / "v1_2026-10-27" / "reports", t / "reports"
+  (snap / "connectivity_cohort_summary_details.csv").write_text("a,b\n1,2\n")
+  (snap / "connectivity_alpha_diagnostic.csv").write_text("x\n1\n")
+  for old, new in {"n_subjects_benchmark": "n_subjects_benchmark_v1check",
+                   "connectivity_cohort_summary": "connectivity_cohort_summary_v1check",
+                   "connectivity_cohort_summary_details": "connectivity_cohort_summary_v1check_details",
+                   "connectivity_alpha_diagnostic": "connectivity_alpha_diagnostic_v1check"}.items():
+    (rep / f"{new}.csv").write_bytes((snap / f"{old}.csv").read_bytes())
+  (snap / "connectivity_edges").mkdir()
+  (rep / "connectivity_edges_v1check").mkdir()
+  return snap / "connectivity_edges", rep / "connectivity_edges_v1check", \
+    ["--baselines-dir", str(t / "baselines"), "--reports-dir", str(rep), "--check-regression"]
+
+
+def nan_diag(n=7, seed=0):
+  import numpy as np
+  m = np.random.default_rng(seed).random((n, n))
+  np.fill_diagonal(m, np.nan)
+  return m
+
+
+def test_regression_check_nan_diagonal_npz_is_equal(tmp_path, capsys):
+  """Identical coherence-like matrices with NaN diagonals are equal (failed with plain array_equal: P16 verify FAIL)."""
+  import numpy as np
+  old_dir, new_dir, args = regression_tree(tmp_path)
+  m = nan_diag()
+  np.savez(old_dir / "S01_coherence.npz", stim_101=m, condition=np.array([101, 102]))
+  np.savez(new_dir / "S01_coherence.npz", stim_101=m.copy(), condition=np.array([101, 102]))
+  assert C.main(args) == 0
+  assert "1/1 npz files equal per key" in capsys.readouterr().out
+
+
+def test_regression_check_misplaced_nan_or_changed_layout_fails(tmp_path):
+  import numpy as np
+  old_dir, new_dir, args = regression_tree(tmp_path)
+  m = nan_diag()
+  np.savez(old_dir / "S01_plv.npz", stim_101=m)
+  moved = m.copy()
+  moved[0, 0], moved[0, 1] = 0.5, np.nan              # NaN in one file, a number in the other
+  np.savez(new_dir / "S01_plv.npz", stim_101=moved)
+  assert C.main(args) == 1
+  np.savez(new_dir / "S01_plv.npz", stim_101=m.astype(np.float32))   # same values, other dtype
+  assert C.main(args) == 1
+  np.savez(new_dir / "S01_plv.npz", stim_101=m, extra=np.zeros(1))   # extra key
+  assert C.main(args) == 1
+  np.savez(new_dir / "S01_plv.npz", stim_101=m)
+  assert C.main(args) == 0
+
+
+def test_regression_check_csv_empty_cells_value_equal(tmp_path, capsys):
+  """CSV value-equal fallback: aligned empty (NaN) cells are equal; an empty cell against a number is different."""
+  old_dir, new_dir, args = regression_tree(tmp_path)
+  snap, rep = old_dir.parent, new_dir.parent
+  (snap / "connectivity_alpha_diagnostic.csv").write_text("x,y\n1,\n,2.5\n")
+  (rep / "connectivity_alpha_diagnostic_v1check.csv").write_bytes(b"x,y\r\n1,\r\n,2.5\r\n")
+  assert C.main(args) == 0 and "value-equal only" in capsys.readouterr().out
+  (rep / "connectivity_alpha_diagnostic_v1check.csv").write_text("x,y\n1,0\n,2.5\n")
+  assert C.main(args) == 1
