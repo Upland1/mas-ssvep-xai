@@ -49,7 +49,7 @@ if str(ROOT) not in sys.path:
   sys.path.insert(0, str(ROOT))
 
 from src.io import ebr_parser  # noqa: E402
-from src.io.channels import legacy_scalp  # noqa: E402
+from src.io.channels import LEGACY_EXCLUDED  # noqa: E402
 from src.io.subject_data import built_dir_name  # noqa: E402
 from src.preprocessing.dataset.cv_utils import LEGACY_TRIAL_LENGTHS, build_trial_ids  # noqa: E402
 from src.preprocessing.signal.filters import broadband_filter  # noqa: E402
@@ -220,7 +220,7 @@ def legacy_reference(x: np.ndarray, mark: np.ndarray, fs: float, cfg: dict, scal
   from src.features.ssvep.psd_extraction import process_condition_windows_with_baseline
   args = rp.build_parser().parse_args([])
   params = rp.resolve_params(cfg, args)
-  params["scalp"] = legacy_scalp(params["scalp"])
+  params["scalp"] = [c for c in params["scalp"] if c not in LEGACY_EXCLUDED]   # legacy: 7 channels
   params["channel_drop"] = False
   rows = [list(scalp).index(c) for c in params["scalp"]]
   inf = float("inf")
