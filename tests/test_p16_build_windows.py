@@ -98,7 +98,9 @@ def test_resume_refuses_legacy_folder_and_stride_subfolder(raw, tmp_path, capsys
   capsys.readouterr()
   assert _run(raw, tmp_path / "c", "--subjects", "S01", "--resume") == 0
   assert "already built" in capsys.readouterr().out
-  assert _run(raw, tmp_path / "c", "--subjects", "S01", "--resume", "--guard-sec", "0.5") == 0
+  assert _run(raw, tmp_path / "c", "--subjects", "S01", "--resume", "--guard-sec", "0.5") == 1   # P19 C-a: refused
+  capsys.readouterr()
+  assert _run(raw, tmp_path / "c", "--subjects", "S01", "--resume", "--guard-sec", "0.5", "--overwrite") == 0
   assert "already built" not in capsys.readouterr().out                 # other parameters: rebuilt
   leg = tmp_path / "leg"
   (leg / "S01").mkdir(parents=True)

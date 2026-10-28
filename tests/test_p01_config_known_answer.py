@@ -42,7 +42,7 @@ V2 = {**V1, "channels": {**V1["channels"], "excluded": [],
 V3 = {**V2, "preprocessing": {**V2["preprocessing"], "highcut_hz": 90.0, "notch_hz": 60.0, "notch_q": 30.0},
       "quality": {"vpp_range_uv": [5.0, 120.0], "std_range_uv": [1.0, 35.0], "channel_fail_fraction": 0.5,
                   "artifact_block_sec": 0.25, "guard_sec": "auto", "guard_rel_amplitude": 0.01,
-                  "source": "filtered"},
+                  "source": "both"},
       "filter_bank": {"harmonics": {"enabled": True, "n_harmonics": 3, "half_width_hz": 1.0, "order": 2},
                       "intermediate": {"enabled": True, "half_width_hz": 1.0, "order": 2}}}
 
