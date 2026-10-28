@@ -56,7 +56,7 @@ def test_truncated_last_trial_dropped_like_legacy():
 
 def test_trial_ids_one_per_segment_and_sub_idx():
   m = make_mark(n_trials=10)
-  idx = W.build_window_index(m, FS, STIM, cue_shares_cross_id=False)
+  idx = W.build_window_index(m, FS, STIM)
   n_seg = 10 * 3                                                       # 201, 202, 10x per trial
   assert len(np.unique(idx.trial_ids)) == n_seg
   for t in np.unique(idx.trial_ids):
@@ -72,7 +72,8 @@ def test_trial_ids_one_per_segment_and_sub_idx():
 def test_cue_window_shares_the_fixation_trial_id_pf13():
   """The 202 window is the second 201 sub-window (same samples): the same group (PF-13)."""
   m = make_mark(n_trials=6)
-  idx = W.build_window_index(m, FS, STIM)
+  assert len(np.unique(W.build_window_index(m, FS, STIM).trial_ids)) == 6 * 3      # default: one id per segment
+  idx = W.build_window_index(m, FS, STIM, cue_shares_cross_id=True)
   assert len(np.unique(idx.trial_ids)) == 6 * 2                        # 201+202 share, 10x separate
   for s in idx.starts[idx.labels == 202]:
     twin = (idx.labels == 201) & (idx.starts == s)

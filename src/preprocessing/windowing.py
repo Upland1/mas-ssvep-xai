@@ -11,9 +11,9 @@ segment. `stride_sec=None` means `stride = n` (non-overlapping) and reproduces t
 exactly (2 / 1 / 5 windows per 201 / 202 / 10x trial). Rows are ordered by condition (`cross, cue,
 stim_conditions...` as given), then by onset, then by offset. One trial id per segment, increasing in row
 order; offsets restart at 0 in every segment, so any ordering that matters (R8) is by `(trial_id, offsets)`.
-PF-13: the 202 window lies inside the fixation period and duplicates a 201 window; with
-`cue_shares_cross_id=True` (default) it gets the id of the 201 segment it overlaps, so a grouped split can
-never separate them.
+PF-13: the 202 window lies inside the fixation period and duplicates a 201 window. The saved ids stay one per
+segment (01_DATA_SPEC 5.2); `load_subject` returns `cv_groups`, which gives the 202 window the id of its 201
+twin, so a grouped split never separates them. `cue_shares_cross_id=True` does the same at build time.
 
 Sub-band windows (R3, PF-14): `band_windows(..., mode="continuous")` filters the whole broadband-filtered
 recording per band and cuts afterwards; `mode="per_window"` (legacy) cuts first and filters each window with
@@ -98,7 +98,7 @@ def build_window_index(mark: np.ndarray, fs: float, stim_conditions: Sequence[in
                        cross_condition: int = 201, cue_condition: int = 202,
                        sub_window_sec: float = 1.0, stim_duration_sec: float = 5.0,
                        cross_duration_sec: float = 2.0, cue_lookback_sec: float = 1.0,
-                       stride_sec: Optional[float] = None, cue_shares_cross_id: bool = True) -> WindowIndex:
+                       stride_sec: Optional[float] = None, cue_shares_cross_id: bool = False) -> WindowIndex:
   """The `WindowIndex` of a MARK channel (module docstring); `fs` is the header rate.
 
   Raises ValueError for a non-positive `fs`, window or stride.
@@ -232,3 +232,21 @@ def select_clean_bands(bands: np.ndarray, valid_mask: np.ndarray,
     raise ValueError(f"valid_mask has {len(keep)} entries for {len(b)} windows")
   b = b[keep]
   return b if channels_kept_idx is None else b[:, :, np.asarray(channels_kept_idx, dtype=int), :]
+
+
+def compare_trial_ids(reconstructed: np.ndarray, true: np.ndarray) -> dict:
+  """How far reconstructed trial ids (legacy `build_trial_ids`) are from true ids for the same windows (P11 D-2).
+
+  A pair `(r, t)` is consistent when reconstructed group `r` and true group `t` hold exactly the same
+  windows. Returns `n_windows`, `n_reconstructed` / `n_true` (distinct ids) and `n_inconsistent_windows`
+  (windows in an inconsistent pair); 0 means the two partitions are identical (ids may be renamed).
+  """
+  r, t = np.asarray(reconstructed), np.asarray(true)
+  if r.shape != t.shape:
+    raise ValueError(f"shapes differ: {r.shape} vs {t.shape}")
+  pairs, counts = np.unique(np.stack([r, t], axis=1), axis=0, return_counts=True)
+  size_r = {k: int((r == k).sum()) for k in np.unique(r)}
+  size_t = {k: int((t == k).sum()) for k in np.unique(t)}
+  bad = sum(int(c) for (a, b), c in zip(pairs, counts) if not (c == size_r[a] == size_t[b]))
+  return {"n_windows": int(len(r)), "n_reconstructed": len(size_r), "n_true": len(size_t),
+          "n_inconsistent_windows": bad}
