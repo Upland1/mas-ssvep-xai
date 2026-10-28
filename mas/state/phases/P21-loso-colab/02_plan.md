@@ -213,6 +213,101 @@ $P scripts.benchmarks.benchmark_loso --data-root data/processed_continuous --win
   and 7 join the human-run request. The phase then reports cohort 5 only and is
   `PASS (partial; human run pending)`.
 
+### Pre-run audit additions (07_review.md 7facac5, copied verbatim)
+
+#### Binding run-list items for the verifier (copy verbatim into 02_plan.md)
+
+B1. **Pre-state.** `reports/loso_w1_s01-s05`, `reports/loso_w1_s01-s05_all`, `reports/loso_w1`,
+`reports/loso_w1_fbcca_all` and `reports/window_sweep_w1_all` must be absent before their commands run (stale-fold rule).
+Hash of the S01–S05 built folders before command 1 and after the last command, with exactly this command:
+`find data/processed_continuous/w1_s0.25/S0[1-5] -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum`.
+The pinned value at a3ea7bc is `e7f55081705d9a0e9a528b93885925dd8cbfe354f44406c04fedc88e14bebab4` (65 files). Before and after must
+both equal it.
+
+B2. **Cohort gate.** Command 1's last lines (`Cohort: N subjects built (...)`, `[-] Skipping <S>: <reason>`) are quoted
+verbatim in 05_run.md. If N = 5, commands 5, 6, B5 and 7 are **not run locally**; they join the human-run request, and
+the phase is reported as `PASS (partial; human run pending)`. Command 6 must never run on a 5-subject root, because it
+would write a duplicate cohort-5 table labelled as the full cohort. Every skipped subject and its reason goes into the report.
+
+B3. **Cohort-5 classical reproduces the builder smoke.** `Acc (%)` of `reports/loso_w1_s01-s05/summary.csv` for fbcca, lda
+and lda_subjnorm, S01–S05, must equal `mas/state/scratch/p21_loso_c5/summary.csv`. fbcca: 58.68, 68.01, 91.07, 98.80, 95.43.
+lda: 69.26, 76.24, 96.07, 99.55, 96.91. lda_subjnorm: 74.85, 83.07, 95.61, 99.70, 96.91. A difference larger than 1 window per subject
+is a stop, to be explained before any interpretation.
+
+B4. **Cohort-5 `--channels all` (≈ 11 s).**
+`$P scripts.benchmarks.benchmark_loso --data-root data/processed_continuous --window 1 --stride-sec 0.25 --subjects S01 S02 S03 S04 S05 --methods fbcca lda lda_subjnorm --channels all --out-dir reports/loso_w1_s01-s05_all`
+
+B5. **Full cohort fbcca with `--channels all` (only if N > 5; seconds to minutes).**
+`$P scripts.benchmarks.benchmark_loso --data-root data/processed_continuous --window 1 --stride-sec 0.25 --methods fbcca --channels all --out-dir reports/loso_w1_fbcca_all`.
+The full classical `--channels all` run (≈ 35 min) is required only if fewer than 50 % of the full-cohort subjects have gate-kept
+channels equal to `common`. It is run locally if the remaining budget allows, otherwise it joins the human-run request,
+into `reports/loso_w1_all`.
+
+B6. **Channel and build record.** For every cohort, copy from the harness log the `Channels (...)` line and every
+`[+] <S>: ... gate kept [...]` line. Then list, read-only from each `windows_meta.json`, `fs`, the `quality.source` (it must be
+`both` for every subject) and `channels_dropped`. Count the subjects whose gate-kept list equals `common` and those equal to the
+full montage.
+
+B7. **Real interrupt (acceptance 2).** Run command 3 under `timeout -s INT 300`. Then list `folds/*.npz` (count k)
+and confirm that no `*.tmp` is left. Rerun command 3 to completion: exactly k `[skip]` lines, then the rest computed.
+After that, run command 4 (rerun command 2). Hash the four CSVs **after command 3 completes and after command 4** with
+`sha256sum reports/loso_w1_s01-s05/{summary,per_subject,predictions,confusion}.csv`; the hashes must be equal.
+Command 4 rebuilds the summary from all folds, networks included, so the "before" hash is the one taken after
+command 3, not after command 2. `folds.csv` is excluded (wall-clock `Seconds`).
+
+B8. **Within reference consistency (only if command 5 runs).** The S01–S05 rows of `reports/window_sweep_w1_all/summary.csv`
+(1 s, fbcca and lda: `Acc (%)` and `Acc SD`) must equal the P20 `reports/window_sweep/summary.csv` 1 s rows exactly. fbcca:
+58.68, 64.60, 91.07, 98.80, 95.43. lda: 75.88, 77.36, 97.31, 99.79, 99.09. A difference is a stop: the folders or the code changed.
+
+B9. **Budget and stop rules.** Classical runs use `CUDA_VISIBLE_DEVICES=""` (acceptance 1). For command 6: if the
+mean time of the first 3 `lda` folds is above 60 s (the builder projected ≈ 22 s), stop with Ctrl-C after a fold line,
+because the folds resume. The remainder joins the human-run request, with the measured time per fold. Command 3 (≈ 15 min
+GPU) and the B7 interrupt stay well inside `MAX_GPU_HOURS_PER_PHASE` 2. Command 7 is always a human run. The suite runs alone
+and records `torch.get_num_threads()` (P20 C-1).
+*Optional* D1, only if ≥ 40 min of budget remain after the binding items: cohort-5 `ccnn eegnet` with `--seed 43` and
+`--seed 44` (≈ 11 min GPU), each in its own out-dir `reports/loso_w1_s01-s05_seed<k>`. Without D1, P21 makes no ranking
+claim between networks and classical methods (P20 C-3).
+
+B10. **Fold integrity (results review, every out-dir).** For each fold `.npz`: `config.train_subjects` excludes
+`test_subject`; `n_train` = (sum of the cohort's test windows) − `n_windows_test`; the set of `git_head` values is reported.
+If there is more than one, `git diff --stat <h1> <h2> -- src scripts` must be empty, otherwise the table mixes code revisions.
+
+B11. **Human-run request content.** The request asks Sebastian to return the whole `LOSO_OUT` folder (including
+`folds/`, `predictions.csv`, `confusion.csv`, `loso_config.json`) and `window_sweep_colab/`. They go into
+`reports/loso_w1_colab/` and `reports/window_sweep_colab/`, never into a local out-dir. The data source of these rows
+says "Colab build" (the Colab session builds its own windows from Drive).
+
+#### Pre-registered directional predictions for the results review (copy verbatim into 02_plan.md)
+
+The cohort-5 classical and S01-network smoke numbers were seen before these predictions (03 handoffs), so the cohort-5
+items are consistency checks; the full-cohort items are blind. "Matched" = a subject whose within run used the same
+channels as the LOSO run: cohort 5 `common` → S01, S03, S04; `all` → S02, S05; full cohort per B6.
+
+- **P1 (identity, bug check).** For every matched subject, the LOSO `fbcca` per-window predictions are identical to the
+  within `fbcca` predictions of the same subject, with 0 mismatches. This is joined on (subject, trial_id, offset_sec) of the two
+  `predictions.csv`. A mismatch on a matched subject is a bug (FAIL), not a deviation. Equal accuracy is not evidence
+  (S05: 7 mismatches at equal 95.43 %). Expected for cohort 5: S01/S03/S04 from command 2, S02/S05 from B4.
+- **P2 (LOSO below within, trained methods).** This is judged on matched subjects for `lda` (against within `lda`) and for
+  each network (against the P20 `reports/nn_sweep` 1 s value of the same network, cohort 5 only). Holds if the matched-subject
+  mean LOSO < the within mean, **and** LOSO ≤ within + 1 pp in ≥ 80 % of matched subjects. Ties at the ceiling count as
+  holding. Any matched subject with LOSO `lda` > within `lda` + 5 pp triggers the B10 audit and is reported as
+  "unexplained", never tuned.
+  For `lda_subjnorm` (transductive), LOSO above within on a matched subject is reported but is not a violation. In
+  the smoke, matched S01/S03/S04 are below within for both methods; unmatched S02 lda_subjnorm is 83.07 vs within 77.36.
+- **P3 (`lda_subjnorm` ≥ `lda`, same run, same channels).** Holds if the cohort mean Δ = subjnorm − lda ≥ 0 **and**
+  at most 20 % of subjects have Δ < −2 pp. Smaller negative Δs are within-noise ties. Example: smoke S03 −0.46 pp = 3.04
+  windows of 661 (shown command: `(96.07-95.61)/100*661`). Basis: per-subject z-scoring removes subject gain and offset, which
+  LOSO cannot learn; the smoke Δ was +5.59, +6.83, −0.46, +0.15, 0.00 (mean +2.42).
+- **P4 (networks, cohort 5).** 0 degenerate folds for `ccnn` and `eegnet` (smoke S01: best epochs 31 and 44, train ≥ 98 %).
+  Any degenerate fold (`compact_eegnet` included) is reported per fold. It stays in the table but is excluded from P2's sign
+  count for that network.
+- **P5 (exploratory, full cohort, no consequence).** The S01–S05 rows of the full-cohort LOSO `lda` (39 training subjects) are compared
+  with the cohort-5 values (4 training subjects) only if `common` is the same 7 channels. Expected: mean ≥ the cohort-5 mean
+  − 2 pp. If channels differ, the comparison is not made.
+- **Consequence rule.** A failed P2/P3 is not a FAIL by itself (R-16 has no numeric target). It must be reported per subject as
+  "direction not observed". It is explained only by a mechanism shown in the data (channel mismatch, degenerate fold,
+  B10 finding), and no setting is changed afterwards (golden rule 5). A failed P1 or B3/B8 is a stop.
+
 ## Acceptance checks (for the verifier)
 
 1. Classical LOSO runs end-to-end on CPU (command 2 and 6 with `CUDA_VISIBLE_DEVICES=""` or the script's CPU path for classical methods).
