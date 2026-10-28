@@ -16,7 +16,7 @@ from src.preprocessing.dataset import augmentation as aug
 from src.preprocessing.dataset.augmentation import (
   SSVEPAugmentedDataset, add_gaussian_noise, mixup_intra_class, scale_amplitude, time_shift)
 from tests.p05_synth import make_windows, write_subject
-from tests.test_p09_compact_shallow import EEGNET_SMOKE_PROBA_SHA256
+from tests.test_p09_compact_shallow import assert_eegnet_smoke_proba, single_thread
 
 
 def test_noise_proportional_to_channel_std():
@@ -193,10 +193,10 @@ def test_augmentation_changes_training_only_and_is_deterministic():
 
 def test_off_path_identical_to_p09():
   X, y = make_windows(n_trials=4, seed=0)
-  import hashlib
-  r = train_and_eval_eegnet_cv(X, y, epochs=3, device="cpu", cv="legacy")
-  assert hashlib.sha256(r["proba"].tobytes()).hexdigest() == EEGNET_SMOKE_PROBA_SHA256
-  r2 = train_and_eval_cv(X, y, eegnet_cv.build_eegnet, epochs=3, device="cpu", augment=False, cv="legacy")
+  with single_thread():
+    r = train_and_eval_eegnet_cv(X, y, epochs=3, device="cpu", cv="legacy")
+    assert_eegnet_smoke_proba(r["proba"])
+    r2 = train_and_eval_cv(X, y, eegnet_cv.build_eegnet, epochs=3, device="cpu", augment=False, cv="legacy")
   assert np.array_equal(r["proba"], r2["proba"])
 
 
