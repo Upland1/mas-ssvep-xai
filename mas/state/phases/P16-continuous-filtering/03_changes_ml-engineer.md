@@ -116,3 +116,9 @@ Full suite `pytest tests -q -o addopts=""` on the tree at commit c931e11 (log ke
 - `test_p07_ml_engineer.py::test_n_subjects_schema_channels_and_parallel_equals_serial` expects the per-channel gate report in the console: `print_channel_report` restores it (the loader now also returns `quality["channel_stats"]` for per-script decisions, a two-line addition to `src/io/subject_data.py`).
 - `test_p11_cv.py::test_defaults_are_grouped_cv_and_mod5_smoothing...` expects the parser default `--smoothing mod5`: the parser default is mod5 again and the script switches to `trial` on built roots only when `--smoothing` is not given on the command line.
 After the fixes the three tests plus `test_p16_subject_data.py`, `test_p16_flagship_port.py`, `test_p16_compare_v1_v2.py`, `test_p07_ml_engineer.py` and `test_p11_cv.py` pass (32 + 3 passed); the full suite was not rerun a second time (23 min under load).
+
+## Round 1 follow-up
+
+Decision (decisions.md, P16): connectivity reads the broadband windows, filtered continuously in both build modes, so (c) - (b) is zero by construction. `compare_v1_v2.py` now writes the string "not applicable (same input)" in the connectivity filter-mode columns of `connectivity.csv` and "n/a (same input)" in the markdown; the flagship keeps the numeric c - b, and the guard effect c - c' stays numeric for both. `test_effects_are_plain_differences` asserts it. Commit 416ab9e.
+
+Full suite, `.venv/bin/python -m pytest tests -o addopts="" -q`: `1035 passed, 21 warnings in 699.45s (0:11:39)`.
