@@ -68,3 +68,15 @@ Paths only (all git-ignored).
 ## Questions
 
 None.
+
+## Round 2 re-verification
+
+HEAD 215bf44 (clean tree). Commands 1-16 outputs unchanged. Logs with `_r2` suffix in `reports/logs/P16/`; first-run logs kept.
+
+| # | Command | Start | Runtime | Exit | Log |
+|---|---|---|---|---|---|
+| 17 | `scripts.diagnostics.compare_v1_v2 --check-regression` | 2026-10-28 00:29:39 | < 1 s | 0 | `17_scripts.diagnostics.compare_v1_v2_r2.log` |
+| 18 | `scripts.diagnostics.compare_v1_v2` | 2026-10-28 00:29:39 | < 1 s | 0 | `18_scripts.diagnostics.compare_v1_v2_r2.log` |
+| - | `pytest tests -o addopts= -q -p no:cacheprovider` (clean worktree of 215bf44, removed after) | 00:29:30 | 10 min 13 s | 0 | `00_pytest_full_r2.log` |
+
+Command 18 rewrote `reports/v1_vs_v2/{flagship,connectivity}.csv`; both are byte-identical (`cmp`) to the first-run copies.

@@ -149,3 +149,16 @@ Every number above comes from the CSV or log named in the row: `reports/n_subjec
 1. Criterion (2): `.venv/bin/python -m scripts.diagnostics.compare_v1_v2 --check-regression` exits 1 (log `reports/logs/P16/17_scripts.diagnostics.compare_v1_v2.log`: `[x] connectivity_edges: 5/20 npz files equal per key`), where the pre-committed text requires exit 0. The four CSV comparisons in the same run are byte-equal and my NaN-aware comparison finds all 20 npz files equal, so the data regression is clean and only the check's equality of NaN diagonals (15 coherence/PLV/wPLI files) fails. The required exit code is not met.
 
 Other items for the reviewer (not FAIL reasons): (i) 28 of 35 identity cells have `obs_diff` equal only to 2.44e-16 between a and a', with `p_one_tailed` and `n_edges_sig_fdr` identical; (ii) guard effect sign negative in S02/S04/S05 against the a-priori expectation >= 0; (iii) skipped test in the clean checkout is the one that reads ignored `reports/`; (iv) reviewer note N5 (redundant `Mean` subject in `baseline_summary.csv`) is still present.
+
+## Round 2 re-verification
+
+Verdict: PASS
+
+Branch HEAD 215bf44. Scope per 07_review.md 645312e: full suite plus commands 17-18.
+
+- Suite on a clean worktree: `1101 passed, 1 skipped, 21 warnings in 613.05s (0:10:13)` (`reports/logs/P16/00_pytest_full_r2.log`). The skip is the same ignored-`reports/` test as in the first run.
+- Command 17 (`17_scripts.diagnostics.compare_v1_v2_r2.log`): four CSVs `byte-equal`, `[+] connectivity_edges: 20/20 npz files equal per key`, `EXIT: 0`. Criterion (2) is met: exit 0, 20/20 npz equal, four CSVs byte-equal.
+- Command 18 (`18_..._r2.log`): exit 0; `flagship.csv` and `connectivity.csv` byte-identical to the first run, so all first-run numbers and directions in this file stand.
+- All other criteria (1), (3), (4), (5) are unchanged from the first run (no re-execution of commands 1-16).
+
+The first-run FAIL (reason 1) is kept above as the record; it is resolved by 9b297c0/45a1d79. Verdict restated: PASS.
