@@ -145,12 +145,12 @@ phases:
     passed: '2026-10-28'
   P18:
     slug: nbs
-    status: pending
+    status: passed
     owner: orchestrator
-    branch: null
-    commit: null
-    opened: null
-    passed: null
+    branch: phase/P18-nbs
+    commit: 59dddd6
+    opened: '2026-10-28'
+    passed: '2026-10-28'
   P19:
     slug: raw-quality
     status: pending

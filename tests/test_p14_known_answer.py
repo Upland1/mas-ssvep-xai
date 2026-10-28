@@ -402,7 +402,8 @@ F24, F20, F15, F1091, F857 = (c3.CONDITION_FREQS[c] for c in (101, 102, 103, 104
 
 def _fake_job(subject, a, b, p_mag, p_pat, r_obs):
   return (subject, "plv", a, b, dict(t_mag=0.1, p_mag=p_mag, d_pat=1 - r_obs, p_pat=p_pat, r_obs=r_obs,
-                                    n_edges_fdr=0, n_edges=21))
+                                    n_edges_fdr=0, n_edges=21, nbs_max_size=0, nbs_p=1.0,
+                                    n_edges_nbs=0, fs=256.0))
 
 
 def test_pairwise_tables_ceiling_disattenuation_and_bh():
@@ -864,6 +865,6 @@ def test_pairwise_null_diagnostic_csv_columns_and_section6_csv_unchanged(tmp_pat
   main = pd.read_csv(d / "plv_pairwise_tests_t.csv")
   assert list(main.columns) == ["subject", "method", "freq_a", "freq_b", "t_mag", "p_mag", "d_pat", "p_pat", "r_obs",
                                 "n_edges_fdr", "n_edges", "reliability_ceiling", "r_disattenuated",
-                                "trial_ids_approximate", "sig_bh_mag", "sig_bh_pat"]
+                                "trial_ids_approximate", "sig_bh_mag", "sig_bh_pat", "nbs_max_size", "nbs_p", "n_edges_nbs", "fs"]
   assert (main[["freq_a", "freq_b"]].values == nul[["freq_a", "freq_b"]].values).all()
   assert not (d / "plv_pairwise_null.csv").exists()          # suffix respected

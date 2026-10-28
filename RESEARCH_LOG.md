@@ -389,3 +389,27 @@ Sources: `reports/compact_cnn_benchmark_cpu.csv`, `reports/shallow_convnet_bench
 **R11.** None. Zero reference-access lines dated 2026-10-28 [9].
 
 **Open.** Carry-forwards C-a (refuse overwrite of built folders with different `build_params`; open), C-b (`fail_fraction` required), C-c (6-class console line), C-d (fundamentals-only ablation), C-e (per-offset Missed/FalseAct). One skipped test is not identified in the run log. Merge per `MERGE_POLICY: orchestrator`.
+
+## P18 — Network-Based Statistic (NBS) beside edge-wise FDR
+
+2026-10-28. Branch `phase/P18-nbs`; run state `32738cc`; verifier PASS `b96d5df`; results review APPROVE `3db9410`; decisions `c8a894b`. Phase report: `mas/state/reports/P18.md`.
+
+**Aim.** Roadmap P18 [1]: a graph-based statistic (Network-Based Statistic) next to edge-wise FDR in the cohort and between-frequency connectivity tests, and a comparison of significant-graph sizes across subjects and frequencies [1, 2]. FDR is kept and saved beside NBS (settled point 3 [2]).
+
+**Data source.** OO session, S01–S05. Continuous build `data/processed_continuous/<S>/` (P16 root; guard 0.902 s; shared quality; fs 256.0 from metadata; true trial ids). The root is unchanged (65 files, hash `c59c94b8…a54e`, equal before and after) [5, 9, 10]. Responders from `reports/n_subjects_benchmark_v2cont.csv` (PF-21) [11].
+
+**Result (cohort, 1000 permutations; 100 cells = 5 subjects × 4 methods × 5 frequencies; `reports/connectivity_cohort_summary_p18_nbs.csv`).** Cells with A-FDR (at least one edge), A-NBS (p < 0.05) and B (global p < 0.05): 48, 43, 32. NBS-positive cells: S03 16, S04 18, S05 8, S01 1, S02 0. Mean largest component, % of possible edges: S03 38.8, S04 32.1, S05 12.1, S01 2.6, S02 1.6 (`reports/connectivity_graph_size_p18_nbs.csv`) [9].
+
+**Graph sizes across frequencies.** Mean over subjects and methods: 26.4 % at 24 Hz, 19.1 % at 20 Hz, 13.0 % at 15 Hz, 13.9 % at 10.91 Hz, 14.8 % at 8.57 Hz. The alpha-band prediction holds for the means of coherence and PLV only; wPLI is high at 10.91 and 8.57 Hz [9].
+
+**Checks.** V0–V8 met. The 200-permutation FDR columns, global p and edge arrays equal P16 `v2cont` (15 of 15 columns, max abs diff 0) [9, 10]. P18 tests: 17 + 21 = 38; suite `1204 passed, 1 skipped` [3, 4, 10].
+
+**R7.** Seventeen cells flip between 200 and 1000 permutations (A-FDR 14, A-NBS 6, B 0); all are inconclusive. Eleven A-FDR flips are BH-resolution-limited, three are Monte Carlo flips. All six A-NBS flips are threshold-boundary; none is p-resolution [9, 10].
+
+**P2 refuted.** A-NBS 43 < A-FDR 48 at 1000 permutations: 9 FDR-only and 4 NBS-only cells. Neither criterion is uniformly more sensitive [7, 9].
+
+**Pairwise (1000 permutations; first run on the continuous build).** NBS p < 0.05 in 8 / 14 / 6 of 50 cells (coherence / PLV / wPLI), against 11 / 8 / 7 for `p_mag`. Read as an excess beyond the per-edge exchange-null centre, not as a test of Δa = Δb (R3). 26 of 28 NBS-positive cells involve 10.91 or 8.57 Hz; exploratory (D-6) [7, 9, 10].
+
+**R11.** None. Zero reference-access lines dated 2026-10-28 [14].
+
+**Open.** Carry-forwards C-1 (`p_mag_centred` in the pairwise CSV), C-2 (pairwise group labels as edge counts), C-3 (flip sizes), C-4 (lower-tailed NBS, option) and C-5 (second pairwise permutation count before any R7 claim on pairwise tests) are open; C-6 is applied in the report. One skipped test is not identified in the run log. Merge pending, by the orchestrator.

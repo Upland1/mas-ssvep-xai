@@ -323,4 +323,5 @@ def pairwise_permutation_test(win_a: np.ndarray, ids_a: np.ndarray, win_b: np.nd
               p_mag_centred=float(p_cen), d_null_mean=float(dn.mean()) if len(dn) else float("nan"),
               d_null_sd=float(dn.std()) if len(dn) else float("nan"), d_pat=float(d_obs), p_pat=float(p_pat), r_obs=float(r_obs),
               n_edges_fdr=int(fdr.sum()), n_edges=int(emask.sum()), delta_a=d_a, delta_b=d_b,
+              diff_edges=diff_obs, null_edges=null_e,
               n_permutations=int(n), n_a=int(na), n_b=int(len(win_b)), n_base=int(len(base)))
