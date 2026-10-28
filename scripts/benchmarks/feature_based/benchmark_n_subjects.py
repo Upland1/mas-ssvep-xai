@@ -239,13 +239,12 @@ def header_lines(d: dict, seed: int, cv: str, smoothing: str, thresholds: dict, 
     q = d["quality"]
     lines = [f"cv={cvl}; seed={seed}", f"smoothing: {sml if smoothing == 'mod5' else 'trial-reset 2-window average over true trial ids ordered by (trial, offset) (R8)'}",
              f"features: {d['filter_mode']} build, FBCCA from the saved fbcca bands, CSP on the saved fbcsp bands "
-             f"({CSP_BANDS_TEXT}); fs={d['fs']:g} Hz ({d['fs_source']}); scaler and CSP fitted inside each training fold "
+             f"({bank_bands_text(d, bank)}); fs={d['fs']:g} Hz ({d['fs_source']}); scaler and CSP fitted inside each training fold "
              f"(R2/PF-11)",
              f"quality: {q['mode']} ({q['source']}); guard_sec {q['guard_sec']}; params {q['params']}"]
   lines.append(f"cv repeats {repeats}: seeds {seed}..{seed + repeats - 1}")
   if bank != "base":
-    lines.append(f"bank {bank}: CSP m per band on the fbcsp bands + {' + '.join(EXTRA_BANKS[bank])} "
-                 f"({bank_bands_text(d, bank)} Hz); FBCCA unchanged")
+    lines.append(f"bank {bank}: the fbcsp bands + {' + '.join(EXTRA_BANKS[bank])} (CSP m per band); FBCCA unchanged")
   if classes == 6:
     lines.append("classes 6: 101-105 + rest 201 (202 excluded, PF-13); uniform LDA priors 1/6; CV groups = true trial ids "
                  "(R1); 2.0 s smoothing resets at each trial id (R8)")
