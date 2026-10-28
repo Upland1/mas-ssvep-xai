@@ -411,3 +411,30 @@ Review
 - Pre-run audit PASS (`25dca39`); results review APPROVE (`1eeff88`), D-1 to D-6, C-a to C-e.
 
 Next phase: after the orchestrator's gate.
+
+## P18 — Network-Based Statistic (NBS) beside edge-wise FDR
+
+2026-10-28. Branch `phase/P18-nbs`. Run state `32738cc`; verifier PASS `b96d5df`; results review APPROVE `3db9410`. Phase report: `mas/state/reports/P18.md`.
+
+Added
+- `src/stats/nbs.py` (NEW): `edge_pseudo_z`, component labelling and maximum component size, `nbs_test`, `nbs_sweep`, edge and matrix layout helpers (PDC symmetrized).
+- `tests/test_p18_nbs.py` (NEW, 17 tests) and `tests/test_p18_independent_known_answer.py` (NEW, 21 tests).
+- Cohort outputs: 18 NBS columns after the 15 pre-P18 columns, `nbs_<c>` masks in the edge npz, `connectivity_graph_size_<s>.csv`, `connectivity_nbs_sweep_<s>.csv`.
+- Generated (ignored): `reports/connectivity_*_p18_nbs{,_p200}*`, `reports/connectivity_comparison/*_p18_nbs.csv`, `reports/connectivity_edges_p18_nbs{,_p200}/`, `reports/logs/P18/`.
+
+Changed
+- `scripts/connectivity/analysis/analyze_connectivity_cohort.py` (MODIFIED): `--stats {nbs,fdr}` (default `nbs`), `--nbs-thresholds`, `--nbs-primary`, `flip_NBS` in `--compare`.
+- `scripts/connectivity/comparison/test_connectivity_frequency_differences.py` (MODIFIED): two-tailed NBS at |z| > 2, four appended pairwise columns, `--summary-only`, `flip_nbs`.
+- `src/features/connectivity/permutation.py` and `comparison.py` (MODIFIED): also return the null and difference matrices; no existing value changed.
+- `tests/test_p13_known_answer.py`, `tests/test_p14_known_answer.py`, `tests/test_p14_connectivity_comparison.py` (MODIFIED): schema pins extended.
+- Not changed: `configs/`; the P16 root `data/processed_continuous/` (hash `c59c94b8…a54e`, 65 files).
+
+Result
+- 1000 permutations, 100 cells: A-FDR 48, A-NBS 43, B 32. Largest graphs in S03 and S04.
+- 200 versus 1000 permutations: 17 flipped cells, all inconclusive; the 6 A-NBS flips are threshold-boundary.
+- Pairwise (continuous build): NBS p < 0.05 in 8 / 14 / 6 of 50 cells (coherence / PLV / wPLI). Excess beyond the per-edge exchange-null centre; not a test of Δa = Δb.
+
+Review
+- Pre-run audit PASS (`0044229`); results review APPROVE (`3db9410`), D-1 to D-6, C-1 to C-6.
+
+Next phase: after the orchestrator's gate.
