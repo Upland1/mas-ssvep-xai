@@ -1,6 +1,6 @@
 # P17 · 07 · Scientific review
 
-Status: READY (pre-run audit)
+Status: READY (pre-run audit PASS; results review APPROVE)
 Author: scientific-reviewer
 Reads: 00, 02, 03_changes_*, 04 and every changed file (pre-run); 05, 06 and the CSVs (results)
 
@@ -224,23 +224,158 @@ None for the builders. Items 1-4 above are run-list additions (orchestrator).
 
 ## Results review
 
-Verdict: APPROVE / REJECT
+Verdict: APPROVE
+
+Inputs: `06_verify.md` (d7daf81, PASS), `05_run.md`, `reports/n_subjects_benchmark_p17_{base,harm,harmmid}_{5,6}class.csv`,
+the three `_6class_confusion.csv`, D0 CSV `reports/n_subjects_benchmark_p17_diag_base_5class_rep5.csv`. The pre-run
+rules were applied unchanged with this read-only command (output quoted below; σ = sqrt(SD_a² + SD_b²), w = one
+window of the denominator, BalAcc w = 100/(6·n_min) with n_min from the confusion row sums / 10):
+
+```bash
+.venv/bin/python - <<'EOF'
+import pandas as pd, numpy as np
+R='reports/n_subjects_benchmark_p17_'
+L=lambda n: pd.read_csv(R+n+'.csv').set_index('Subject').drop('Mean')
+c5={b:L(b+'_5class') for b in ('base','harm','harmmid')}
+c6={b:L(b+'_6class') for b in ('base','harm','harmmid')}
+cf={b:pd.read_csv(R+b+'_6class_confusion.csv') for b in ('base','harm','harmmid')}
+def nmin(b,s):
+  c=cf[b]; return int(c[c.Subject==s][[str(k) for k in (101,102,103,104,105,201)]].sum(axis=1).min()/10)
+def cls(ma,sa,mb,sb,w):
+  d=ma-mb; sg=np.hypot(sa,sb)
+  if abs(d)>=max(2*sg,2*w): k='MAT'
+  elif abs(d)<max(sg,w): k='tie'
+  else: k='small'
+  return f"{d:+6.2f} s{sg:4.2f} w{w:4.2f} {k}"
+# ... per comparison: 5-class acc (1.0 s: '1.0s Acc (%)','1.0s SD'; 2.0 s: '2.0s Smoothed (%)','2.0s SD', w=100/Clean Windows);
+# 6-class columns with their ' SD' twin (w: stim = Clean-Rest, rest = Rest Windows, bal = 6*n_min);
+# 6 vs 5 = 2.0s StimCorrect(6) vs 2.0s Smoothed(5), w=100/Clean(5); Missed vs FalseAct w = max of the two windows
+EOF
+```
+
+(Full script as run in this session; the elided lines are the loops printing each comparison.) Ceiling = both arms ≥ 99 %.
+
+G1-G4 (pre-committed acceptance of the gain) are all met per `06_verify.md`: suite with the 12 leak controls
+passed; D0 25/25 values identical to P16 row c; D1 min cross-trial gap 2.969 s on all subjects; D2 non-guard files
+byte-identical, `p17-only 0`; G3 S01 +12.35 pp to 85.50 %, S02 +13.69 pp to 86.74 % (< +20 pp, < 97 %); G4 met on
+5/5. The gain is accepted under the pre-committed wording.
 
 ### Deviations from references
 
 | Ref | Expected | Obtained (log) | Δ | Within tolerance? | Explanation | Accepted? |
 |---|---|---|---|---|---|---|
-| | | | | | | |
+| R-16 | no numeric target; direction and plausibility | directions below | — | n/a | — | yes |
+| P16 row c (D0 identity) | equal on subjects with an equal stimulus mask (5/5) | 25/25 values equal (`06_verify.md` D0) | 0 | yes (exact) | same bands, same mask, same seeds | yes |
+
+### Per-subject comparisons (rule output, Δ in pp)
+
+**P1 harm − base, 5 classes** (`..._harm_5class.csv` vs `..._base_5class.csv`):
+
+| Subject | 1.0 s Δ (σ) | class | 2.0 s Δ (σ) | class |
+|---|---|---|---|---|
+| S01 | +12.35 (2.76) | material | +12.60 (2.75) | material |
+| S02 | +13.69 (2.94) | material | +11.53 (3.18) | material |
+| S03 (seen) | +5.62 (1.22) | material | +5.56 (1.13) | material |
+| S04 | +0.62 (0.40) | small, ceiling | +0.62 (0.40) | small, ceiling |
+| S05 | +0.96 (0.71) | small | +0.85 (0.68) | small, ceiling |
+
+Confirmed on S01 and S02 (material gains, the pre-committed direction). S04 is a ceiling tie as predicted; S05 is
+"small" at 1.0 s (base 98.89 < 99 so the ceiling clause does not apply), positive direction, no claim. Cohort rule:
+3/5 material same sign (S01, S02, S03), none opposite: **"harm > base" holds at 1.0 s and 2.0 s**. S03 is counted
+by the rule but is the observation that prompted the check; the independent confirmation is S01 and S02.
+
+**P2 harm+mid − harm, 5 classes:** tie on 10/10 subject × time cells (largest |Δ| S01 2.0 s −1.40, σ 2.54).
+Confirmed. 6 classes: tie on all 25 subject × metric cells (BalAcc 1.0/2.0 s, FalseAct, Missed, StimCorrect).
+The intermediate bands add nothing measurable.
+
+**P3 6 vs 5 classes, 2.0 s StimCorrect(6) − Smoothed(5):** negative on 15/15 subject-bank cells; material on 12,
+small on base S02 (−6.10, σ 3.68) and base S03 (−2.53, σ 1.63). Direction confirmed (no gain anywhere; "small" is a
+loss below the material bar, not a contradiction). The second half, "loss ≈ Missed", is **refuted on the low-SNR
+subjects**: base S01 loss 6.45 vs Missed 14.25, S02 6.10 vs 18.26; harm S01 15.20 vs 20.00, S02 11.48 vs 20.00. It
+holds on S03–S05 (e.g. harm S04 1.38 vs 1.38, S05 2.92 vs 2.81). Reason (arithmetic, not a new hypothesis): loss =
+Missed − (5-class stimulus errors − 6-class stimulus-to-other-stimulus errors); on S01/S02 many windows that rest
+absorbs were already 5-class errors (base S01: 5-class error 21.15, 6-class stimulus-to-stimulus error
+100 − 72.40 − 14.25 = 13.35).
+
+**P4 Missed − FalseAct, 2.0 s, base:** S01 −7.75 (σ 3.84) material **opposite**; S02 +2.18 tie; S03 +4.19
+material; S04 +2.51 small; S05 +2.96 material. 2 material in the predicted direction and 1 opposite: **P4 refuted
+for base** (S01 has FalseAct 22.00 % > Missed 14.25 %). With the narrow banks it holds: harm and harm+mid material
+Missed > FalseAct on S01, S02, S03, S05, small on S04.
+
+**P5 harm − base, 6 classes:** 2.0 s BalAcc S01 +5.69 material, S02 +7.01 material, S03 +1.86 small, S04 +0.95
+small, S05 +0.55 tie — direction confirmed (no loss), but only 2/5 material, so **no cohort claim** by the rule;
+"BalAcc gain on S01 and S02" only. FalseAct S01 −14.88 and S02 −12.84 material, ties elsewhere (S04, S05 0.00 in
+both): confirmed. Missed (no direction pre-committed): S01 +5.75 material, others tie/small. So in 6 classes the
+narrow bands mainly move rest errors: far fewer false activations, somewhat more misses on S01.
+
+**P6 2.0 s vs 1.0 s:** no material or small negative cell in 15 (5-class accuracy) + 15 (6-class BalAcc); minimum
+−0.04 (base S04 BalAcc, tie). Confirmed. Material smoothing gains only on S01 (5-class base +5.70, harm +5.95).
+
+**P7:** D0 exact. Confirmed.
 
 ### Interpretation check
 
-<!-- Per-subject reading; inconclusive results stated as such; leakage in
-fitted objects, normalization, validation sets; statistics unit and
-multiple comparisons. -->
+- **Leakage.** No fitted object sees test rows (pre-run R2), splits are trial-grouped with the runtime guard, priors
+  are fixed, the mask is shared by all six runs, and the pre-committed leak signature (G3) did not fire. Weak
+  subjects did not jump to the ceiling: S01/S02 harm 85.50/86.74 % (1.0 s). The gain is accepted as **consistent
+  with an SNR gain of the ±1 Hz bands at k·f**, not proven genuine; the real-data label-permutation control was not
+  required by the outcome and was not run.
+- **What the bank is (C-d).** `harm` = 14 narrow bands at k·f, k = 1..3, **including the five fundamentals** (60 Hz
+  skipped). The data cannot say whether the gain comes from the narrow fundamentals or from the harmonics. The report
+  must not write "harmonic bands improve" or "harmonics carry the gain"; write "the narrow bank at the stimulus
+  frequencies and their 2nd/3rd multiples".
+- **6-class accuracy columns.** `1.0s Acc (%)`/`2.0s Smoothed (%)` in the 6-class CSVs are over stimulus + rest
+  windows; never compare them with 5-class accuracy. Use StimCorrect(6) vs Smoothed(5).
+- **Uniform priors.** Rest has 74-80 windows vs 36-40 per stimulus class; with priors 1/6 the classifier is not
+  pushed towards rest by frequency. The S01 base FalseAct 22 % shows rest is not easy to separate for low-SNR
+  subjects with the broad bands; the narrow banks cut it to 7.12 %.
+- **Coincidence flag.** harm 2.0 s Missed is exactly 20.00 % on both S01 and S02: counts 400/2000 (S01: 98 + 91 + 25 +
+  36 + 150 in the 201 column) and 380/1900 (S02: 17 + 65 + 76 + 116 + 106), with per-repeat SD 1.97 and 2.11. It is
+  not "one window per trial" by construction (it varies per repeat and per class: S01 103 25/400 vs 105 150/400).
+  Whether misses concentrate on the first window after onset (narrow-band build-up) is an open question; the
+  outputs have no per-offset breakdown. The report must not suggest the 1/5 is structural.
+- **Class pattern.** In the summed matrices the rest column is the main error sink for 105 (8.57 Hz) and 104 (10.91
+  Hz) on every bank (harm Sum: 280 and 202 of 2000 windows to 201), consistent with alpha-band fixation
+  activity overlapping the two lowest targets; descriptive only.
+- **S04 mask change.** The longer guard (231 → 268 samples) removes on S04 exactly one 201 window and one 202 window
+  (read-only check:
+  `.venv/bin/python -c "import numpy as np; a,b='data/processed_continuous/S04','data/processed_continuous_p17/S04'; y=np.load(a+'/y_labels.npy'); va=np.load(a+'/valid_mask.npy').astype(bool); vb=np.load(b+'/valid_mask.npy').astype(bool); print({int(l): int(((va&~vb)&(y==l)).sum()) for l in np.unique(y)})"`
+  -> `{101: 0, ..., 105: 0, 201: 1, 202: 1}`). `05_run.md:64` says "2 rest windows removed": wrong, the second is a
+  202 cue window, which no P17 run uses. Effect: S04 has 75 rest windows instead of 76 in all three 6-class runs; no
+  stimulus window and no 5-class number changes (D0 exact). Other subjects: no change.
+- **Statistics.** SDs over 10 repeats are split variability on fixed data; no p-values; nothing called significant.
+
+### What the report must say
+
+1. Data source per run: continuous build at `data/processed_continuous_p17/` (four banks, guard 1.046875 s = 268
+   samples) vs P16 `data/processed_continuous/` (two banks, 231 samples), decided before any number; P16 root hash
+   unchanged; valid counts table from D2 with the S04 line corrected (−1 rest, −1 cue 202).
+2. P16 masks are reproduced only with `build_windows --banks fbcca fbcsp` (C-a).
+3. Per-subject tables for 5 and 6 classes with SDs (R9); cohort claims only as ruled above: harm > base (5 classes,
+   both times); harm+mid = harm; 6-class costs stimulus accuracy everywhere; BalAcc/FalseAct gains with harm on S01
+   and S02 only.
+4. The refuted directions verbatim: P4 for base (S01 FalseAct > Missed) and "loss ≈ Missed" on S01/S02.
+5. `harm` includes the narrow fundamentals; no attribution to harmonics (C-d).
+6. The 6-class accuracy columns are 6-class accuracies; the 20.00 % coincidence; the console "stimulus windows only"
+   line of 6-class logs is wrong (C-c), the `.meta.txt` line is the data source.
 
 ### Decisions for decisions.md
 
-<!-- Accepted deviations, one line each; the orchestrator copies them. -->
+- D-1 (P17) Narrow-bank gain accepted under the pre-committed G1-G4 (all met): `harm` > `base` in 5 classes, material
+  on S01 (+12.35/+12.60), S02 (+13.69/+11.53), S03 (+5.62/+5.56), ceiling/small on S04, S05; worded "consistent with
+  an SNR gain of ±1 Hz bands at k·f, fundamentals included"; no real-data permutation control run (not triggered).
+- D-2 (P17) Intermediate bands: tie with `harm` on every subject and metric (5 and 6 classes).
+- D-3 (P17) 6 vs 5 classes: StimCorrect(6) below Smoothed(5) on 15/15 cells (12 material); loss ≈ Missed only on
+  S03-S05.
+- D-4 (P17) Pre-committed P4 (Missed > FalseAct, base) refuted: S01 FalseAct 22.00 > Missed 14.25; it holds with
+  the narrow banks (4 material, 1 small). 6-class BalAcc gain with harm material on S01, S02 only (no cohort claim).
+- D-5 (P17) Guard 1.047 s changes only S04 (−1 rest 201, −1 cue 202); `05_run.md:64` wording corrected in the report.
+- D-6 (P17) harm Missed 20.00 % on S01 and S02 recorded as a count coincidence (400/2000, 380/1900).
+- Carry-forwards (from the pre-run audit, unchanged): C-a (data-signal: refuse overwriting a built folder with
+  different `build_params`; before any phase rebuilds `data/processed_continuous`; later phases needing narrow banks
+  read `_p17`), C-b (`fail_fraction` required in `evaluate_subject`), C-c (6-class console data-source line), C-d
+  (ablation fundamentals-only vs k = 2, 3 to attribute the gain). New: C-e (optional) per-offset Missed/FalseAct
+  breakdown (which window of a trial goes to rest), wherever 6-class work continues.
 
 ## Sources spot-check
 
