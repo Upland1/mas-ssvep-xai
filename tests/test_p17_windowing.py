@@ -139,7 +139,7 @@ def test_per_window_build_is_labelled_legacy(raw, tmp_path, capsys):
   m = json.loads((d / "windows_meta.json").read_text())
   assert m["legacy"] is True and "legacy" in m["data_source"] and "Data source: legacy per_window" in out
   c = json.loads((_build(raw, tmp_path / "ct", "--banks", "fbcsp", "--guard-sec", "1.5") / "windows_meta.json").read_text())
-  assert c["legacy"] is False and c["data_source"] == "continuous build"
+  assert c["legacy"] is False and c["data_source"] == "continuous build, quality source both"
 
 
 def test_missing_filter_bank_config_raises(tmp_path):

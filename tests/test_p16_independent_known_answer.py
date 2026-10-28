@@ -171,7 +171,7 @@ def test_ringing_time_takes_the_longest_filter():
 
 GATE = {"thresholds": {"vpp_min": 5.0, "vpp_max": 120.0, "std_min": 1.0, "std_max": 35.0}, "channel_fail_fraction": 0.5}
 PARAMS = {"vpp_min": 5.0, "vpp_max": 120.0, "std_min": 1.0, "std_max": 35.0, "channel_fail_fraction": 0.5,
-          "artifact_block_sec": 1.0, "guard_sec": 2.0, "guard_rel_amplitude": 0.01}
+          "artifact_block_sec": 1.0, "guard_sec": 2.0, "guard_rel_amplitude": 0.01, "source": "filtered"}
 NAMES = ["PO3", "POz", "Oz", "O1"]
 
 

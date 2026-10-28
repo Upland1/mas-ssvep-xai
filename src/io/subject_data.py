@@ -170,7 +170,7 @@ def _load_built(d: Path, conds: list, mode: str, banks: tuple, fs_override, thre
     key = "valid_mask" if mode == "shared" else "valid_mask_no_guard"
     keep_local = load(key)[rows].astype(bool)
     kept, dropped = list(dq["channels_kept"]), list(dq["channels_dropped"])
-    source = f"shared decision of the built folder ({key})"
+    source = f"shared decision of the built folder ({key}), quality source {dq.get('source', 'filtered')}"
     params = dq.get("params")
     rej = None
     guard, art = dq.get("guard_sec"), dq.get("artifact_fraction")
@@ -198,7 +198,8 @@ def _load_built(d: Path, conds: list, mode: str, banks: tuple, fs_override, thre
     rej = {int(lab): {"total": int((y_all[rows] == lab).sum()),
                       "valid": int(((y_all[rows] == lab) & keep_local).sum()),
                       "own_gate": int(((y_all[rows] == lab) & (reason == 1)).sum()),
-                      "guard": int(((y_all[rows] == lab) & (reason == 2) & ~keep_local).sum())}
+                      "guard": int(((y_all[rows] == lab) & (reason == 2) & ~keep_local).sum()),
+                      "raw": int(((y_all[rows] == lab) & (reason == 3)).sum())}
            for lab in sorted(set(int(v) for v in y_all[rows]))}
   return {
     "subject": d.name, "sub_dir": str(d), "built": True,

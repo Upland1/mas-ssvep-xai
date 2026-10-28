@@ -62,7 +62,8 @@ from src.io.channels import LEGACY_EXCLUDED  # noqa: E402
 from src.io.subject_data import built_dir_name  # noqa: E402
 from src.preprocessing.dataset.cv_utils import LEGACY_TRIAL_LENGTHS, build_trial_ids  # noqa: E402
 from src.preprocessing.signal.filters import broadband_filter  # noqa: E402
-from src.preprocessing.window_quality import quality_params_from_config, subject_quality_gate  # noqa: E402
+from src.preprocessing.window_quality import (SOURCES, AllChannelsDropped, quality_params_from_config,  # noqa: E402
+                                              subject_quality_gate)
 from src.preprocessing.windowing import (BANK_NAMES, BASE_BANKS, MODES, NARROW_BANKS, BandFilter,  # noqa: E402
                                          band_overlaps, band_windows, build_bank, build_window_index, compare_trial_ids,
                                          cut_windows, load_session, windows_per_segment)
@@ -123,6 +124,8 @@ def resolve_params(cfg: dict, args: argparse.Namespace) -> dict:
   q = quality_params_from_config(cfg)
   if args.guard_sec is not None:
     q["guard_sec"] = "auto" if args.guard_sec == "auto" else float(args.guard_sec)
+  if args.quality_source is not None:
+    q["source"] = args.quality_source
   return {
     "scalp": list(cfg["channels"]["scalp"]), "mark_channel": str(cfg["channels"]["mark_channel"]),
     "feature_conditions": tuple(conds), "stim_conditions": tuple(c for c in conds if c not in (cross, cue)),
@@ -169,7 +172,7 @@ def build_subject(x: np.ndarray, mark: np.ndarray, fs: float, params: dict) -> d
     overlaps[b] = band_overlaps(bank)
     filters += bank
   quality = subject_quality_gate(X_time, idx.starts, broadband, fs, names, filters, params["quality"],
-                                 labels=idx.labels)
+                                 labels=idx.labels, raw_windows=X_raw, raw=x)
   return {"broadband": broadband, "idx": idx, "X_time": X_time, "X_raw": X_raw, "bands": bands,
           "banks_meta": banks_meta, "bands_skipped": bands_skipped, "band_overlaps": overlaps, "quality": quality, "n_samples": n}
 
@@ -218,7 +221,8 @@ def build_meta(built: dict, params: dict, fs: float, subject: str, recording: st
     "filters": {"broadband": "butterworth bandpass + notch", **{b: f"{len(v)} bands" for b, v in
                                                                  built["banks_meta"].items()}},
     "bands": built["banks_meta"], "bands_skipped": built["bands_skipped"], "band_overlaps": _cross_overlaps(built),
-    "data_source": "legacy per_window build (PF-14)" if params["filter_mode"] == "per_window" else "continuous build",
+    "data_source": ("legacy per_window build (PF-14)" if params["filter_mode"] == "per_window" else "continuous build")
+                   + f", quality source {q['source']}",
     "legacy": params["filter_mode"] == "per_window",
     "label_counts": dict(zip(labels.tolist(), counts.tolist())), "n_windows": int(len(idx)),
     "n_trials": int(len(np.unique(idx.trial_ids))), "skipped_segments": idx.skipped,
@@ -226,9 +230,12 @@ def build_meta(built: dict, params: dict, fs: float, subject: str, recording: st
                 "channel_stats": q["channel_stats"], "guard_sec": q["guard_sec"],
                 "guard_samples": q["guard_samples"], "artifact_fraction": q["artifact_fraction"],
                 "guarded_fraction": q["guarded_fraction"], "n_artifact_blocks": q["n_artifact_blocks"],
-                "rejections_by_label": q["rejections_by_label"], "params": q["params"],
+                "rejections_by_label": q["rejections_by_label"], "params": q["params"], "source": q["source"],
+                "channel_stats_raw": q["channel_stats_raw"], "n_artifact_blocks_raw": q["n_artifact_blocks_raw"],
+                "artifact_fraction_raw": q["artifact_fraction_raw"], "guarded_fraction_raw": q["guarded_fraction_raw"],
+                "n_reason3_raw_gate": q["n_raw_gate"], "n_reason3_raw_guard": q["n_raw_guard"],
                 "n_valid": int(q["valid_mask"].sum()), "n_valid_no_guard": int(q["valid_mask_no_guard"].sum()),
-                "reason_codes": {"0": "valid", "1": "own_gate", "2": "guard", "3": "raw_gate"}},
+                "reason_codes": {"0": "valid", "1": "own_gate", "2": "guard", "3": "raw (gate or guard)"}},
   })
 
 
@@ -368,9 +375,13 @@ def quality_lines(subject: str, built: dict, fs: float, x: np.ndarray) -> list:
          f"{q['guarded_fraction']:.2%} guarded)",
          f"  channels kept {q['channels_kept']}; dropped {q['channels_dropped'] or 'none'}; fail fractions: "
          + ", ".join(f"{c} {s['fail_fraction']:.1%}" for c, s in q["channel_stats"].items())]
+  out.append(f"  quality source {q['source']}: reasons 1/2/3 = {int((q['reason'] == 1).sum())}/{int((q['reason'] == 2).sum())}/"
+             f"{int((q['reason'] == 3).sum())} (3: raw gate {q['n_raw_gate']}, raw guard {q['n_raw_guard']})"
+             + ("" if q["n_artifact_blocks_raw"] is None else f"; raw artifact blocks {q['n_artifact_blocks_raw']} "
+                f"({q['artifact_fraction_raw']:.2%}, {q['guarded_fraction_raw']:.2%} guarded)"))
   for lab, r in q["rejections_by_label"].items():
     out.append(f"  rejected {subject} {lab}: total {r['total']}, valid {r['valid']}, own_gate {r['own_gate']}, "
-               f"guard {r['guard']}")
+               f"guard {r['guard']}, raw {r['raw']}")
   for b, sk in built["bands_skipped"].items():
     if sk:
       out.append(f"  bands skipped {subject} {b}: " + "; ".join(f"{k['center']:g} Hz [{k['low']:g}, {k['high']:g}] "
@@ -400,6 +411,22 @@ def discover_raw_subjects(raw_dir: Path) -> list:
   return sorted(found, key=lambda s: int(s[1:]))
 
 
+def diff_build_params(old, new: dict) -> list:
+  """Keys (`quality` split into `quality.<k>`) whose recorded value differs from the requested one; all keys
+  if `old` is not a dict (a folder without recorded build_params)."""
+  new = json.loads(json.dumps(new, default=str))
+  if not isinstance(old, dict):
+    return sorted(new)
+  out = []
+  for k in sorted(set(old) | set(new)):
+    if k == "quality" and isinstance(old.get(k), dict) and isinstance(new.get(k), dict):
+      out += [f"quality.{j}" for j in sorted(set(old[k]) | set(new[k])) if old[k].get(j) != new[k].get(j)
+              or (j in old[k]) != (j in new[k])]
+    elif old.get(k) != new.get(k) or (k in old) != (k in new):
+      out.append(k)
+  return out
+
+
 def build_parser() -> argparse.ArgumentParser:
   p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
   p.add_argument("--filter-mode", choices=MODES, default="continuous",
@@ -407,6 +434,9 @@ def build_parser() -> argparse.ArgumentParser:
   p.add_argument("--subjects", nargs="+", default=None, help="subject folders (default: every S\\d+ in --raw-dir)")
   p.add_argument("--session", default=DEFAULT_SESSION, help="recording file stem (default: OO)")
   p.add_argument("--guard-sec", default=None, help="artifact guard in seconds or 'auto' (default: config quality.guard_sec)")
+  p.add_argument("--quality-source", choices=SOURCES, default=None,
+                 help="signal the quality gate checks: filtered, raw (unfiltered windows) or both "
+                 "(default: config quality.source)")
   p.add_argument("--window-sec", type=float, default=None, help="window length (default: config sub_window_sec); "
                  "giving it or --stride-sec saves under w<len>_s<stride>/")
   p.add_argument("--stride-sec", type=float, default=None, help="window stride (default: none = the legacy starts)")
@@ -417,6 +447,8 @@ def build_parser() -> argparse.ArgumentParser:
   p.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
   p.add_argument("--check-legacy-starts", action="store_true",
                  help="compare with the P02 legacy starts/trial ids and print the first-trial start-up report")
+  p.add_argument("--overwrite", action="store_true",
+                 help="rewrite a subject folder whose recorded build_params differ from the requested ones (P17 C-a)")
   p.add_argument("--resume", action="store_true", help="skip subjects already built with the same parameters")
   return p
 
@@ -451,6 +483,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
   print(f"Quality: vpp [{q['vpp_min']:g}, {q['vpp_max']:g}] uV, std [{q['std_min']:g}, {q['std_max']:g}] uV, channel "
         f"fail fraction {q['channel_fail_fraction']:g}, artifact block {q['artifact_block_sec']:g} s, guard "
         f"{q['guard_sec']} (rel {q['guard_rel_amplitude']:g})")
+  if not args.overwrite:                                       # P17 C-a: never silently replace a different build
+    for subject in subjects:
+      mp = out_root / subject / "windows_meta.json"
+      if mp.is_file():
+        diff = diff_build_params(json.loads(mp.read_text()).get("build_params"), sig)
+        if diff:
+          print(f"[x] Refusing to overwrite {out_root / subject}: its recorded build_params differ in {diff}; "
+                f"use --overwrite to rewrite it")
+          return 1
   commit = git_commit(ROOT)
   done, skipped, t_all = [], [], time.time()
   for subject in subjects:
@@ -466,6 +507,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
       path = ebr_parser.resolve_recording_path(raw_dir, subject, args.session)
       x, mark, fs = load_session(path, params["scalp"], params["mark_channel"])
       built = build_subject(x, mark, fs, params)
+    except AllChannelsDropped:
+      print(f"[-] Skipping {subject}: all channels dropped (source={params['quality']['source']})")
+      skipped.append(subject)
+      continue
     except (FileNotFoundError, ValueError) as exc:
       print(f"[-] Skipping {subject}: {exc}")
       skipped.append(subject)

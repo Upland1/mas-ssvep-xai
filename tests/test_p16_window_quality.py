@@ -8,7 +8,7 @@ from src.preprocessing.windowing import cut_windows, fbcsp_filter_bank
 
 FS = 256.0
 PARAMS = {"vpp_min": 5.0, "vpp_max": 120.0, "std_min": 1.0, "std_max": 35.0, "channel_fail_fraction": 0.5,
-          "artifact_block_sec": 0.25, "guard_sec": 1.0, "guard_rel_amplitude": 0.01}
+          "artifact_block_sec": 0.25, "guard_sec": 1.0, "guard_rel_amplitude": 0.01, "source": "filtered"}
 
 
 def boxcar(n):
@@ -120,7 +120,7 @@ def test_rejections_by_label_counts():
 
 def test_params_from_config():
   cfg = {"quality": {"vpp_range_uv": [5.0, 120.0], "std_range_uv": [1.0, 35.0], "channel_fail_fraction": 0.5,
-                     "artifact_block_sec": 0.25, "guard_sec": "auto", "guard_rel_amplitude": 0.01}}
+                     "artifact_block_sec": 0.25, "guard_sec": "auto", "guard_rel_amplitude": 0.01, "source": "filtered"}}
   p = WQ.quality_params_from_config(cfg)
   assert p == {**PARAMS, "guard_sec": "auto"}
   del cfg["quality"]["guard_sec"]

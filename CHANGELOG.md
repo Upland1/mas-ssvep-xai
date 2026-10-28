@@ -438,3 +438,33 @@ Review
 - Pre-run audit PASS (`0044229`); results review APPROVE (`3db9410`), D-1 to D-6, C-1 to C-6.
 
 Next phase: after the orchestrator's gate.
+
+## P19 — Quality check on the raw segmented signal
+
+2026-10-28. Branch `phase/P19-raw-quality`. Run state `2994599`; verifier PASS `20ab583`; results review APPROVE `5be0674`. Phase report: `mas/state/reports/P19.md`.
+
+Added
+- `tests/test_p19_raw_quality.py` (NEW, 12 tests) and `tests/test_p19_independent_known_answer.py` (NEW, 13 tests).
+- `scripts/build_windows.py --quality-source {filtered,raw,both}`; refusal of a folder with different `build_params` unless `--overwrite` (P17 C-a).
+- Reason 3 (`REASONS[3] = "raw"`); meta `n_reason3_raw_gate` and `n_reason3_raw_guard`; `rejections_by_label` reason-3 count in the loader.
+- Generated (ignored): `data/processed_continuous_p19_raw/`, `data/processed_continuous_p19_both/`, `reports/n_subjects_benchmark_p19_{filtered,both}_{base,harm}.{csv,meta.txt}`, `reports/logs/P19/`. Scratch `mas/state/scratch/p19_filtered/` (to be deleted at merge).
+
+Changed
+- `src/preprocessing/window_quality.py` (MODIFIED): `source` a required parameter; per-signal channel tier and artifact guard; reason precedence 1 > 2 > 3.
+- `scripts/build_windows.py` (MODIFIED); `src/io/subject_data.py` (MODIFIED): data-source string ends `quality source <s>`.
+- `configs/pipeline_config.yaml` (MODIFIED): `quality.source: both`, the new default; `mas/02_REQUIREMENTS.md` §3 (MODIFIED).
+- Adapted tests (MODIFIED): `tests/test_p01_config_known_answer.py`, `test_p16_build_windows.py`, `test_p16_independent_known_answer.py`, `test_p16_window_quality.py`, `test_p17_windowing.py`.
+- Not changed: `data/processed_continuous` (P16) and `data/processed_continuous_p17`.
+
+Result
+- Rejected windows of 1600: filtered 43, both 44, raw 44. Under `both`, one reason-3 window (S03 row 160).
+- Flagship 5-class: no cell material; S03 base Δ −0.24 / −0.09 pp is split variation from a changed partition.
+- `source=filtered` reproduces the P17 folder and benchmark CSVs byte for byte (`CMP_IDENTICAL`).
+
+Review
+- Pre-run audit PASS (`2928ddb`); results review APPROVE (`5be0674`), D-1 to D-3, C-1 to C-6.
+
+Open
+- C-1 `scripts/diagnostics/demo_edge_effects.py` inherits `both`; C-2 `src/io/subject_data.py` raw count under `shared-no-guard`; C-3 P20 names `--quality-source`.
+
+Next phase: after the orchestrator's gate.

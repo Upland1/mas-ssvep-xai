@@ -413,3 +413,23 @@ Sources: `reports/compact_cnn_benchmark_cpu.csv`, `reports/shallow_convnet_bench
 **R11.** None. Zero reference-access lines dated 2026-10-28 [14].
 
 **Open.** Carry-forwards C-1 (`p_mag_centred` in the pairwise CSV), C-2 (pairwise group labels as edge counts), C-3 (flip sizes), C-4 (lower-tailed NBS, option) and C-5 (second pairwise permutation count before any R7 claim on pairwise tests) are open; C-6 is applied in the report. One skipped test is not identified in the run log. Merge pending, by the orchestrator.
+
+## P19 — Quality check on the raw segmented signal
+
+2026-10-28. Branch `phase/P19-raw-quality`; run state `2994599`; verifier PASS `20ab583`; results review APPROVE `5be0674`; decisions `b5d8e3f`. Phase report: `mas/state/reports/P19.md`.
+
+**Aim.** Roadmap P19 [1]: check the limits also on unfiltered windows cut at the same positions, so that a window or channel must pass on every checked signal. `quality.source` is `filtered`, `raw` or `both`; reason 3 marks raw-only failures; the config default becomes `both` [1, 2].
+
+**Data source.** OO session, S01–S05. Continuous builds `data/processed_continuous_p17` (filtered reference, 75 files, hash `c0e9ba84…d342d`), `data/processed_continuous_p19_raw` and `data/processed_continuous_p19_both` (generated). The P16 root `data/processed_continuous` (65 files, hash `c6e72a79…2aec`) is unchanged before and after [5, 6, 10]. Flagship: 5-class base and harm, `--cv-repeats 10`, `reports/n_subjects_benchmark_p19_*` [9].
+
+**Result (rejections, 320 windows per subject; `reports/logs/P19/12_tables.txt`).** Rejected windows of 1600: filtered 43, both 44, raw 44. Reason 3 under `raw` is 0 / 19 / 11 / 13 / 1 for S01–S05. Under `both` it is one window cohort-wide (S03 row 160, label 102, raw gate). `raw` is different from `filtered`, not stricter [7, 10].
+
+**Flagship (1.0 s / 2.0 s, `both` vs `filtered`).** No cell is material. S03 base Δ −0.24 / −0.09 pp (thresholds 2.40 / 2.32 pp) is split variation from a changed fold partition, not an effect of the raw check (D-1). All other rows are identical [7, 9, 10].
+
+**Checks.** A–F met. `p19_filtered` equals the P17 folder file by file, and the CSVs are byte-identical (`CMP_IDENTICAL`). Suite `1231 passed`, no skipped test (`reports/logs/P19/01_pytest.log`) [6, 10].
+
+**Null wording (amended, D-3).** "filtering hid one borderline window (S03 row 160; PO4 119.4 vs 121.9 µV, limit 120) that these limits detect, and nothing else." The PO4 values are the review's read-only check, not in `reports/` [7, 8].
+
+**R11.** One verifier metadata listing of the read-only answer-key directory, with no content read; disclosed and not an R11 consultation (D-2) [5, 7]. The access log has 41 lines in total, one dated 2026-10-28 [12].
+
+**Open.** C-1 (`scripts/diagnostics/demo_edge_effects.py` now inherits `both`), C-2 (`src/io/subject_data.py:202` raw count needs `& ~keep_local` and a test) and C-3 (P20 build commands name `--quality-source`) are open. C-4 is closed (the raw guard reuses the filters' ringing time, a design choice under PF-14). Blocker B003 is due before P20. Merge pending, by the orchestrator, who also deletes the scratch build `mas/state/scratch/p19_filtered`.
