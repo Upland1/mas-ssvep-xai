@@ -153,12 +153,12 @@ phases:
     passed: '2026-10-28'
   P19:
     slug: raw-quality
-    status: in_progress
+    status: passed
     owner: orchestrator
     branch: phase/P19-raw-quality
-    commit: null
+    commit: 1fa9faf
     opened: '2026-10-28'
-    passed: null
+    passed: '2026-10-28'
   P20:
     slug: detection-online
     status: pending
