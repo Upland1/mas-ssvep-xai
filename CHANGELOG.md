@@ -343,3 +343,41 @@ Review
 - Suite runtime about 7.2 min against "about a minute" (noted, not blocking).
 
 Next phase: P16, after the orchestrator's gate.
+
+## P16 — Baseline freeze, edge effects, continuous filtering, 256 Hz, shared quality
+
+2026-10-27 to 2026-10-28, branch `phase/P16-continuous-filtering`. Run state `bb8c999`; re-verified at `215bf44`; results review `928ae8c` (APPROVE). Phase report: `mas/state/reports/P16.md`.
+
+Added
+- `scripts/freeze_baseline.py`: read-only snapshot `baselines/v1_<date>/` with MANIFEST, `baseline_summary.csv` and `superseded/`; refuses a repeated tag.
+- `src/preprocessing/windowing.py`: window index (`stride=None` reproduces the legacy starts), `band_windows` in `continuous` and `per_window` modes, filter banks.
+- `src/preprocessing/window_quality.py`: `subject_quality_gate` (channel and window tiers, artifact guard by ringing time, every threshold explicit).
+- `src/io/subject_data.py`: `load_subject` (fs from metadata, true or reconstructed trial ids, saved bands, one quality decision).
+- `scripts/build_windows.py`: builds `data/processed_<mode>/<S>/`; `--check-legacy-starts`.
+- `scripts/diagnostics/demo_edge_effects.py` and `reports/edge_effects_summary.csv`.
+- `scripts/diagnostics/compare_v1_v2.py`: joins the CSVs into `reports/v1_vs_v2/`; `--check-regression`.
+- Tests: `tests/p16_synth.py`, `tests/test_p16_*.py` (nine builder files and one independent known-answer file with 59 cases).
+
+Changed
+- `configs/pipeline_config.yaml`: final version (1–90 Hz broadband, notch 60 Hz, `quality:`, `filter_bank:`).
+- `scripts/benchmarks/feature_based/benchmark_n_subjects.py`: port to `load_subject`; `--data-root`, `--quality`, `--fs`, `--smoothing`, `--cv-repeats`.
+- `src/features/ssvep/fbcca_extraction.py`, `fbcsp_extraction.py`: `subband_windows=` and `quality=`.
+- `src/models/classical/legacy_eval.py`: `oof_space` requires explicit splits (P11 N1).
+- `src/features/connectivity/connectivity_extraction.py`: loader `load_condition_windows` through `load_subject` with the connectivity gate passed explicitly.
+- Connectivity scripts (`analyze_connectivity_cohort.py`, `analyze_connectivity.py`, comparison and confound scripts): ported to the loader; `--out-suffix`, `--fs`, `--data-root`, `--quality`.
+- `scripts/preprocessing/run_preprocessing.py`: pins the legacy highcut at 60 Hz.
+- `src/preprocessing/signal/filters.py`: `apply_notch`, `broadband_filter`.
+- `src/features/ssvep/window_mask.py`: `loader_decision`.
+- Follow-on updates in `tests/test_p01_config_known_answer.py`, `test_p05_feature_benchmark.py`, `test_p14_known_answer.py`, and `benchmark_5_subjects.py`, `test_sklearn_models.py`.
+
+Result (S01–S05, OO session; `reports/n_subjects_benchmark_<suffix>.csv`, `reports/v1_vs_v2/flagship.csv`)
+- Regression: the v1 flagship row at seed 42 equals R-6 per subject (mean 79.28 / 82.61); `_v1check` byte-equal to the frozen v1; connectivity cohort summary byte-equal; 20/20 npz equal. The first run failed on NaN diagonals (a checker defect, fixed in `9b297c0`, data identical throughout).
+- Edge effects, S03: ratios 8.17 / 7.45 / 21.00 for 7–12 / 13–17 / 18–26 Hz, edge errors ≥ 20 %. Criterion met; the ≥ 10 reading is not met for 7–12 and 13–17 Hz.
+- Legacy starts equal on all 70 lines. Trial-id groups inconsistent on S02 (39 of 199) and S04 (38 of 198) as in P11 D-2.
+- Flagship cohort mean, 1.0 s / 2.0 s: v1 79.28 / 82.61; a 80.80 / 84.42; a′ 88.84 / 91.33; c (headline v2) 87.38 / 89.07; c′ 88.38 / 89.83. The fs correction (+8.04 / +6.91 pp) explains the v1 → v2 gain; the filter mode is nil, the build is material only on S02, the guard is material only on S02 at 1.0 s.
+- No claim that continuous filtering or the guard improves accuracy. R-6 remains the P11 target; v2 has no numeric target (R-16).
+
+Review
+- Pre-run audit Round 1 FAIL (`58c578c`), Round 2 PASS (`fe71ffa`, `645312e`). Verifier FAIL (`bd55527`), PASS after Round 2 (`6bb9b81`). Results review APPROVE (`928ae8c`), D-1 to D-8, C-1 to C-5.
+
+Next phase: P17, after the orchestrator's gate.
