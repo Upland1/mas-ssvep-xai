@@ -611,3 +611,43 @@ def test_check_regression_flags_one_changed_edge_array_and_a_missing_file(tmp_pa
 def test_check_regression_distinguishes_value_equal_from_byte_equal(tmp_path, capsys):
   rc, out = _check(_regression_tree(tmp_path, bytes_only=True), capsys)
   assert rc == 0 and "value-equal only" in out and out.count("byte-equal") == 3
+
+
+# ---------------------------------------------------------------- round 2: NaN-aware npz comparison
+
+def _npz_case(tmp_path, old, new):
+  t = _regression_tree(tmp_path)
+  np.savez(t / "baselines/v1_2026-01-01/reports/connectivity_edges/S01_coherence.npz", **old)
+  np.savez(t / "reports/connectivity_edges_v1check/S01_coherence.npz", **new)
+  return t
+
+
+def _nan_matrix():
+  m = np.arange(16.0).reshape(4, 4)
+  np.fill_diagonal(m, np.nan)                       # the diagonal of a connectivity matrix
+  return m
+
+
+def test_check_regression_npz_with_aligned_nan_diagonals_is_equal(tmp_path, capsys):
+  rc, out = _check(_npz_case(tmp_path, {"stim": _nan_matrix(), "p": np.ones(3)},
+                             {"stim": _nan_matrix(), "p": np.ones(3)}), capsys)
+  assert rc == 0 and "1/1 npz" in out
+
+
+@pytest.mark.parametrize("label,new", [
+  ("nan_vs_number", {"stim": np.where(np.isnan(_nan_matrix()), 0.0, _nan_matrix())}),
+  ("number_vs_nan", {"stim": np.where(np.arange(16).reshape(4, 4) == 6, np.nan, _nan_matrix())}),
+  ("one_value", {"stim": np.where(np.arange(16).reshape(4, 4) == 6, 6.5, _nan_matrix())}),
+  ("tiny_difference", {"stim": np.where(np.arange(16).reshape(4, 4) == 6, 6.0 + 1e-12, _nan_matrix())}),
+  ("shape", {"stim": np.full((2, 8), np.nan)}),
+  ("dtype", {"stim": _nan_matrix().astype(np.float32)}),
+  ("extra_key", {"stim": _nan_matrix(), "extra": np.ones(1)}),
+  ("missing_key", {})])
+def test_check_regression_npz_mismatches_exit_1(tmp_path, capsys, label, new):
+  rc, out = _check(_npz_case(tmp_path, {"stim": _nan_matrix()}, new), capsys)
+  assert rc == 1 and "0/1 npz" in out, label
+
+
+def test_check_regression_npz_all_nan_arrays_of_different_shape_are_different(tmp_path, capsys):
+  rc, _ = _check(_npz_case(tmp_path, {"a": np.full((3, 3), np.nan)}, {"a": np.full((3, 4), np.nan)}), capsys)
+  assert rc == 1                                    # equal_nan alone would broadcast-compare: the shape must be checked

@@ -95,3 +95,21 @@ Mutants (one-line, reverted, `git status` clean): `cv_groups` exact start; per-s
 Full suite `.venv/bin/python -m pytest tests -o addopts="" -q`: `1089 passed, 21 warnings in 609.52s (0:10:09)`.
 
 Status: READY
+
+## Round 2
+
+Fix covered: 9b297c0 (NaN-aware npz comparison in `compare_v1_v2 --check-regression`).
+
+New tests in `tests/test_p16_independent_known_answer.py` (file now 59 cases):
+
+| Test | Known answer |
+|---|---|
+| `test_check_regression_npz_with_aligned_nan_diagonals_is_equal` | 4x4 matrices with NaN diagonals in both files: exit 0, "1/1 npz" |
+| `test_check_regression_npz_mismatches_exit_1[...]` | exit 1 and "0/1 npz" for: NaN vs number, number vs NaN, one value changed by 0.5, a 1e-12 difference, shape (4,4) vs (2,8), dtype float64 vs float32, extra key, missing key |
+| `test_check_regression_npz_all_nan_arrays_of_different_shape_are_different` | all-NaN (3,3) vs (3,4): exit 1 |
+
+Mutants (reverted, working tree clean apart from the new tests): `equal_nan=False` (killed by the aligned-NaN test); shape and dtype check removed (killed by the dtype case); `np.allclose(..., equal_nan=True)` (killed by the 1e-12 case after I added it; it survived my first version). Mutant "dtype check only, shape check removed" survives, and is equivalent: `np.array_equal` itself returns False for different shapes, so the explicit shape test is redundant for correctness.
+
+Run: `tests/test_p16_*.py` gives `137 passed in 176.56s (0:02:56)` before the 1e-12 case was added; the new file alone then gives `59 passed in 15.44s`. The full suite was not rerun (no shared fixture changed).
+
+Status: READY
