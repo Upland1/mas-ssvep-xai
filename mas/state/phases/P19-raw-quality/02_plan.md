@@ -139,6 +139,109 @@ $B --data-root data/processed_continuous_p19_both --bank harm --out-suffix p19_b
 - If a subject is skipped under `raw`/`both` (settled point 5), the benchmark prints its
   `[-] Skipping` line and the report states it.
 
+
+### Run-list additions from the pre-run audit (07_review.md 2928ddb, copied verbatim)
+
+
+Roots: `F=data/processed_continuous_p17`, `R=data/processed_continuous_p19_raw`,
+`B=data/processed_continuous_p19_both`, `N=mas/state/scratch/p19_filtered`. Every check below is read-only. I
+dry-ran A–C on fake P19-format roots (symlinked _p17 arrays) to confirm that they execute. Paste every output
+verbatim into 05_run.md.
+
+**A. Hashes (commands 0 and 8).** Before and after:
+`for r in data/processed_continuous data/processed_continuous_p17; do echo $r $(find $r -type f | wc -l) $(find $r -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum); done`.
+Expected: identical before and after.
+
+**B. Regression build (`N` vs `F`, command 8).** Expected for every subject: `same_file_list True`,
+`npy_differ []`, `meta_top_differ []`, `quality_differ []`, `rejections_ok True`, `build_params_ok True`,
+`params_ok True`, `new_quality_fields` all None/0 with source `filtered`. Any other output is a FAIL of settled
+point 3.
+```bash
+.venv/bin/python -c "
+import json, filecmp, os
+A, N = 'data/processed_continuous_p17', 'mas/state/scratch/p19_filtered'
+IGN_TOP = {'git_commit', 'data_source', 'build_params', 'quality'}
+NEW_Q = {'source', 'channel_stats_raw', 'n_artifact_blocks_raw', 'artifact_fraction_raw', 'guarded_fraction_raw', 'n_reason3_raw_gate', 'n_reason3_raw_guard'}
+for s in ['S01', 'S02', 'S03', 'S04', 'S05']:
+  fa, fn = sorted(os.listdir(f'{A}/{s}')), sorted(os.listdir(f'{N}/{s}'))
+  bad = [f for f in fa if f.endswith('.npy') and not filecmp.cmp(f'{A}/{s}/{f}', f'{N}/{s}/{f}', shallow=False)]
+  a, n = json.load(open(f'{A}/{s}/windows_meta.json')), json.load(open(f'{N}/{s}/windows_meta.json'))
+  qa, qn = a['quality'], n['quality']
+  top = sorted(k for k in set(a) | set(n) if k not in IGN_TOP and a.get(k) != n.get(k))
+  qd = sorted(k for k in set(qa) | set(qn) if k not in NEW_Q | {'params', 'reason_codes', 'rejections_by_label'} and qa.get(k) != qn.get(k))
+  newq = {k: qn.get(k) for k in NEW_Q}
+  rl = all({k: v for k, v in qn['rejections_by_label'][l].items() if k != 'raw'} == {k: v for k, v in qa['rejections_by_label'][l].items() if k != 'raw_gate'} and qn['rejections_by_label'][l]['raw'] == 0 for l in qa['rejections_by_label'])
+  bp = {k: v for k, v in n['build_params'].items() if k != 'quality'} == {k: v for k, v in a['build_params'].items() if k != 'quality'} and {k: v for k, v in n['build_params']['quality'].items() if k != 'source'} == a['build_params']['quality'] and n['build_params']['quality'].get('source') == 'filtered'
+  pr = {k: v for k, v in qn['params'].items() if k != 'source'} == qa['params'] and qn['params'].get('source') == 'filtered'
+  print(s, 'same_file_list', fa == fn, 'npy_differ', bad, 'meta_top_differ', top, 'quality_differ', qd, 'rejections_ok', rl, 'build_params_ok', bp, 'params_ok', pr, 'new_quality_fields', newq, 'data_source', n['data_source'])
+"
+```
+
+**C. Raw/both roots vs `F`: identities, removed rows and pinned count (after commands 2–3).** Expected for every
+subject:
+- `nonmask_differ []`: X, bands, starts, labels, trial ids, offsets and sub_idx are identical, so the Δ is only the
+  mask.
+- If `channels_equal True`: all three identities are `True` (`vb==vf&vr`, `rb(3->0)==rf`, `vb subset vf`) and
+  `gained: []`.
+- `raw-root reason codes used` ⊆ `[3]`.
+- `raw blocks` non-None in both roots, `guard_sec` 1.046875 for f/r/b.
+- `raw_gate` count pinned: **S01 0, S02 0, S03 1 (row 160, condition 102, trial 88, offset 0), S04 0, S05 0**.
+  Any other `raw_gate` count, or a False identity with equal channels, stops the interpretation. Record it as a
+  finding for the review, and do not re-run with other settings.
+```bash
+.venv/bin/python -c "
+import json, filecmp, numpy as np
+F, R, B = 'data/processed_continuous_p17', 'data/processed_continuous_p19_raw', 'data/processed_continuous_p19_both'
+SAME = ['X_time_windows', 'X_raw_windows', 'X_bands_fbcca', 'X_bands_fbcsp', 'X_bands_harmonic', 'X_bands_intermediate', 'window_starts', 'y_labels', 'trial_ids', 'window_offsets', 'sub_idx']
+for s in ['S01', 'S02', 'S03', 'S04', 'S05']:
+  m = {k: json.load(open(f'{d}/{s}/windows_meta.json'))['quality'] for k, d in (('f', F), ('r', R), ('b', B))}
+  ld = lambda d, n: np.load(f'{d}/{s}/{n}.npy')
+  nd = [f'{x}:{n}' for x, d in (('raw', R), ('both', B)) for n in SAME if not filecmp.cmp(f'{F}/{s}/{n}.npy', f'{d}/{s}/{n}.npy', shallow=False)]
+  y, tid, off = ld(F, 'y_labels'), ld(F, 'trial_ids'), ld(F, 'window_offsets'); st = np.isin(y, [101, 102, 103, 104, 105])
+  vf, vr, vb = (ld(d, 'valid_mask').astype(bool) for d in (F, R, B)); rf, rr, rb = (ld(d, 'reject_reason') for d in (F, R, B))
+  ch = [m[k]['channels_kept'] for k in 'frb']; eq = ch[0] == ch[1] == ch[2]
+  print(s, 'nonmask_differ', nd, 'channels_equal', eq, ch[2] if eq else ch)
+  print('  valid f/r/b', int(vf.sum()), int(vr.sum()), int(vb.sum()), '| stimulus', int(vf[st].sum()), int(vr[st].sum()), int(vb[st].sum()))
+  print('  both reasons 1/2/3', [int((rb == c).sum()) for c in (1, 2, 3)], 'raw_gate/raw_guard', m['b']['n_reason3_raw_gate'], m['b']['n_reason3_raw_guard'], '| raw-root reason codes used', sorted(set(rr[rr > 0].tolist())))
+  if eq: print('  identities vb==vf&vr', bool(np.array_equal(vb, vf & vr)), 'rb(3->0)==rf', bool(np.array_equal(np.where(rb == 3, 0, rb), rf)), 'vb subset vf', bool(not (vb & ~vf).any()))
+  print('  removed by both (row, label, trial, offset, reason):', [(int(i), int(y[i]), int(tid[i]), int(off[i]), int(rb[i])) for i in np.flatnonzero(vf & ~vb)], 'gained:', [int(i) for i in np.flatnonzero(vb & ~vf)])
+  print('  raw blocks/artifact/guarded', m['b']['n_artifact_blocks_raw'], m['b']['artifact_fraction_raw'], m['b']['guarded_fraction_raw'], '| guard_sec f/r/b', m['f']['guard_sec'], m['r']['guard_sec'], m['b']['guard_sec'])
+"
+```
+
+**D. Margins (makes a null interpretable).** Expected `X_raw_windows` 95th percentiles of 75.3/111.3/64.0/90.1/62.1
+µV for S01–S05 (same arrays as _p17).
+```bash
+.venv/bin/python -c "
+import json, numpy as np
+B = 'data/processed_continuous_p19_both'
+for s in ['S01', 'S02', 'S03', 'S04', 'S05']:
+  m = json.load(open(f'{B}/{s}/windows_meta.json')); k = [m['channels'].index(c) for c in m['quality']['channels_kept']]
+  for n in ('X_time_windows', 'X_raw_windows'):
+    X = np.load(f'{B}/{s}/{n}.npy')[:, k]; v = np.ptp(X, axis=2).max(1); sd = X.std(axis=2).max(1)
+    print(s, n, 'max-channel Vpp p50/p95/max', np.round(np.percentile(v, [50, 95, 100]), 1), 'std p95/max', np.round(np.percentile(sd, [95, 100]), 1), 'n Vpp>120', int((v > 120).sum()), 'n std>35', int((sd > 35).sum()))
+"
+```
+
+**E. Flagship determinism and unaffected subjects (commands 4–7).**
+- `cmp reports/n_subjects_benchmark_p19_filtered_base.csv reports/n_subjects_benchmark_p17_base_5class.csv` and
+  `cmp reports/n_subjects_benchmark_p19_filtered_harm.csv reports/n_subjects_benchmark_p17_harm_5class.csv`:
+  silent (byte-identical).
+- `diff` of the two `.meta.txt` pairs: only the `quality:` line differs, gaining `, quality source filtered`. Any
+  other differing line is reported.
+- For every subject that check C shows with an empty stimulus "removed" list, an empty "gained" list and equal
+  channels, the `_p19_both_*` CSV row must equal the `_p19_filtered_*` row in every column. Show it with
+  `diff <(grep '^S0' reports/n_subjects_benchmark_p19_filtered_base.csv) <(grep '^S0' reports/n_subjects_benchmark_p19_both_base.csv)`
+  (same for harm). Expected: only rows of subjects with a changed stimulus mask differ (S03 at least, from the pinned
+  raw_gate window).
+- The `Clean Windows` difference per subject equals the number of stimulus rows that check C lists as removed minus
+  those gained.
+
+**F. Report wording.** In every flagship table, each row names its root and `quality source` (R9). The rejection
+table shows reason 3 split into raw_gate/raw_guard per subject and per label (101–105, 201, 202) for all three
+sources. Under `raw`, windows that only the filtered gate rejected become valid, so `raw` can keep more windows than
+`filtered`; the table must not describe `raw` as stricter.
+
 ## Acceptance checks (for the verifier)
 
 1. Rejection breakdown table per subject × source (filtered/raw/both):
