@@ -183,3 +183,16 @@ def test_r1_built_cv_groups_never_straddle_a_fold(built):
   for seed in (42, 43, 44):
     for tr, te in le.splits_for("grouped", d["y"], d["cv_groups"], seed):
       assert not set(d["cv_groups"][tr]) & set(d["cv_groups"][te])
+
+
+def test_smoothing_trial_on_a_legacy_root_is_the_a_prime_t_row(legacy, tmp_path):
+  """Row a't: `--fs 256 --smoothing trial` on legacy folders resets at the reconstructed ids; 1.0 s equals row a'."""
+  base = ["--data-root", str(legacy), "--reports-dir", str(tmp_path), "--subjects", "S04", "--fs", "256"]
+  assert B.main(base + ["--out-suffix", "a"]) == 0
+  assert B.main(base + ["--smoothing", "trial", "--out-suffix", "at"]) == 0
+  a, at = (pd.read_csv(tmp_path / f"n_subjects_benchmark_{s}.csv").iloc[0] for s in ("a", "at"))
+  assert a["1.0s Acc (%)"] == at["1.0s Acc (%)"]
+  d = SD.load_subject(legacy / "S04", fs_override=256.0, thresholds=TH, channel_fail_fraction=0.5)
+  space, sub = B.feature_blocks(d, 1)
+  acc = B.run_cv(space, sub, d, "grouped", "trial", 42, 1)[0]
+  assert at["2.0s Smoothed (%)"] == round(100 * acc[1], 2)

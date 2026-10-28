@@ -478,7 +478,7 @@ def test_compare_v1_v2_labels_connectivity_filter_mode_not_applicable(tmp_path):
   rep.mkdir()
   for sfx, v in (("v1rep5", 60.0), ("v1fs256", 70.0), ("v2pw", 75.0), ("v2cont", 80.0), ("v2cont_noguard", 78.0)):
     flag(v).to_csv(rep / f"n_subjects_benchmark_{sfx}.csv", index=False)
-  for sfx, v, e in (("v2pw", 0.20, 3), ("v2cont", 0.20, 3), ("v2cont_noguard", 0.15, 2)):
+  for sfx, v, e in (("v1fs256", 0.12, 1), ("v2pw", 0.20, 3), ("v2cont", 0.20, 3), ("v2cont_noguard", 0.15, 2)):
     conn(v, e).to_csv(rep / f"connectivity_cohort_summary_{sfx}.csv", index=False)
   assert cmp.main(["--baselines-dir", str(tmp_path / "baselines"), "--reports-dir", str(rep)]) == 0
   f = pd.read_csv(rep / "v1_vs_v2/flagship.csv")
@@ -488,5 +488,6 @@ def test_compare_v1_v2_labels_connectivity_filter_mode_not_applicable(tmp_path):
   assert c.d_obs_diff_filter_mode == "not applicable (same input)"
   assert c.d_n_edges_sig_fdr_filter_mode == "not applicable (same input)"
   assert c.d_obs_diff_guard == pytest.approx(0.05) and c.d_n_edges_sig_fdr_guard == 1
-  assert c.d_obs_diff_build == pytest.approx(0.10)
+  assert c.d_obs_diff_build == pytest.approx(0.08)      # b - a' (round 1 fix 3), not b - a
+  assert c.d_obs_diff_fs == pytest.approx(0.02)
   assert "same input" in (rep / "v1_vs_v2/v1_vs_v2.md").read_text()

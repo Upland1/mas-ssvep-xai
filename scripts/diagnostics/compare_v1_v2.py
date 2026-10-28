@@ -4,12 +4,14 @@ Flagship (`reports/n_subjects_benchmark_<suffix>.csv`, 5 repeats, seeds 42+r), p
   v1   frozen `baselines/v1_*/reports/n_subjects_benchmark.csv` (seed 42, one repeat, fs 250, per-script gate)
   a    legacy folders, fs 250,      suffix v1rep5      (the rows below are judged against this one)
   a'   legacy folders, fs 256,      suffix v1fs256     fs effect            = a'  - a
-  b    per_window build, shared,    suffix v2pw        8 channels + 1-90 Hz + shared gate = b - a'
+  a't  as a' with --smoothing trial (suffix v1fs256trial): smoothing-rule effect (2.0 s) = a't - a'
+  b    per_window build, shared,    suffix v2pw        8 channels + 1-90 Hz + shared gate + true ids
+                                                    = b - a' (1.0 s), b - a't (2.0 s)
   c    continuous build, shared,    suffix v2cont      filtering-mode effect = c - b
   c'   continuous, shared-no-guard, suffix v2cont_noguard   guard effect     = c - c'
 Connectivity (`reports/connectivity_cohort_summary_<suffix>.csv`, joined on subject, method, condition,
-frequency): a = frozen `baselines/v1_*/reports/connectivity_cohort_summary.csv`, b = v2pw, c = v2cont,
-c' = v2cont_noguard; obs_diff, p_one_tailed, n_edges_sig_fdr per variant and the differences b - a and c - c'; the filter-mode column is "not applicable (same input)" (both build modes filter the
+frequency): a = frozen `baselines/v1_*/reports/connectivity_cohort_summary.csv`, a' = v1fs256 (fs effect a' - a), b = v2pw (build b - a'), c = v2cont,
+c' = v2cont_noguard; obs_diff, p_one_tailed, n_edges_sig_fdr per variant and the differences; the filter-mode column is "not applicable (same input)" (both build modes filter the
 broadband windows continuously; the effect is flagship only).
 
 Outputs in `--out-dir` (default reports/v1_vs_v2): flagship.csv, connectivity.csv, v1_vs_v2.md. A file that does not
@@ -39,8 +41,8 @@ ROOT = _find_root()
 if str(ROOT) not in sys.path:
   sys.path.insert(0, str(ROOT))
 
-FLAGSHIP_VARIANTS = {"a": "v1rep5", "a_prime": "v1fs256", "b": "v2pw", "c": "v2cont", "c_prime": "v2cont_noguard"}
-CONN_VARIANTS = {"b": "v2pw", "c": "v2cont", "c_prime": "v2cont_noguard"}
+FLAGSHIP_VARIANTS = {"a": "v1rep5", "a_prime": "v1fs256", "a_prime_t": "v1fs256trial", "b": "v2pw", "c": "v2cont", "c_prime": "v2cont_noguard"}
+CONN_VARIANTS = {"a_prime": "v1fs256", "b": "v2pw", "c": "v2cont", "c_prime": "v2cont_noguard"}
 FLAG_METRICS = {"1.0s": ("1.0s Acc (%)", "1.0s SD"), "2.0s": ("2.0s Smoothed (%)", "2.0s SD")}
 NOT_APPLICABLE = "not applicable (same input)"
 CONN_KEY = ["subject", "method", "condition", "frequency_hz"]
@@ -80,7 +82,9 @@ def flagship_table(frozen: Optional[pd.DataFrame], variants: dict) -> pd.DataFra
       for k, df in variants.items():
         row[k], row[f"{k}_sd"] = get(df, acc), get(df, sd)
       row["d_fs"] = row["a_prime"] - row["a"]
-      row["d_build"] = row["b"] - row["a_prime"]
+      # 2.0 s: a' still smooths by i % 5 on reconstructed ids, b by true ids; a't separates the rule (fix 4)
+      row["d_smoothing"] = row["a_prime_t"] - row["a_prime"] if w == "2.0s" else np.nan
+      row["d_build"] = row["b"] - (row["a_prime_t"] if w == "2.0s" else row["a_prime"])
       row["d_filter_mode"] = row["c"] - row["b"]
       row["d_guard"] = row["c"] - row["c_prime"]
       row["d_total"] = row["c"] - row["a"]
@@ -104,7 +108,8 @@ def connectivity_table(frozen: Optional[pd.DataFrame], variants: dict) -> pd.Dat
       if f"{v}_{k}" not in merged.columns:
         merged[f"{v}_{k}"] = np.nan
   for v in CONN_VALUES:
-    merged[f"d_{v}_build"] = merged[f"{v}_b"] - merged[f"{v}_a"]
+    merged[f"d_{v}_fs"] = merged[f"{v}_a_prime"] - merged[f"{v}_a"]
+    merged[f"d_{v}_build"] = merged[f"{v}_b"] - merged[f"{v}_a_prime"]
     merged[f"d_{v}_filter_mode"] = NOT_APPLICABLE   # connectivity reads the broadband windows: same input in b and c
     merged[f"d_{v}_guard"] = merged[f"{v}_c"] - merged[f"{v}_c_prime"]
   return merged.sort_values(["method", "frequency_hz", "subject"]).reset_index(drop=True)
@@ -115,49 +120,80 @@ def markdown(flag: pd.DataFrame, conn: pd.DataFrame) -> str:
     return "" if pd.isna(x) else f"{x:.{nd}f}"
   out = ["# v1 vs v2 (P16.8)", "",
          "Flagship FBCSP(m=1)+FBCCA -> StandardScaler -> Shrinkage-LDA, accuracy % (mean over 5 CV repeats, seeds 42+r; SD in "
-         "brackets). v1 = frozen seed-42 run. Differences in percentage points: fs = a' - a, build = b - a', filter mode = c - b, "
+         "brackets). v1 = frozen seed-42 run. Differences in percentage points: fs = a' - a, smoothing rule (2.0 s) = a't - a', build = b - a' (1.0 s) / b - a't (2.0 s), filter mode = c - b, "
          "guard = c - c', total = c - a.", ""]
   for w in FLAG_METRICS:
-    out += [f"## {w} window", "", "| Subject | v1 | a | a' | b | c | c' | fs | build | filter mode | guard | total |",
-            "|---|---|---|---|---|---|---|---|---|---|---|---|"]
+    out += [f"## {w} window", "", "| Subject | v1 | a | a' | a't | b | c | c' | fs | smoothing | build | filter mode | guard | total |",
+            "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for _, r in flag[flag["window"] == w].iterrows():
       cell = lambda k: f"{f(r[k])} ({f(r[k + '_sd'])})" if pd.notna(r[k]) else ""
-      out.append(f"| {r['subject']} | {f(r['v1_frozen'])} | {cell('a')} | {cell('a_prime')} | {cell('b')} | {cell('c')} | "
-                 f"{cell('c_prime')} | {f(r['d_fs'])} | {f(r['d_build'])} | {f(r['d_filter_mode'])} | {f(r['d_guard'])} | "
-                 f"{f(r['d_total'])} |")
+      out.append(f"| {r['subject']} | {f(r['v1_frozen'])} | {cell('a')} | {cell('a_prime')} | {cell('a_prime_t')} | {cell('b')} | "
+                 f"{cell('c')} | {cell('c_prime')} | {f(r['d_fs'])} | {f(r['d_smoothing'])} | {f(r['d_build'])} | "
+                 f"{f(r['d_filter_mode'])} | {f(r['d_guard'])} | {f(r['d_total'])} |")
     out.append("")
   if len(conn):
     out += ["## Connectivity (cohort summary; edges significant after FDR / one-tailed global p)", "",
-            "| Subject | Method | Hz | FDR a | FDR b | FDR c | FDR c' | p a | p b | p c | p c' | filter mode | dFDR guard |",
-            "|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
+            "| Subject | Method | Hz | FDR a | FDR a' | FDR b | FDR c | FDR c' | p a | p a' | p b | p c | p c' | dFDR fs | dFDR build | "
+            "filter mode | dFDR guard |", "|" + "---|" * 17]
     for _, r in conn.iterrows():
       g = lambda k: "" if pd.isna(r[k]) else f"{r[k]:.0f}"
       p = lambda k: "" if pd.isna(r[k]) else f"{r[k]:.3f}"
-      out.append(f"| {r['subject']} | {r['method']} | {r['frequency_hz']:g} | {g('n_edges_sig_fdr_a')} | {g('n_edges_sig_fdr_b')} | "
-                 f"{g('n_edges_sig_fdr_c')} | {g('n_edges_sig_fdr_c_prime')} | {p('p_one_tailed_a')} | {p('p_one_tailed_b')} | "
-                 f"{p('p_one_tailed_c')} | {p('p_one_tailed_c_prime')} | n/a (same input) | "
-                 f"{g('d_n_edges_sig_fdr_guard')} |")
+      fd = lambda v: g(f"n_edges_sig_fdr_{v}")
+      pp = lambda v: p(f"p_one_tailed_{v}")
+      out.append(f"| {r['subject']} | {r['method']} | {r['frequency_hz']:g} | {fd('a')} | {fd('a_prime')} | {fd('b')} | {fd('c')} | "
+                 f"{fd('c_prime')} | {pp('a')} | {pp('a_prime')} | {pp('b')} | {pp('c')} | {pp('c_prime')} | "
+                 f"{g('d_n_edges_sig_fdr_fs')} | {g('d_n_edges_sig_fdr_build')} | n/a (same input) | {g('d_n_edges_sig_fdr_guard')} |")
     out.append("")
   return "\n".join(out)
 
 
+def _verdict(new: Path, old: Path) -> str:
+  """`byte-equal`, `value-equal only` (frames equal cell by cell, bytes differ) or `different: <first line>`."""
+  if new.read_bytes() == old.read_bytes():
+    return "byte-equal"
+  a, b = pd.read_csv(new, keep_default_na=False), pd.read_csv(old, keep_default_na=False)
+  try:
+    pd.testing.assert_frame_equal(a, b, check_exact=True)
+    return "value-equal only"
+  except AssertionError as exc:
+    return f"different: {str(exc).splitlines()[0]}"
+
+
 def check_regression(reports: Path, snapshot: Path, suffix: str = "v1check") -> int:
-  """Exact comparison of the `_v1check` CSVs with the frozen ones (settled point 4); 0 = identical."""
+  """Compares the `_v1check` outputs with the frozen ones (settled point 4): flagship CSV, connectivity cohort summary
+  and its `_details`, the alpha diagnostic, and every `connectivity_edges_<suffix>/*.npz` (array_equal per key).
+  Prints byte-equal / value-equal only / different per file; returns 0 when none is different."""
+  import numpy as np
   status = 0
-  for name in ("n_subjects_benchmark", "connectivity_cohort_summary"):
-    new, old = reports / f"{name}_{suffix}.csv", snapshot / "reports" / f"{name}.csv"
+  for name in ("n_subjects_benchmark", "connectivity_cohort_summary", "connectivity_cohort_summary_details",
+               "connectivity_alpha_diagnostic"):
+    # the suffix goes before `_details` in the cohort summary file name
+    new_name = name.replace("_details", f"_{suffix}_details") if name.endswith("_details") else f"{name}_{suffix}"
+    new, old = reports / f"{new_name}.csv", snapshot / "reports" / f"{name}.csv"
     if not new.is_file() or not old.is_file():
       print(f"[x] {name}: missing {new if not new.is_file() else old}")
       status = 1
       continue
-    a, b = pd.read_csv(new, keep_default_na=False), pd.read_csv(old, keep_default_na=False)
-    try:
-      pd.testing.assert_frame_equal(a, b, check_exact=True)
-      print(f"[+] {name}: {new.name} equals the frozen {old} ({len(a)} rows, exact)")
-    except AssertionError as exc:
-      print(f"[x] {name}: differs from the frozen file: {str(exc).splitlines()[0]}")
-      status = 1
-  return status
+    v = _verdict(new, old)
+    print(f"[{'x' if v.startswith('different') else '+'}] {name}: {new.name} vs frozen {old.name}: {v}")
+    status |= v.startswith("different")
+  new_dir, old_dir = reports / f"connectivity_edges_{suffix}", snapshot / "reports" / "connectivity_edges"
+  if not new_dir.is_dir() or not old_dir.is_dir():
+    print(f"[-] connectivity_edges: {new_dir if not new_dir.is_dir() else old_dir} missing (not compared)")
+  else:
+    files = sorted(p.name for p in old_dir.glob("*.npz"))
+    bad = []
+    for fn in files:
+      if not (new_dir / fn).is_file():
+        bad.append(fn)
+        continue
+      with np.load(new_dir / fn, allow_pickle=False) as x, np.load(old_dir / fn, allow_pickle=False) as y:
+        if set(x.files) != set(y.files) or not all(np.array_equal(x[k], y[k]) for k in y.files):
+          bad.append(fn)
+    print(f"[{'x' if bad else '+'}] connectivity_edges: {len(files) - len(bad)}/{len(files)} npz files equal per key"
+          + (f"; different or missing: {bad[:5]}" if bad else ""))
+    status |= bool(bad)
+  return int(bool(status))
 
 
 def build_parser() -> argparse.ArgumentParser:
