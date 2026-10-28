@@ -8,6 +8,15 @@ the shared quality decision (`subject_quality_gate`, thresholds from the config 
 every file of 01_DATA_SPEC 5.2 into `<out-root>[/w<len>_s<stride>]/<S>/` (default out-root
 `data/processed_<filter-mode>`).
 
+Banks: `fbcca`, `fbcsp` (P05) and, from P17, `harmonic` (k*f, k = 1..3, 15 centres) and `intermediate` (4 midpoints
+of neighbouring targets), narrow Butterworth bands from the config `filter_bank:` block, filtered on the
+continuous signal like the others. By default `--banks` is `fbcca fbcsp` plus every narrow bank whose config
+block has `enabled: true`; naming a bank explicitly builds it whatever the flag. A narrow band above
+`min(highcut, fs/2 - 1)` or containing the notch is not built; `windows_meta.json` records `bands_skipped` and
+`band_overlaps` per bank. The artifact guard `auto` is the longest ringing time of every filter applied, the
+narrow bands included, so a build with narrow banks can have a longer guard (hence different masks) than a
+two-bank build; every other file of a build is independent of the set of banks.
+
 `--filter-mode continuous` filters each sub-band over the whole recording and then cuts (R3);
 `--filter-mode per_window` (legacy, PF-14) cuts first and filters each window alone: the broadband filter
 is continuous in both, so the two builds differ only in the sub-bands.
@@ -54,9 +63,9 @@ from src.io.subject_data import built_dir_name  # noqa: E402
 from src.preprocessing.dataset.cv_utils import LEGACY_TRIAL_LENGTHS, build_trial_ids  # noqa: E402
 from src.preprocessing.signal.filters import broadband_filter  # noqa: E402
 from src.preprocessing.window_quality import quality_params_from_config, subject_quality_gate  # noqa: E402
-from src.preprocessing.windowing import (BANK_NAMES, MODES, band_windows, build_window_index,  # noqa: E402
-                                         compare_trial_ids, cut_windows, filter_bank, load_session,
-                                         windows_per_segment)
+from src.preprocessing.windowing import (BANK_NAMES, BASE_BANKS, MODES, NARROW_BANKS, BandFilter,  # noqa: E402
+                                         band_overlaps, band_windows, build_bank, build_window_index, compare_trial_ids,
+                                         cut_windows, load_session, windows_per_segment)
 
 SUBJECT_PATTERN = re.compile(r"^S\d+$")
 DEFAULT_CONFIG = ROOT / "configs" / "pipeline_config.yaml"
@@ -72,13 +81,38 @@ def load_build_config(path: Path) -> dict:
   """Parsed config; ValueError naming the first missing P16 key."""
   cfg = yaml.safe_load(Path(path).read_text()) or {}
   need = {"channels": ("scalp", "mark_channel"), "project": ("target_conditions",),
+          "filter_bank": ("harmonics", "intermediate"),
           "preprocessing": ("lowcut_hz", "highcut_hz", "notch_hz", "notch_q", "filter_order", "sub_window_sec",
                             "baseline"), "quality": ("vpp_range_uv",)}
   for sec, keys in need.items():
     for k in keys:
       if k not in (cfg.get(sec) or {}):
         raise ValueError(f"{path}: missing config key {sec}.{k}")
+  for blk, keys in (("harmonics", ("enabled", "n_harmonics", "half_width_hz", "order")),
+                    ("intermediate", ("enabled", "half_width_hz", "order"))):
+    for k in keys:
+      if k not in (cfg["filter_bank"][blk] or {}):
+        raise ValueError(f"{path}: missing config key filter_bank.{blk}.{k}")
   return cfg
+
+
+def narrow_params(cfg: dict) -> dict:
+  """`{bank: kwargs of build_bank}` for the narrow banks from the config: `filter_bank:` widths and orders,
+  `max_hz` = broadband highcut, `exclude_hz` = the notch (none if the notch is off)."""
+  fb, pre = cfg["filter_bank"], cfg["preprocessing"]
+  common = {"max_hz": float(pre["highcut_hz"]),
+            "exclude_hz": () if pre["notch_hz"] is None else (float(pre["notch_hz"]),)}
+  return {"harmonic": {**common, "n_harmonics": int(fb["harmonics"]["n_harmonics"]),
+                       "half_width_hz": float(fb["harmonics"]["half_width_hz"]), "order": int(fb["harmonics"]["order"])},
+          "intermediate": {**common, "half_width_hz": float(fb["intermediate"]["half_width_hz"]),
+                           "order": int(fb["intermediate"]["order"])}}
+
+
+def default_banks(cfg: dict) -> list:
+  """`fbcca fbcsp` plus the narrow banks enabled in the config `filter_bank:` block (harmonic first)."""
+  fb = cfg["filter_bank"]
+  return list(BASE_BANKS) + [b for b, k in (("harmonic", "harmonics"), ("intermediate", "intermediate"))
+                             if fb[k]["enabled"]]
 
 
 def resolve_params(cfg: dict, args: argparse.Namespace) -> dict:
@@ -99,7 +133,8 @@ def resolve_params(cfg: dict, args: argparse.Namespace) -> dict:
     "stride_sec": None if args.stride_sec is None else float(args.stride_sec),
     "stim_duration_sec": float(base["stimulus_duration_sec"]), "cross_duration_sec": float(base["pre_stim_cross_sec"]),
     "cue_lookback_sec": float(base["cue_lookback_sec"]), "quality": q,
-    "filter_mode": args.filter_mode, "banks": list(args.banks), "session": args.session}
+    "filter_mode": args.filter_mode, "banks": list(args.banks or default_banks(cfg)), "session": args.session,
+    "narrow": narrow_params(cfg)}
 
 
 # --- one subject (importable, no file output) ----------------------------------------
@@ -108,7 +143,7 @@ def build_subject(x: np.ndarray, mark: np.ndarray, fs: float, params: dict) -> d
   """Windows, sub-bands and the shared quality decision of one recording (`x (C, T)` raw scalp channels).
 
   Returns `broadband (C, T)`, `idx` (WindowIndex), `X_time`, `X_raw` `(n, C, n_samples)`, `bands`
-  `{bank: (n, B, C, n_samples)}`, `banks_meta`, `quality` (`subject_quality_gate` result), `n_samples`.
+  `{bank: (n, B, C, n_samples)}`, `banks_meta`, `bands_skipped` / `band_overlaps` `{bank: list}` (P17), `quality` (`subject_quality_gate` result), `n_samples`.
   """
   names = list(params["scalp"])
   if len(names) != x.shape[0]:
@@ -122,17 +157,21 @@ def build_subject(x: np.ndarray, mark: np.ndarray, fs: float, params: dict) -> d
     raise ValueError("no complete segment in the MARK channel")
   n = int(params["window_sec"] * fs)
   X_time, X_raw = cut_windows(broadband, idx.starts, n), cut_windows(x, idx.starts, n)
-  bands, banks_meta, filters = {}, {}, [lambda z: broadband_filter(
+  bands, banks_meta, bands_skipped, overlaps, filters = {}, {}, {}, {}, [lambda z: broadband_filter(
     z, fs, params["lowcut"], params["highcut"], params["order"], params["notch_hz"], params["notch_q"])]
   for b in params["banks"]:
-    bank = filter_bank(b, fs)
+    bank, skipped = build_bank(b, fs, params["narrow"].get(b))
+    if not bank:
+      raise ValueError(f"bank {b!r} has no band left at fs {fs:g} Hz")
     bands[b] = band_windows(broadband, idx.starts, n, bank, params["filter_mode"])
     banks_meta[b] = [{"name": f.name, "low": f.low, "high": f.high} for f in bank]
+    bands_skipped[b] = skipped
+    overlaps[b] = band_overlaps(bank)
     filters += bank
   quality = subject_quality_gate(X_time, idx.starts, broadband, fs, names, filters, params["quality"],
                                  labels=idx.labels)
   return {"broadband": broadband, "idx": idx, "X_time": X_time, "X_raw": X_raw, "bands": bands,
-          "banks_meta": banks_meta, "quality": quality, "n_samples": n}
+          "banks_meta": banks_meta, "bands_skipped": bands_skipped, "band_overlaps": overlaps, "quality": quality, "n_samples": n}
 
 
 def _jsonable(o):
@@ -145,6 +184,17 @@ def _jsonable(o):
   if isinstance(o, np.generic):
     return o.item()
   return o
+
+
+def _cross_overlaps(built: dict) -> dict:
+  """`band_overlaps` of the meta: `{bank: pairs inside the bank}` plus `combined`, the pairs between bands of
+  different banks among the banks the benchmark joins (`fbcsp`, `harmonic`, `intermediate`, those built)."""
+  out = dict(built["band_overlaps"])
+  joined = [(b, BandFilter(f["name"], f["low"], f["high"], None, None)) for b in ("fbcsp",) + NARROW_BANKS
+            for f in built["banks_meta"].get(b, [])]
+  owner = {f.name: b for b, f in joined}
+  out["combined"] = [o for o in band_overlaps([f for _, f in joined]) if owner[o["a"]] != owner[o["b"]]]
+  return out
 
 
 def build_meta(built: dict, params: dict, fs: float, subject: str, recording: str, git_commit: str) -> dict:
@@ -167,7 +217,9 @@ def build_meta(built: dict, params: dict, fs: float, subject: str, recording: st
                   "applied": "continuous"},
     "filters": {"broadband": "butterworth bandpass + notch", **{b: f"{len(v)} bands" for b, v in
                                                                  built["banks_meta"].items()}},
-    "bands": built["banks_meta"], "skipped_bands": [],
+    "bands": built["banks_meta"], "bands_skipped": built["bands_skipped"], "band_overlaps": _cross_overlaps(built),
+    "data_source": "legacy per_window build (PF-14)" if params["filter_mode"] == "per_window" else "continuous build",
+    "legacy": params["filter_mode"] == "per_window",
     "label_counts": dict(zip(labels.tolist(), counts.tolist())), "n_windows": int(len(idx)),
     "n_trials": int(len(np.unique(idx.trial_ids))), "skipped_segments": idx.skipped,
     "quality": {"channels_kept": q["channels_kept"], "channels_dropped": q["channels_dropped"],
@@ -319,6 +371,10 @@ def quality_lines(subject: str, built: dict, fs: float, x: np.ndarray) -> list:
   for lab, r in q["rejections_by_label"].items():
     out.append(f"  rejected {subject} {lab}: total {r['total']}, valid {r['valid']}, own_gate {r['own_gate']}, "
                f"guard {r['guard']}")
+  for b, sk in built["bands_skipped"].items():
+    if sk:
+      out.append(f"  bands skipped {subject} {b}: " + "; ".join(f"{k['center']:g} Hz [{k['low']:g}, {k['high']:g}] "
+                                                              f"({k['why']})" for k in sk))
   if idx.skipped:
     out.append(f"  skipped segments {len(idx.skipped)}: " + "; ".join(f"{s['condition']}@{s['onset']} ({s['why']})"
                                                                        for s in idx.skipped[:6]))
@@ -354,7 +410,8 @@ def build_parser() -> argparse.ArgumentParser:
   p.add_argument("--window-sec", type=float, default=None, help="window length (default: config sub_window_sec); "
                  "giving it or --stride-sec saves under w<len>_s<stride>/")
   p.add_argument("--stride-sec", type=float, default=None, help="window stride (default: none = the legacy starts)")
-  p.add_argument("--banks", nargs="+", choices=BANK_NAMES, default=list(BANK_NAMES), help="sub-band banks to save")
+  p.add_argument("--banks", nargs="+", choices=BANK_NAMES, default=None,
+                 help="sub-band banks to save (default: fbcca fbcsp + the narrow banks enabled in config filter_bank:)")
   p.add_argument("--out-root", type=Path, default=None, help="default: <root>/data/processed_<filter-mode>")
   p.add_argument("--raw-dir", type=Path, default=None, help="default: <root>/ + paths.data_raw_dir")
   p.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
@@ -386,7 +443,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     return 1
   sig = {k: params[k] for k in ("scalp", "lowcut", "highcut", "order", "notch_hz", "notch_q", "window_sec",
                                 "stride_sec", "filter_mode", "banks", "session", "quality")}
-  print(f"Data source: {args.filter_mode} build of {args.session}.ebr -> {out_root}/<S>/")
+  print(f"Data source: {'legacy per_window' if args.filter_mode == 'per_window' else 'continuous'} build of {args.session}.ebr -> {out_root}/<S>/")
   print(f"Filter: Butterworth {params['lowcut']:g}-{params['highcut']:g} Hz order {params['order']} + notch "
         f"{params['notch_hz']} Hz Q {params['notch_q']:g}, zero-phase on the continuous signal; banks {params['banks']} "
         f"({args.filter_mode}); window {params['window_sec']:g} s, stride {params['stride_sec'] or 'none (legacy starts)'}")

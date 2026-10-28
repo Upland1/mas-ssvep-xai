@@ -89,7 +89,7 @@ def test_read_only_and_refuses_second_run(tree):
 
 
 def test_failed_freeze_leaves_no_snapshot(tree, monkeypatch):
-  monkeypatch.setattr(fb, "summary_rows", lambda s: (_ for _ in ()).throw(RuntimeError("boom")))
+  monkeypatch.setattr(fb, "summary_rows", lambda s, **kw: (_ for _ in ()).throw(RuntimeError("boom")))
   with pytest.raises(RuntimeError):
     fb.freeze(tree, "v1", "", date="2026-10-27", with_pip=False)
   assert fb.existing_snapshots(tree, "v1") == []

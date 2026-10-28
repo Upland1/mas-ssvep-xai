@@ -137,12 +137,12 @@ phases:
     passed: '2026-10-28'
   P17:
     slug: rest-class-filterbank
-    status: pending
+    status: passed
     owner: orchestrator
-    branch: null
-    commit: null
-    opened: null
-    passed: null
+    branch: phase/P17-rest-class-filterbank
+    commit: 900f4931ec9e819484c1a87bfe95c90ac0f0899d
+    opened: '2026-10-28'
+    passed: '2026-10-28'
   P18:
     slug: nbs
     status: pending

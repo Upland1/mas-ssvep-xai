@@ -379,14 +379,14 @@ def test_flagship_smoothing_resets_per_true_trial_ordered_by_trial_offset(built,
   smx[1:] = (scores[:-1] + scores[1:]) / 2                                  # the bug: smoothing across trial boundaries
   exp_cross = round(100 * float((classes[smx.argmax(1)] == d["y"]).mean()), 2)
   assert exp_trial == 100.0 and exp_mod5 < exp_trial and exp_cross < exp_trial   # the rules differ, so the test can tell
-  row = B.evaluate_subject(built, "S02")["row"]
+  row = B.evaluate_subject(built, "S02", thresholds=GATE["thresholds"])["row"]
   assert row["2.0s Smoothed (%)"] == exp_trial
   assert row["1.0s Acc (%)"] == round(100 * float((classes[scores.argmax(1)] == d["y"]).mean()), 2)
 
 
 def test_flagship_cv_repeats_columns_are_mean_and_sample_sd_of_seeds(built):
-  r3 = B.evaluate_subject(built, "S01", repeats=3, seed=42)["row"]
-  singles = [B.evaluate_subject(built, "S01", repeats=1, seed=42 + r)["row"] for r in range(3)]
+  r3 = B.evaluate_subject(built, "S01", repeats=3, seed=42, thresholds=GATE["thresholds"])["row"]
+  singles = [B.evaluate_subject(built, "S01", repeats=1, seed=42 + r, thresholds=GATE["thresholds"])["row"] for r in range(3)]
   a1 = np.array([s["1.0s Acc (%)"] for s in singles])
   a2 = np.array([s["2.0s Smoothed (%)"] for s in singles])
   assert r3["CV repeats"] == 3

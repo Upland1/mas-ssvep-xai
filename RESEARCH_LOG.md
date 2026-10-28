@@ -367,3 +367,25 @@ Sources: `reports/compact_cnn_benchmark_cpu.csv`, `reports/shallow_convnet_bench
 **R11.** None. The builders and the tester report no consultation; the verifier found no entry dated 2026-10-27 or later in `mas/state/scratch/reference_access.log` [6, 9].
 
 **Open.** Carry-forwards for P17 onward: C-1 (freeze skips the redundant `Mean` row for later tags), C-2 (remove the script-local threshold fallback in `benchmark_n_subjects`, label `per_window` builds legacy, forbid or document `--fs` on built roots), C-3 (optional labelled S02 build diagnostic), C-4 (show c′ beside c for S02; FDR as fractions when channel sets differ), C-5 (the P17 rest class uses 201 windows only). Merge per `MERGE_POLICY: orchestrator`. B003 is non-blocking and to be decided before P20.
+
+## P17 — Sixth (rest) class and harmonic / intermediate filter bank
+
+2026-10-28. Branch `phase/P17-rest-class-filterbank`; run state `59b0f10`; verifier PASS `d7daf81`; results review APPROVE `1eeff88`; decisions `471c6a2`. Phase report: `mas/state/reports/P17.md`.
+
+**Aim.** Roadmap P17 [1]: add the fixation cross (201) as a sixth class, and add narrow harmonic (k·f, k = 1..3) and intermediate (midpoint) bands to the filter bank. Evaluate `base` (five FBCSP bands), `harm` and `harm+mid` with 5 and 6 classes over ten CV repeats [1, 2].
+
+**Data source.** OO session, S01–S05 (B005). Continuous build `data/processed_continuous_p17/<S>/` (four banks, fs 256 from the header, guard `auto` 1.046875 s = 268 samples, shared quality) [5, 8]. The guard moved from 0.902 s because the order-2 narrow bands ring to 1.047 s, so the rebuild went to a new root and the P16 root `data/processed_continuous/` stayed unchanged (65 files, hash `c59c94b8…a54e`, equal before and after) [3, 5, 8].
+
+**Result (cohort means, S01–S05, 10 repeats; `reports/n_subjects_benchmark_p17_*_5class.csv`, `reports/n_subjects_benchmark_p17_*_6class.csv`).** 5 classes, 1.0 s / 2.0 s: base 87.65 / 89.57, harm 94.29 / 95.80, harm+mid 94.23 / 95.45. The `harm` gain is material on S01 (+12.35 / +12.60 pp) and S02 (+13.69 / +11.53 pp) and small at ceiling on S04 and S05. `harm+mid` ties `harm` everywhere [7, 8]. The gain is worded "consistent with an SNR gain of the ±1 Hz bands at k·f, fundamentals included". The bank includes the five fundamentals, so no gain is attributed to harmonics alone (C-d) [7].
+
+**Six classes.** Stimulus and rest (chance 16.7 %), not comparable with five-class accuracy. The like-for-like check is StimCorrect(6) against Smoothed(5) at 2.0 s: StimCorrect(6) is below Smoothed(5) in 15 of 15 cells [7, 8]. The narrow banks mainly reduce false activations on S01 and S02 (FalseAct 2.0 s, base → harm: 22.00 → 7.12 %, 16.08 → 3.24 %); Missed rises on S01 (14.25 → 20.00 %) [8].
+
+**Refuted a-priori directions.** P4 for base (S01 FalseAct 22.00 > Missed 14.25); "loss ≈ Missed" on S01 and S02; P1's S05 tie (small positive, no claim). The 6-class BalAcc gain is material on S01 and S02 only, so no cohort claim is made [7].
+
+**Gates.** G1 (leak controls, 1166 passed) met; G2 (D0 25 of 25 equal, D1 gap 2.969 s, D2 non-guard identical) met; G3 and G4 met (not triggered) [7, 9, 10]. Synthetic leak controls: null recording at chance (base 20.00 / 20.83 %, bound 31.3 %), carry-over ≤ 6.5e-6 at the protocol spacing, tone at 2·f0 found by `harm` only [4].
+
+**Caveats.** Uniform priors push errors toward FalseAct (not isolated by a run). The harm Missed 20.00 % on S01 and S02 is a count coincidence (400 of 2000, 380 of 1900). The S04 mask change is one rest and one cue window (`05_run.md:64` corrected in D-5). The 5-class base at 10 repeats is 0.27 / 0.50 pp above P16 row c at 5 repeats, a repeat-count effect [7, 8].
+
+**R11.** None. Zero reference-access lines dated 2026-10-28 [9].
+
+**Open.** Carry-forwards C-a (refuse overwrite of built folders with different `build_params`; open), C-b (`fail_fraction` required), C-c (6-class console line), C-d (fundamentals-only ablation), C-e (per-offset Missed/FalseAct). One skipped test is not identified in the run log. Merge per `MERGE_POLICY: orchestrator`.
