@@ -210,17 +210,197 @@ Verdict: **PASS**.
 
 ## Results review
 
-Verdict: APPROVE / REJECT
+Verdict: **APPROVE**
 
-### Deviations from references
+Read: `06_verify.md`, in both its first run (bd55527, FAIL, kept as the record) and its Round 2 re-verification (6bb9b81, PASS); `reports/v1_vs_v2/flagship.csv` and `connectivity.csv`; the six `reports/n_subjects_benchmark_<suffix>.csv` files; and the four `reports/connectivity_cohort_summary_<suffix>.csv` files. I judged them against criteria (1)–(5) of Round 1 and additions A and B of Round 2. Those criteria were fixed before the run, and none was changed afterwards.
 
-| Ref | Expected | Obtained (log) | Δ | Within tolerance? | Explanation | Accepted? |
-|---|---|---|---|---|---|---|
-| | | | | | | |
+### Pre-committed criteria
 
-### Interpretation check
+| Criterion | Outcome | Evidence |
+|---|---|---|
+| (1) Edge ≫ centre, narrow FBCSP bands | **met** | 7–12: 53.236 / 6.512 % (ratio 8.17); 13–17: 56.684 / 7.604 % (7.45); 18–26: 33.097 / 1.576 % (21.00). All three are ≥ 5 with edges ≥ 20 %, and all eight bands have edges > centre (`reports/edge_effects_summary.csv`, log 02). The ≥ 10 reading, reported as information only, is **not** met for 7–12 and 13–17. The report must say so. |
+| (2) v1check exactness | **met (at Round 2)** | All four CSVs are byte-equal, and 20 of 20 npz files are equal per key with NaN compared only at aligned positions (log `17_..._r2.log`, exit 0). In the first run the script exited 1 on NaN diagonals. That was a defect in the checker, not in the data, and was resolved by 9b297c0 (my Round 2 post-verify section). The row-a "seed 42 alone" values equal R-6 per subject. |
+| (3) Snapshot | **met** | 407 = 407 (path, sha256) pairs, with the config taken from 97a29bed; superseded files present; no write bit; refusal on rerun with MANIFEST unchanged; MEAN 79.2767 / 82.6117 (06_verify.md (3)). |
+| (4) Legacy starts | **met** | 70 of 70 lines show `n_legacy = n_built = n_equal`, max\|d\| 0. Trial-id lines: S02 39, S04 38, other subjects 0. |
+| (5) Determinism checks | **met** | a/a′/a′t window counts equal (addition A); a′t 1.0 s = a′; d_smoothing 0.00 on S01/S05; b vs c windows equal and connectivity b ≡ c (max \|Δ\| 0.0); S01 d_guard 0.00 everywhere; connectivity a′ vs a window counts and approximate-id flags equal (addition B). See D-2 for the identity cells. |
+
+**Identity cells (verifier CONCERN (i)).** There are 35 identity cells: PLV and wPLI at 101, 102 and 105, and coherence at 105. In all 35, `p_one_tailed` and `n_edges_sig_fdr` are identical between a and a′. In 28 of them, `obs_diff` differs by at most 2.44e-16.
+
+My text said "identical" in all three columns, so read literally it is not met bit for bit. The mechanism is known. fs enters these estimators only as the Welch/CSD density scale factor 1/(fs·Σw²). Coherence (|Pxy|²/(Pxx·Pyy)), PLV and wPLI are ratios, so that factor cancels analytically but is rounded differently in floating point. 2.44e-16 is about one ulp of values of order 1.
+
+My intent was "same bins → same values", and that is met. A difference above 1e-12 would have counted as a real difference. I record this ruling as D-2, in the same spirit as the aligned-NaN ruling. It does not loosen any other check.
+
+### Direction of every change (R-16)
+
+Unit rule (pre-committed): a difference counts as a change only if |Δ| ≥ 1.0 pp **and** |Δ| > the larger repeat SD of the two rows. Otherwise it is "none" (the sign is given but not interpreted). All values below are from `reports/v1_vs_v2/flagship.csv` (5 repeats, seeds 42–46).
+
+**fs, a′ − a (1.0 s / 2.0 s).**
+
+| Subject | Δ (pp) | Unit rule |
+|---|---|---|
+| S01 | +11.30 / +8.90 | change |
+| S02 | +18.47 / +18.16 | change |
+| S03 | +6.30 / +5.18 | change |
+| S04 | +1.22 / −0.41 | change / none |
+| S05 | +2.90 / +2.70 | change |
+| Mean | +8.04 / +6.91 | change |
+
+- As predicted: positive at 1.0 s in every subject, and the Mean is ≥ +3 pp.
+- The order of the gains (S02 > S01 > S03 > S05 > S04) is exactly the reverse of the row-a accuracy order (60.61 < 61.70 < 88.22 < 95.00 < 98.48). That is the ceiling relation I predicted.
+- Mechanism (pre-run, unchanged): the FBCCA references drift at fs 250, and CCA r² is reduced by a factor of 0.28–0.86, by class.
+- S04 2.0 s −0.41 is "none". Under mod5, S04 at 2.0 s is capped by the structural loss explained in the smoothing paragraph (a′ 97.97 with SD 0.00, while its 1.0 s is 99.70).
+- No subject has a negative material fs effect.
+
+**Smoothing rule, a′t − a′ (2.0 s only).**
+
+| Subject | Δ (pp) | Unit rule |
+|---|---|---|
+| S01 | 0.00 | binding check met |
+| S02 | −2.55 | none (SD 2.92) |
+| S03 | −2.64 | change |
+| S04 | +2.03 | change |
+| S05 | 0.00 | binding check met |
+
+- Both non-zero signs follow from the legacy rule. On legacy folders, `i % 5` on the *clean* array loses alignment after the first rejected window (S02/S03/S04: 3/3/1 rejected). The arrays are ordered by condition, so a misaligned 2-window average mostly joins two windows of the **same class** from adjacent trials. That inflates mod5, so trial reset is lower: S02 −2.55 = 5/196 windows, S03 −2.64 ≈ 5.2/197 (mean over seeds). This is the label-order effect of PF-02. P11 at fs 250 gave −2.55 and −3.56, the same sign.
+- Where a misaligned pair falls at one of the 4 class boundaries, mod5 instead averages two *different* classes, which hurts a near-perfect classifier. S04 +2.03 = 4/197 windows exactly (`python3 -c "print(100*4/197)"` → 2.03), with SD 0.00 in both rows. That is one window per class change, the structural signature in my memory notes.
+- The trial rule is the honest one (R8). v2 uses it on true ids.
+
+**Build, b − a′ at 1.0 s and b − a′t at 2.0 s.**
+
+| Subject | Channels (legacy → built) | Δ (pp) | Unit rule |
+|---|---|---|---|
+| S01 | same 7 (PO7 dropped by tier 1) | −0.30 / +0.40 | none |
+| S03 | same 7 (PO7 dropped) | −1.12 / −0.59 | none (1.12 is not > SD 1.12) |
+| S04 | same 7 (PO7 dropped) | −0.11 / −0.41 | none |
+| S05 | 8 vs 7 (PO7 kept) | +0.39 / +0.49 | none |
+| S02 | 8 vs 7 (PO7 kept) | −8.03 / −7.79 | change |
+| Mean | | −1.83 / −1.58 | change; inside the predicted \|Mean\| ≤ 3 |
+
+- **S01, S03, S04.** For these three subjects, tier 1 dropped PO7, so the built folders have exactly the legacy channel set (PO3, POz, PO4, PO8, O1, Oz, O2). There, the build step changes only the broadband filter (1–90 Hz plus notch), the shared gate plus guard, and the ids (an id change on S04 only). None of the three moves materially.
+- **The Mean is driven entirely by S02**, the one subject where both build-specific factors coincide:
+  - (i) PO7 is restored as an 8th channel;
+  - (ii) the legacy reconstructed ids are approximate (39 windows in inconsistent groups), so a′'s grouped CV on S02 still carries the residual P11 D-2 leak that true ids remove;
+  - (iii) there are 6 fewer clean windows (190 vs 196, 10 rejected, 5 of them by the guard; about 0.53 pp per window).
+- Direction: I predicted "a decrease on S02/S04 if anything", from the id factor. S02 matches. S04 has approximate ids too but sits at the ceiling (a′ 99.70), so there is no room.
+- The three S02 factors cannot be separated with these rows. The v2 S02 value (c: 72.42 / 75.26) is the leak-free one, and the report must not present −8 pp as a cost of the new pipeline. It reads: "S02 is lower in v2; candidates are the restored PO7 and the removal of the approximate-id leak; not separated". See C-3.
+
+**Filter mode, c − b.**
+
+| Subject | Δ (pp) | Unit rule |
+|---|---|---|
+| S01 | +0.10 / +0.20 | none |
+| S02 | +1.37 / −0.42 | none (SD 2.92) |
+| S03 | +0.21 / −0.31 | none |
+| S04 | −0.10 / −0.10 | none |
+| S05 | +0.30 / +0.40 | none |
+| Mean | +0.37 / −0.05 | none; inside the predicted [−1, +2] |
+
+- None is material.
+- Reading: the per-window distortion is large at the signal level (criterion 1: 23–57 % of band RMS at the window edges). It is the same for every class, though, and the flagship's CSP log-variance and CCA features absorb it, as I predicted. The report must not write that continuous filtering "improves accuracy". It is the correct signal path (R3), and its accuracy effect here is nil.
+
+**Guard, c − c′.**
+
+| Subject | Δ (pp) | Unit rule |
+|---|---|---|
+| S01 | 0.00 / 0.00 | binding check |
+| S02 | −4.50 / −3.30 | 1.0 s change (4.50 > SD 3.34); 2.0 s none (SD 4.96) |
+| S03 | +0.04 / −0.06 | none |
+| S04 | −0.10 / −0.10 | none |
+| S05 | −0.41 / −0.31 | none |
+| Mean | −1.00 / −0.76 | none |
+
+- **Against my expected sign ≥ 0.** The sign was a non-binding expectation; only the identity case and the bound were binding. The bound holds in all 10 cells (S02: 4.50 ≤ 5.90 and 3.30 ≤ 7.52; 06_verify.md (5)).
+- On S04 and S05 the negative sign is not material and is not interpreted.
+- On S02 it is material at 1.0 s and needs explaining. The guard removes 5 stimulus windows (c 190 vs c′ 195). Even if all 5 were correctly classified, adding them back would raise accuracy by at most 0.71 pp (`python3 -c "c=0.7242; print(100*((c*190+5)/195-c))"` → 0.71). So at least about 3.8 pp of the −4.50 comes from the training set and the fold composition, which differ when the window set differs (unpaired splits).
+- Against the spread of those splits, the gap is about 2.3 SE (SE of the difference of 5-repeat means ≈ 1.98 if treated as independent, shown command). That is modest evidence.
+- Reading: "on S02 the guard costs 4.50 pp at 1.0 s and nothing material at 2.0 s; cause not established (fewer training windows in the weakest subject, or the 0.9 s guard also removing usable windows near short artifacts)".
+- The guard stays the shared default. Its justification (PF-14: windows contaminated by ringing) is about signal validity, not accuracy, and golden rule 5 forbids choosing it by accuracy. c′ is reported beside c for S02 (C-4).
+
+**Total, c − a (Mean).** +6.58 / +4.65 pp. The decomposition adds up: 8.04 − 1.83 + 0.37 = 6.58 at 1.0 s, and 6.91 − 0.63 − 1.58 − 0.05 = 4.65 at 2.0 s. Against the frozen seed-42 v1, c is +8.10 / +6.46 (`python3 -c "print(87.38-79.28, 89.07-82.61)"`). **The fs correction accounts for all of the v1→v2 gain.** The other steps are net zero or negative.
+
+**Connectivity, fs (a′ − a; same 7 legacy channels, same windows and ids per addition B).** Mean Δobs_diff over 25 cells per method:
+
+| Method | Mean Δobs_diff | FDR edges a → a′ |
+|---|---|---|
+| Coherence | −0.0079 | 125 → 123 |
+| PLV | −0.0063 | 67 → 47 |
+| wPLI | −0.0126 | 79 → 83 |
+| PDC | −0.0002 | 46 → 42 |
+
+- Coherence 101–103 (−0.0069 / −0.0132 / −0.0092) shows the predicted dilution: the band moves from 2 to 3 true bins, adding the f−1 bin.
+- At 104, coherence (−0.0102), PLV (−0.0097) and wPLI (−0.0148) all decrease, as predicted: the 104 band moves onto the 10 Hz alpha bin of the fixation baseline.
+- PLV and wPLI at 103 (−0.0219 and −0.0480; PLV FDR 19 → 4, wPLI 5 → 3): 15 Hz falls between the 2 Hz CSD bins, and fs 256 averages the 14 and 16 Hz bins where fs 250 used only 16. This is the same dilution mechanism, but it is a **post-hoc** explanation; my pre-run note predicted coherence and 104 only.
+- wPLI 104 FDR 9 → 15 runs against its mean Δobs_diff. The change is heterogeneous across edges and subjects (S03 and S04 move in opposite directions at 104). I record it as "mixed", with no sign interpreted.
+- PDC: all |Δ| ≤ 0.0007, as expected from a model whose frequency grid only rescales.
+- One global-p crossing: S03 wPLI 103, 0.05 → 0.06. Under R7 that cell is **inconclusive**, not "lost".
+
+**Connectivity, build (b − a′).** Mean Δobs_diff is +0.0045 / +0.0010 / +0.0038 / +0.0058 (coherence / PLV / wPLI / PDC): small, positive and no material change. No sign was predicted. FDR counts are only comparable as a fraction of `total_edges` (N1), shown command below:
+
+| Group | Method | FDR fraction a′ → b |
+|---|---|---|
+| Same 7 channels (S01, S03, S04) | Coherence | 0.352 → 0.356 |
+| | PLV | 0.149 → 0.165 |
+| | wPLI | 0.248 → 0.260 |
+| | PDC | 0.051 → 0.076 |
+| 8 vs 7 channels (S02, S05) | Coherence | 0.057 → 0.086 |
+| | PLV | 0.000 → 0.011 |
+| | wPLI | 0.024 → 0.032 |
+| | PDC | 0.024 → 0.011 |
+
+- The fractions change by small amounts and mostly upward.
+- The S02/S05 PDC fraction falls. PDC is a multivariate MVAR model, so an 8-channel model is a different model; the absolute counts (10 → 6) must not be compared.
+- The verifier's 4 build crossings (S02 PDC 103: 0.045 → 0.109; S04 wPLI 103: 0.05 → 0.09; S05 PDC 102: 0.02 → 0.124; S05 wPLI 102: 0.065 → 0.02) all sit between 0.02 and 0.124 and go both ways. Three of the four are on the subjects whose channel set changed. All four are **inconclusive** under R7.
+- No connectivity claim of P13 is to be restated as strengthened or weakened by v2 on the strength of these cells.
+
+**Connectivity, filter mode:** not applicable (same input; decisions row 133). b ≡ c was confirmed exactly.
+
+**Connectivity, guard (c − c′).** Mean Δobs_diff is −0.0002 / −0.0003 / −0.0040 / +0.0005. FDR totals (c vs c′) are coherence 136 / 136, PLV 55 / 54, wPLI 91 / 87, PDC 54 / 50. 0 crossings. Direction: no change in obs_diff, and slightly more FDR edges with the guard, consistent with removing windows next to artifacts. Not interpreted further.
+
+```
+.venv/bin/python -c "import pandas as pd; ...n_edges_sig_fdr.sum()/total_edges.sum() by group..."   (shown in this run)
+same 7 ch  coherence 0.352 | 0.356 | 0.356 ; plv 0.149 | 0.165 | 0.162 ; wpli 0.248 | 0.260 | 0.248 ; pdc 0.051 | 0.076 | 0.070   (a', b, c')
+8 vs 7 ch  coherence 0.057 | 0.086 | 0.086 ; plv 0.000 | 0.011 | 0.011 ; wpli 0.024 | 0.032 | 0.032 ; pdc 0.024 | 0.011 | 0.011
+python3 -c "..."  -> guard direct bound 0.71 pp; SE 1.98; 4/197 = 2.03; 5/196 = 2.55; c - v1 = 8.1, 6.46
+```
+
+### Verifier notes
+
+| Note | Ruling |
+|---|---|
+| 35 identity cells, obs_diff differences ≤ 2.44e-16 | Accepted as round-off with an analytic mechanism (D-2). Not a value difference. |
+| PO7 dropped on S01/S03/S04 | Expected from P07 (chronic PO7 noise). It is what makes b − a′ a same-channel comparison on three subjects. State it per subject (R9). |
+| 8 vs 7 channel denominators on S02/S05 | Compare FDR counts only as fractions (N1); PDC 8-channel models are different models. |
+| Redundant `Mean` row in `baseline_summary.csv` (N5) | Harmless (the MEAN value is unchanged), but the snapshot is read-only and stays as is. Fix the script for any later tag (C-1). |
+| Skipped test in the clean checkout | It needs the ignored `reports/`, and it passes in the main tree. Acceptable. |
+
+### What the report must say
+
+- **The historical facts (R-16, verbatim content):** the frozen v1 (including R-6) used `fs = 250` in feature code on 256 Hz recordings, and filtered sub-bands per 1 s window. The v2 numbers are the first computed with the real sampling rate (256 Hz, from metadata) and continuous filtering.
+- **v1/v2 attribution:** the fs correction accounts for the v1 → v2 gain (+8.04 / +6.91 pp mean). Filtering mode has no material effect on accuracy, although the edge distortion is large at the signal level. The build step is not material except on S02. The guard is not material except on S02 at 1.0 s (negative).
+- **Data source, per subject (R9):** the v2 headline is row c, "continuous build of OO, fs 256 from metadata, shared quality with guard, true trial ids, trial-reset smoothing". Give all five subjects at 1.0 s and 2.0 s with channels kept and dropped, never the mean alone.
+- **R-6 status:** R-6 stays the P11 (v1) target. The v2 numbers have no reference (R-16), and no "reproduces" wording may be used for them.
+- **Forbidden wording:** "continuous filtering improves accuracy", "the guard improves accuracy", and any claim built on a connectivity cell that crosses p = 0.05 between variants.
+- **Edge criterion:** state that it was met at ratio ≥ 5 with edges ≥ 20 %, and that the order-of-magnitude reading (≥ 10) is not met for 7–12 and 13–17 Hz.
+- **Regression record:** state that the regression check first failed on NaN diagonals (a checker defect) and passed after 9b297c0, with the data byte- and value-identical throughout.
 
 ### Decisions for decisions.md
+
+- D-1: P16 acceptance met: snapshot `baselines/v1_2026-10-27/` read-only with 407 hashes equal to the pre-hash list; edge criterion met (ratios 8.17 / 7.45 / 21.00 ≥ 5, edges ≥ 20 %; the ≥ 10 reading not met for 7–12 and 13–17); legacy starts 70/70 equal; flagship and connectivity v1check byte-equal and 20/20 npz equal (first verify FAIL on NaN diagonals = checker defect, fixed in 9b297c0); v1/v2 table complete.
+- D-2: identity cells. In 28 of 35, obs_diff differs by ≤ 2.44e-16, while p and FDR counts are identical. This is accepted as round-off: fs enters only through the density scale, which cancels in the ratio estimators. Any |Δ| > 1e-12 would have been a difference.
+- D-3: fs effect +8.04 / +6.91 pp mean, positive on every subject at 1.0 s and ordered inversely to accuracy. It is explained by the FBCCA reference drift at fs 250. It accounts for the whole v1 → v2 gain (c − v1 = +8.10 / +6.46).
+- D-4: smoothing rule. Legacy i%5 inflates 2.0 s on S02/S03 (same-class cross-trial averaging after misalignment; −2.55 / −2.64) and deflates S04 by exactly 4/197 windows (class-boundary crossings). It is zero on S01/S05. The trial rule on true ids is the reported rule from P16.
+- D-5: build effect. Not material on S01/S03/S04, whose built channel set equals the legacy set. S02 −8.03 / −7.79 is the one material cell; the candidates are the restored PO7, the removal of the approximate-id leak (P11 D-2) and 6 fewer windows. Not separated. The v2 S02 value is the leak-free one.
+- D-6: filter mode (c − b). No material change in any subject (Mean +0.37 / −0.05). PF-14 is a signal-level fix with a nil accuracy effect for this flagship.
+- D-7: guard (c − c′). S02 1.0 s −4.50 pp is material and negative, against the non-binding expectation ≥ 0. It is inside the pre-committed bound. The direct test-window component is ≤ 0.71 pp. Cause not established. Other subjects: none. The guard stays the shared default (validity rationale, golden rule 5). Connectivity: no obs_diff change, slightly more FDR edges, 0 crossings.
+- D-8: connectivity. The fs effect is as predicted (dilution at coherence 101–103, decrease at 104 on the alpha bin; PLV/wPLI 103 dilution explained post hoc; wPLI 104 FDR mixed). The build effect is small and positive in fractions of total edges (8-channel PDC not comparable). All 5 global-p crossings (1 fs, 4 build) are inconclusive under R7.
+
+### Carry-forwards (P17+)
+
+- C-1 (data-signal): `freeze_baseline.summary_rows` should skip `Mean`/`MEAN` subject rows for later tags (N5). v1 stays frozen as it is.
+- C-2 (ml-engineer): remove the script-local `GATE_THRESHOLDS` fallback in `benchmark_n_subjects.evaluate_subject` (R2-N1). Label per_window builds "legacy (PF-14)" in headers and meta (N3). Forbid or document `--fs` on built roots (N6).
+- C-3 (ml-engineer, optional, only if S02 is discussed in P17+): separate the S02 build factors with a labelled diagnostic, for example a built S02 run with PO7 excluded by name. No tuning; report beside c.
+- C-4 (all): when a write-up shows the v2 flagship per subject, show c′ beside c for S02. When channel sets differ, connectivity FDR counts are always given as fractions of `total_edges`.
+- C-5 (P17 6-class): the rest class uses 201 windows only (PF-13). Any use of 202 groups by `cv_groups` (overlap rule).
 
 - (pre-run, for the orchestrator now) Guard `auto` = one-sided 1 % span of the zero-phase impulse response, measured on the broadband filter and all bank filters in **both** build modes (0.902 s, FBCSP 13–17 Hz). This deliberately departs from the literal "filters applied continuously" for per_window builds, so that b and c share one mask and c − b is the sub-band filtering alone.
 - (pre-run) `cv_groups` is the R1 key for any analysis selecting 202. It is derived by overlap (after fix 1). `trial_ids.npy` stays one id per segment (spec §5.2).
