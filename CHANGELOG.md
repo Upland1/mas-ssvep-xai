@@ -381,3 +381,33 @@ Review
 - Pre-run audit Round 1 FAIL (`58c578c`), Round 2 PASS (`fe71ffa`, `645312e`). Verifier FAIL (`bd55527`), PASS after Round 2 (`6bb9b81`). Results review APPROVE (`928ae8c`), D-1 to D-8, C-1 to C-5.
 
 Next phase: P17, after the orchestrator's gate.
+
+## P17 — Sixth (rest) class and harmonic / intermediate filter bank
+
+2026-10-28. Branch `phase/P17-rest-class-filterbank`. Run state `59b0f10`; verifier PASS `d7daf81`; results review APPROVE `1eeff88`. Phase report: `mas/state/reports/P17.md`.
+
+Added
+- `src/preprocessing/windowing.py`: `harmonic_centers`, `intermediate_centers`, `narrow_filter_bank` (skip rule, `bands_skipped`), `band_overlaps`, `build_bank`; banks `harmonic` and `intermediate`.
+- `src/models/classical/rest_metrics.py`: BalAcc, FalseAct, Missed and StimCorrect, and the confusion counts.
+- `scripts/build_windows.py`: banks `harmonic` and `intermediate`; meta `bands_skipped`, `band_overlaps`, `data_source`, `legacy`.
+- `scripts/benchmarks/feature_based/benchmark_n_subjects.py`: `--bank {base,harm,harm+mid}`, `--classes {5,6}`, `--allow-fs-override`; 6-class columns and SDs; `<csv>_confusion.csv`.
+- Tests: `tests/test_p17_windowing.py` (10), `tests/test_p17_benchmark.py` (21), `tests/test_p17_independent_known_answer.py` (22), `tests/test_p17_leak_controls.py` (12).
+- Generated (ignored): `data/processed_continuous_p17/`; six `reports/n_subjects_benchmark_p17_*` pairs, three `_6class_confusion.csv`, the D0 CSV; `reports/logs/P17/`.
+
+Changed
+- `scripts/freeze_baseline.py`: no `Mean` subject row for new tags (C-1); `v1` unchanged.
+- `scripts/build_windows.py`: default `--banks` is the four config-enabled banks; per_window builds labelled legacy (C-2).
+- `benchmark_n_subjects.py`: no `GATE_THRESHOLDS` fallback; `--fs` on a built root raises unless `--allow-fs-override` (C-2).
+- `tests/test_p16_freeze_baseline.py`, `tests/test_p16_independent_known_answer.py`: follow-on updates (keyword, explicit `thresholds=`).
+- Not changed: `configs/` (the `filter_bank:` block exists from P16); the P16 root `data/processed_continuous/` (hash `c59c94b8…a54e`, 65 files, unchanged).
+
+Result (S01–S05, 10 repeats; `reports/n_subjects_benchmark_p17_*.csv`)
+- 5 classes, cohort mean 1.0 s / 2.0 s: base 87.65 / 89.57; harm 94.29 / 95.80; harm+mid 94.23 / 95.45.
+- Guard 0.902 s → 1.047 s changes only S04 (one rest and one cue window; valid 309 → 307).
+- Six classes: StimCorrect(6) < Smoothed(5) in 15 of 15 cells; rest errors fall with the narrow banks on S01 and S02.
+- Leak controls and G1–G4 met; no leak trigger. The gain is accepted as consistent with an SNR gain of the narrow bands at k·f, fundamentals included.
+
+Review
+- Pre-run audit PASS (`25dca39`); results review APPROVE (`1eeff88`), D-1 to D-6, C-a to C-e.
+
+Next phase: after the orchestrator's gate.
