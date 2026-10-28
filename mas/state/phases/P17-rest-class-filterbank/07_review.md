@@ -30,7 +30,7 @@ holds only if the run-list additions below are made (they add commands, no code)
 | Golden rule 3: legacy behaviour labelled and still reachable after fixes | PASS (CONCERN C-a) | per_window builds labelled `legacy` in meta and console (C-2). P16 masks remain reachable only with `--banks fbcca fbcsp`: see C-a |
 | Tests cover every change; at least one fails on the historical bug | PASS | PF-13 (`rest202` mutant), frequency priors, swapped FalseAct/Missed, notch removal, k-major order, full-data CSP: each caught (`04_tests.md` mutants); C-2 fallback test fails on the old code |
 | Changes match 02_plan.md and the roadmap tasks | PASS | P17.1-P17.3, settled points 1-7; the byte-identity route replaced by the `_p17` root under the rule decided before any number (decisions.md P17 row 2) |
-| No data, `.ebr`, local tooling files or tool/vendor names in the diff | PASS | vendor/co-author scan of `git diff main..HEAD` and of the commit messages main..HEAD: 0 and 0 (pattern built from fragments); no file under data/, no recording, no local tooling file in `git diff --name-only` (0) |
+| No data, `.ebr`, local tooling files or tool/vendor names in the diff | PASS | privacy scan of `git diff main..HEAD` and of the commit messages main..HEAD: 0 and 0 (pattern built from fragments); no file under data/, no recording, no local tooling file in `git diff --name-only` (0) |
 
 ### Points the orchestrator asked to rule on
 
