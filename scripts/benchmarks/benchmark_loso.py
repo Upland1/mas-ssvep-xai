@@ -250,6 +250,15 @@ def network_fold(P: dict, tr: np.ndarray, te: np.ndarray, method: str, args, dev
           "epochs_run": r["epochs_run"], "model": r["model"], "mean": r["mean"], "std": r["std"]}
 
 
+def pick_device(requested: str = "auto") -> str:
+  """`cuda` when available, else `cpu`; an explicit `cuda` without a GPU falls back to CPU with a warning."""
+  import torch
+  has = torch.cuda.is_available()
+  if requested == "cuda" and not has:
+    print("[warn] --device cuda requested but CUDA is not available; falling back to cpu", flush=True)
+  return "cuda" if requested in ("auto", "cuda") and has else "cpu"
+
+
 def is_degenerate(best_epoch: float, train_acc: float, n_classes: int) -> bool:
   """P20 C-2: restored best epoch <= 5 or training accuracy below chance + 10 pp (networks only)."""
   if best_epoch is None or np.isnan(best_epoch):
@@ -340,7 +349,7 @@ def save_models(path_dir: Path, method: str, subject: str, extra: dict, ctx: dic
   stem = path_dir / f"{method}__test-{subject}"
   if "model" in extra:
     import torch
-    torch.save({"state_dict": extra["model"].state_dict(), "mean": extra["mean"], "std": extra["std"],
+    torch.save({"state_dict": {k: v.cpu() for k, v in extra["model"].state_dict().items()}, "mean": extra["mean"], "std": extra["std"],
                 "channels": ctx["channels"], "fs": ctx["fs"]}, str(stem) + ".pt")
   elif extra:
     import joblib
@@ -519,8 +528,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
   dev = "cpu"
   if nets:
     import torch
-    from src.models.cnn.spatial_spectral_cnn import resolve_device
-    dev = resolve_device(args.device).type
+    dev = pick_device(args.device)
     if dev == "cuda":
       torch.backends.cudnn.deterministic = True
       torch.backends.cudnn.benchmark = False
