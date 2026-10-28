@@ -103,7 +103,7 @@ def test_cnn_fold_runs_on_cuda(model):
 @pytest.mark.parametrize("model", ["ccnn", "compact_eegnet", "eegnet"])
 def test_every_model_runs_cpu_all_window_lengths(model):
   for n in (128, 256, 512):
-    X, y, g = planted(n_trials=10, per_trial=2, C=3, n=n)
+    X, y, g = planted(n_trials=25, per_trial=2, C=3, n=n)
     r = T.fit_network(X, y, g, T.model_factory(model, FS), seed=0, device="cpu", max_epochs=1)
     assert 0.0 <= r["train_acc"] <= 1.0
 
