@@ -138,7 +138,7 @@ def build_parser() -> argparse.ArgumentParser:
 def _prediction_frame(d: dict, window: float, method: str, run: int, idx: np.ndarray, yi: np.ndarray,
                       classes: np.ndarray, pred_idx: np.ndarray, proba: Optional[np.ndarray]) -> pd.DataFrame:
   frame = pd.DataFrame({"subject": d["subject"], "window_sec": window, "method": method, "run": run,
-                        "trial_id": np.asarray(d["trial_ids"])[idx], "offset_sec": np.asarray(d["offsets"])[idx],
+                        "trial_id": np.asarray(d["trial_ids"])[idx], "offset_sec": np.asarray(d["offsets"])[idx] / float(d["fs"]),
                         "true": classes[yi[idx]], "pred": classes[pred_idx]})
   for j, c in enumerate(classes):
     frame[f"p_{c}"] = np.nan if proba is None else proba[:, j]

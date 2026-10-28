@@ -105,3 +105,9 @@ So command 2a for 5 subjects is about 5 x 25 s = 2 min plus reading the arrays (
 
 ## Questions
 <!-- receivers append: ACK <agent> <YYYY-MM-DD>, then questions; answers appended, never deleted -->
+
+## Build fix
+
+`benchmark_window_sweep.py` wrote `offset_sec` from `load_subject(...)["offsets"]`, which are in samples (`window_offsets.npy`), not seconds. Fixed: `offset_sec = offsets / d["fs"]`. The earlier fixture used seconds and hid it; `fake_subject` now uses sample offsets (multiples of 64 at fs 256) and the new test `test_offset_sec_is_in_seconds_while_loader_offsets_are_samples` checks a real built-style folder (`offset_sec == offsets / fs`) and that the fake subject gives {0, 0.25, ..., 1.75} s (fails on the old line). Window-sweep tests: `15 passed`. Suite (log `mas/state/scratch/suite_p20_ml_fix.log`):
+`1275 passed, 22 warnings in 804.48s (0:13:24)`
+Note: `scripts/benchmarks/neural_networks/benchmark_nn_sweep.py` (deep-learning) writes `"offset_sec": offs[ok]` from the same samples array (line 132) and has the same defect; not touched.

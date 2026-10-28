@@ -100,7 +100,8 @@ def fake_subject(n_trials=20, wpt=8, C=5, T=128, seed=0, signal=1.0):
   X = rng.normal(size=(len(y), C, T))
   cls = (y - 101)
   X[np.arange(len(y)), cls % C, :] *= 1.0 + signal
-  return {"subject": "Sx", "trial_ids": tid, "cv_groups": tid, "offsets": np.tile(np.arange(wpt) * 0.25, n_trials), "y": y,
+  return {"subject": "Sx", "trial_ids": tid, "cv_groups": tid, "y": y,
+          "offsets": np.tile(np.arange(wpt) * 64, n_trials),   # SAMPLES like window_offsets.npy (0.25 s at 256 Hz)
           "fs": FS, "source": "synthetic", "X": X,
           "bands": {"fbcca": rng.normal(size=(len(y), 3, C, T)), "fbcsp": np.stack([X] * 5, axis=1) + rng.normal(size=(len(y), 5, C, T))}}
 
@@ -211,3 +212,14 @@ def test_evaluate_subject_requires_fail_fraction_c_b(tmp_path):
   from scripts.benchmarks.feature_based import benchmark_n_subjects as B
   with pytest.raises(ValueError, match="fail_fraction"):
     B.evaluate_subject(tmp_path, "S01", thresholds=TH)
+
+
+def test_offset_sec_is_in_seconds_while_loader_offsets_are_samples(sweep_root):
+  from src.io.subject_data import CLASS_CODES, load_subject
+  d = load_subject(sweep_root / "w1_s0.25" / "S01", CLASS_CODES, "shared", bands=("fbcca", "fbcsp"), thresholds=TH,
+                   channel_fail_fraction=0.5)
+  _, pr, _, _ = W.run_cell(d, 1.0, W.FBCCA, W.build_parser().parse_args([]), "cpu", W.fbcca_features(d))
+  assert np.allclose(pr["offset_sec"].to_numpy(), np.asarray(d["offsets"]) / d["fs"])
+  fk = fake_subject()
+  _, pf, _, _ = W.run_cell(fk, 0.5, W.FBCCA, W.build_parser().parse_args([]), "cpu", W.fbcca_features(fk))
+  assert set(np.round(pf["offset_sec"], 6)) == {k * 0.25 for k in range(8)}
