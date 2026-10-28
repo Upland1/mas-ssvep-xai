@@ -85,18 +85,30 @@ compare the sizes of the significant graphs across subjects and frequencies.
 
 ## Run commands (for the verifier, in order)
 
+Final list, copied from `03_changes_connectivity-stats.md` (882fdc9) before the run:
+
 ```bash
 P=".venv/bin/python -m"
-C="$P scripts.connectivity.analysis.analyze_connectivity_cohort --methods coherence plv wpli pdc --permutation-unit trial --n-jobs -1 --data-root data/processed_continuous --quality shared"
+C="$P scripts.connectivity.analysis.analyze_connectivity_cohort --methods coherence plv wpli pdc --permutation-unit trial --n-jobs -1 --data-root data/processed_continuous --quality shared --stats nbs --nbs-thresholds 1.5 2.0 2.5 3.0 --nbs-primary 2.0"
 $C --permutations 200  --out-suffix p18_nbs_p200
 $C --permutations 1000 --out-suffix p18_nbs
+$P scripts.connectivity.analysis.analyze_connectivity_cohort --compare p18_nbs_p200 p18_nbs
 $P scripts.connectivity.comparison.test_connectivity_frequency_differences --methods coherence plv wpli --permutations 1000 --data-root data/processed_continuous --quality shared --benchmark reports/n_subjects_benchmark_v2cont.csv --out-suffix p18_nbs
-$P scripts.connectivity.comparison.test_connectivity_frequency_differences --summary-only --out-suffix p18_nbs --benchmark reports/n_subjects_benchmark_v2cont.csv
+$P scripts.connectivity.comparison.test_connectivity_frequency_differences --summary-only --methods coherence plv wpli --out-suffix p18_nbs --benchmark reports/n_subjects_benchmark_v2cont.csv
 ```
 
-Exact flag names (NBS thresholds, primary, the graph-size and sweep tables' paths) are
-confirmed in `03_changes_connectivity-stats.md`; the orchestrator copies the final list
-here before the run. Estimate from P16/P14 logs: cohort 200 ≈ 7 min, cohort 1000 ≈ 35
+Outputs (per `--out-suffix s`, under `reports/`):
+- `connectivity_cohort_summary_<s>.csv` (+ `_details.csv`), `connectivity_edges_<s>/<S>_<method>.npz` (with `nbs_<c>`), `connectivity_alpha_diagnostic_<s>.csv`
+- graph-size table: `reports/connectivity_graph_size_<s>.csv` (also printed, "Graph sizes: …") for `p18_nbs` and `p18_nbs_p200`
+- sweep table: `reports/connectivity_nbs_sweep_<s>.csv` (also printed, "NBS threshold sweep: …")
+- R7 flips: `reports/connectivity_cohort_flips_p18_nbs_p200_vs_p18_nbs.csv` (rows flip on FDR-A, global-B or NBS-A)
+- pairwise: `reports/connectivity_comparison/<m>_pairwise_tests_p18_nbs.csv` (with the four NBS columns), `<m>_split_half_reliability_p18_nbs.csv`, `_pairwise_null_`, `_pairwise_combined_`
+- settled point 6 check: the FDR columns of `connectivity_cohort_summary_p18_nbs_p200.csv` against `reports/connectivity_cohort_summary_v2cont.csv` (same data, same 200 permutations; the 15 pre-P18 columns must be identical; S01 already verified above).
+- `--summary-only` needs `--methods` equal to the run's (default is all three) and the benchmark CSV (or `--responders`).
+
+Measured by the builder (S01): cohort 200 ≈ 5.5 min, cohort 1000 ≈ 27.5 min, pairwise 1000 ≈ 43.4 min for 5 subjects; with the suite (≈ 12.5 min) ≈ 89 min, inside 120.
+
+Estimate from P16/P14 logs: cohort 200 ≈ 7 min, cohort 1000 ≈ 35
 min, pairwise 1000 ≈ 45 min, suite ≈ 11 min: ≈ 100 min, inside `LOCAL_RUN_BUDGET_MIN` 120
 but close. The builder measures one subject; if the projected total exceeds 110 min, the
 orchestrator issues a human-run request for the pairwise run.
