@@ -64,6 +64,42 @@ def quality_gate(windows: np.ndarray, y: np.ndarray, channel_names: Optional[Seq
     verbose=verbose, precomputed=precomputed)
 
 
+def loader_decision(quality: dict, n_windows: int, n_channels: int,
+                    channel_names: Optional[Sequence[str]] = None) -> tuple:
+  """`(row_mask (n_windows,) bool, channel_idx list, channel_report)` of a `load_subject(...)["quality"]` dict (P16, R5).
+
+  The windows handed to an extractor are either every selected row of the folder (`len(valid_mask)` rows,
+  `channel_names` = all channels: the decision is applied) or the rows `load_subject` already kept (`valid_mask.sum()`
+  rows; the decision is only checked and every row is used). Likewise the channels: selected by name from
+  `channel_names`, or all of them when their number equals `len(channels_kept)` and no names are given.
+  Raises ValueError for any other shape, so a decision is never applied to misaligned rows or channels.
+  """
+  vm = np.asarray(quality["valid_mask"]).reshape(-1).astype(bool)
+  kept = [str(c) for c in quality["channels_kept"]]
+  if n_windows == len(vm):
+    rows = vm
+  elif n_windows == int(vm.sum()):
+    rows = np.ones(n_windows, dtype=bool)
+  else:
+    raise ValueError(f"{n_windows} windows match neither the {len(vm)} rows of the decision nor its {int(vm.sum())} kept rows")
+  if channel_names is None:
+    if n_channels != len(kept):
+      raise ValueError(f"{n_channels} channels but the decision keeps {len(kept)}; pass channel_names")
+    names = kept
+  else:
+    names = [str(c) for c in channel_names]
+    if len(names) != n_channels:
+      raise ValueError(f"{len(names)} channel names for {n_channels} channels")
+    unknown = sorted(set(kept) - set(names))
+    if unknown:
+      raise ValueError(f"decision keeps channels not in channel_names: {unknown}")
+  idx = [names.index(c) for c in kept]
+  dropped = [c for c in names if c not in set(kept)]
+  rep = {"valid_mask": rows.astype(int), "channels_kept": kept, "channels_kept_idx": np.asarray(idx, dtype=int),
+         "channels_dropped": dropped}
+  return rows, idx, rep
+
+
 def channel_report(result: dict) -> dict:
   """The decision part of a pipeline result (no window arrays): `valid_mask`, `channels_kept`,
   `channels_kept_idx`, `channels_dropped`, `channel_stats`. Valid as `precomputed=`."""
