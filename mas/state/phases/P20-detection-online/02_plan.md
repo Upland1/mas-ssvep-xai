@@ -202,6 +202,61 @@ Final CLIs copied from the three handoffs (2026-10-28). Measured estimates: buil
   human-run request (local terminal, exact commands, expected runtime, outputs into
   `reports/window_sweep/` and `reports/nn_sweep/`).
 
+### Pre-run audit additions (07_review.md db474b6, copied verbatim)
+
+#### Binding run-list items (copy verbatim into 02_plan.md, "Run commands" / "Acceptance checks")
+
+> **A (R5).** Commands 5 and 6 pass the quality source explicitly: append `--quality-source both` to both `scripts.benchmarks.pseudo_online` commands. 05_run.md quotes the console line `quality source both, limits {...}, channel fail fraction ...` of each run.
+>
+> **B (disk, stale outputs).** Before command 1: `df -h` of the run checkout shows ≥ 8 GB free; `reports/window_sweep/`, `reports/nn_sweep/`, `reports/dynamic_stopping*/`, `reports/pseudo_online/` and `data/processed_continuous/w*_s0.25/` do not exist in the run checkout (the window sweep MERGES into existing files and would keep stale cells). If any exists, stop and report; do not delete by hand.
+>
+> **C (order and dynamic stopping out-dirs).** Order: 0, 1, 2a, 3, 4a, 5, 6, [S], 2b, 4b, 7. Command 4a = command 4 with `--out-dir reports/dynamic_stopping_lda` (run after 2a, lda only). Command 4b = command 4 as written (`--out-dir reports/dynamic_stopping`), run only after 2b has merged all six cnn windows. The rows with `Method == lda` of `per_subject.csv` must be identical between `reports/dynamic_stopping_lda/` and `reports/dynamic_stopping/` (pandas `equals` after sorting; quote the command and `True`).
+>
+> **S (stop rule for 2b, binding).** After command 6, compute (shown Python command, numbers in 05_run.md): `T_A` = cumulative wall minutes of all commands run so far (from their logs); `P_2b` = 7.0 × (sum of `Seconds` of the `compact_eegnet` rows of `reports/nn_sweep/folds.csv`) / 60. Run 2b locally only if `T_A + P_2b + 3 ≤ 120`. If run locally, run 2b as six invocations, one per window length in the order 0.5, 1, 1.5, 2, 3, 4 (same flags, `--windows <L>`; the merge is per cell), and before each invocation check `elapsed + P_2b × share_L ≤ 117` with share_L = 0.099, 0.143, 0.186, 0.207, 0.211, 0.155; on the first failed check stop. Every window length not run locally, plus command 4b, becomes the human-run request (local terminal, RTX-class GPU; exact per-window commands; expected runtime = P_2b × remaining shares; outputs dropped into the same `reports/window_sweep/`, then 4b). No local run may push the cumulative time past 120 min or the GPU time past 2 h. While 2b or 4b is pending, acceptance checks 1 and the cnn part of 3 are marked PENDING-HUMAN, not PASS.
+>
+> **D (merge integrity).** Before the first 2b invocation and after the last, record the sha256 of the `fbcca`+`lda` rows of `reports/window_sweep/summary.csv` and `predictions.csv` (pandas: filter `Method`/`method` != `cnn (compact_eegnet)`, sort by all key columns, `to_csv(index=False)` → sha256). Both hashes unchanged.
+>
+> **E (cnn = compact_eegnet at 1 s).** If 2b's 1 s cell runs on the same machine as command 3: per subject, `Acc (%)` of `cnn (compact_eegnet)` at 1 s in `reports/window_sweep/summary.csv` equals `compact_eegnet` in `reports/nn_sweep/summary.csv`, and the max |Δp| of the joined predictions (subject, trial_id, offset_sec) is ≤ 1e-4. Any difference on the same machine is an anomaly in 05_run.md. On different machines, report the difference as cross-machine non-determinism.
+>
+> **F (sweep invariants).** From `reports/window_sweep/summary.csv`: Runs = 1 (fbcca), 5 (lda), 1 (cnn); per subject and window, `Windows` and `Trials` equal across the three methods; `Windows ≤ Trials × ((5 − L)/0.25 + 1)`. From the build logs: channels kept per subject at each of the six lengths (list them); a subject whose kept channels differ between lengths is flagged in 05_run.md.
+>
+> **G (dynamic-stopping invariants).** Per (Subject, Method, Window): `Mean Time (s)` and `Forced (%)` are non-decreasing in the threshold; the minimum `time_sec` in `decisions.csv` is ≥ 0.5 + L; `fbcca` absent; `Skipped trials` total quoted.
+>
+> **H (causal-filter test named).** `.venv/bin/python -m pytest tests/test_p20_online.py -v -o addopts="" -k causal_filter` shows `test_causal_filter_chunked_equals_one_pass_and_is_causal PASSED`; quote the line (acceptance check 5; `-q` does not name tests).
+>
+> **I (pseudo-online consistency).** Per subject, `Channels kept` equal in `summary_ccnn_5class.csv` and `summary_ccnn_6class.csv` (else flag the subject); `Fallback`, `Dropped at check`, `Trials before check` quoted per subject; no PF-39 warning line in either log (OO → mOO).
+
+#### A-priori directions (pre-committed; copy verbatim into 02_plan.md)
+
+Each is checked per subject and on the cohort mean; "holds", "fails" or "inconclusive" is reported, never re-worded after the numbers exist. Single-repeat CNN cells carry no seed-variance estimate.
+
+> **P1 (accuracy vs window length).** For `fbcca` and `lda`, the cohort-mean accuracy rises strictly from 0.5 to 1 to 1.5 to 2 s, and from 2 to 3 to 4 s does not fall by more than 1 pp (ceiling). Per subject and method, at most one decrease > 2 pp between consecutive lengths. For `cnn (compact_eegnet)` only the endpoints are committed: cohort Acc(4 s) > Acc(0.5 s) (training windows per trial fall from 19 to 5, so no monotonicity is claimed).
+>
+> **P2 (ITR peak).** For every method, cohort-mean ITR at 4 s is below its maximum over lengths; for `lda` the cohort maximum lies at L ≤ 1.5 s; per subject (lda) the ITR peak of S03, S04, S05 lies at L ≤ 1.5 s, and the peaks of S01 and S02 lie at a length ≥ the shortest peak among S03–S05 (lower SNR shifts the optimum to longer windows).
+>
+> **P3 (methods).** `lda` ≥ `fbcca` on the cohort mean at every length, and in ≥ 4 of 5 subjects at 1 s and at 2 s. No direction between `cnn (compact_eegnet)` and `lda`; `cnn` above `lda` by ≥ 5 pp on the cohort mean at any length is a surprising gain and triggers a leak check (R1 guard logs, validation-trial disjointness) before it is reported.
+>
+> **P4 (NN sweep, 1 s).** Every model above chance (20 %) on the cohort mean. Committed ordering: `ccnn` ≥ `eegnet` on the cohort mean (0.25 Hz complex spectrum vs a 2,389-parameter temporal model). No ordering committed for `compact_eegnet`. Mean `Train Acc (%)` ≥ mean `Val Acc (%)` for every model.
+>
+> **P5 (dynamic stopping).** Invariants G hold. For `lda`, at `Threshold` 0.5, `Forced (%)` ≤ 10 % for S03, S04, S05 (confident probabilities at high SNR). Against the roadmap's fixed-window ITR at the same L: no direction (that ITR uses T = L + 0.5 s although its accuracy pools windows at every offset 0…5 − L, while dynamic stopping cannot decide before 0.5 + L). Committed direction only against the time-matched comparator (R-P6): for `lda` at L = 0.5 s and 1 s, the cohort best-threshold ITR ≥ the time-matched single-window ITR.
+>
+> **P6 (pseudo-online, 5 vs 6 classes).** (a) `False act. (%)` lower with 6 classes than with 5 in every subject with ≥ 1 scored rest period. (b) `Acc (%)` with 6 classes ≤ 5 classes in ≥ 4 of 5 subjects. (c) The 5-class accuracy ranks S03, S04, S05 above S01 and S02 (each of S03-S05 above each of S01-S02). No direction for `Time (s)`.
+
+#### Reporting rules (copy verbatim into 02_plan.md; the scribe applies them)
+
+> **R-P1.** Per-subject tables for every window × method, unsmoothed (roadmap P20.2), with the data source "continuous build `data/processed_continuous/w<L>_s0.25/`, shared quality (source both), OO session"; pseudo-online "OO → mOO, causal stream replay, window tier without guard, session files".
+> **R-P2.** `Acc SD` = 0 with `Runs` = 1 (fbcca, cnn, NN sweep) means "not estimated", never "no variance". FBCCA is evaluated without CV because it fits nothing.
+> **R-P3.** Sweep ITR is a window-level ITR (Wolpaw, N = 5, T = L + 0.5 s, accuracy pooled over overlapping windows at all offsets); state that it is not a trial-level online rate.
+> **R-P4.** The best threshold (6 values) and the best window (6 lengths) are selected on the same data they are reported on: "selected in-sample, descriptive"; never the system's ITR.
+> **R-P5.** A difference between methods or models is called a difference only if the cohort means differ by ≥ 3 pp and ≥ 4 of 5 subjects have the same sign; otherwise "not distinguishable (single CNN repeat)".
+> **R-P6.** Time-matched comparator for dynamic stopping, computed read-only from `reports/window_sweep/predictions.csv`: per subject, method and L, the accuracy of the windows with `offset_sec == 0.5` and ITR with T = 0.5 + L + 0.5 s; shown next to the dynamic-stopping row.
+> **R-P7.** The pseudo-online channel check is named "test-time label-free channel check (first 30 s of the test stream)"; cross-session pseudo-online numbers are not compared with within-session CV numbers as a gain or loss of a method. The `Mean` row is the mean of per-subject values; subjects with `Fallback` = 1 are named (the `Mean` row's `Window (s)` is the first subject's).
+> **R-P8.** For subjects with `Dropped at check` > 0: accuracy also reported without the stimulus periods with `onset_sec` < 30 s (read-only from `decisions_<tag>.csv`); for subjects with 0 the check changes nothing.
+> **R-P9.** The rest segment is [o − 5 s, o) = fixation + cue (target presentation) + preparation, not P17's fixation-only rest. Report, per subject and pooled, the share of false activations whose `pred` equals the code of the following stimulus period (chance 20 %) and the distribution of their `time_sec` (≤ 2 s fixation, 2–4 s cue, 4–5 s preparation).
+> **R-P10.** Weight decay 0.01 and label smoothing 0.1 are "inferred (roadmap unspecified)"; validation loss = plain cross-entropy (builder choice).
+> **R-P11.** No R-16 numbers exist; any comparison with P16/P17 numbers names the stride difference (1 s builds vs stride 0.25 s).
+> **R-P12.** 5 vs 6 classes accuracy change reported as the decomposition Acc5 − Acc6 = P(correct5, wrong6) − P(wrong5, correct6) over the periods scored in both, with the first term split into "missed" and "wrong class"; never as "≈ Missed".
+
 ## Acceptance checks (for the verifier)
 
 1. `reports/window_sweep/summary.csv` has all 6 lengths × 3 methods × 5 subjects, with the
