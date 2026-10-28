@@ -95,13 +95,21 @@ the fixation cross, "no stimulus"), each over 10 CV repeats with SDs.
 
 ## Run commands (for the verifier, in order)
 
+Filled in from the two handoffs (the guard rule sends the build to the `_p17` root;
+decisions.md P17 row 2).
+
 ```bash
 P=".venv/bin/python -m"
-# 0. hash data/processed_continuous before the rebuild (verifier)
-$P scripts.build_windows --filter-mode continuous --subjects S01 S02 S03 S04 S05 --session OO --banks fbcca fbcsp harmonic intermediate
-# (out-root per "Data source" if the guard changed; confirmed in 03_changes_data-signal.md)
-# 6 benchmark runs, {base, harm, harm+mid} x {5, 6}, --cv-repeats 10, built root, --quality shared
-# exact flags and suffixes: listed in full in 03_changes_ml-engineer.md and copied here by the orchestrator before the run
+# 1. build (P16 root untouched; the verifier hashes data/processed_continuous before and after)
+$P scripts.build_windows --filter-mode continuous --subjects S01 S02 S03 S04 S05 --session OO --banks fbcca fbcsp harmonic intermediate --out-root data/processed_continuous_p17
+# 2-7. benchmarks
+B="$P scripts.benchmarks.feature_based.benchmark_n_subjects --data-root data/processed_continuous_p17 --quality shared --cv-repeats 10"
+$B --bank base     --classes 5 --out-suffix p17_base_5class
+$B --bank base     --classes 6 --out-suffix p17_base_6class
+$B --bank harm     --classes 5 --out-suffix p17_harm_5class
+$B --bank harm     --classes 6 --out-suffix p17_harm_6class
+$B --bank harm+mid --classes 5 --out-suffix p17_harmmid_5class
+$B --bank harm+mid --classes 6 --out-suffix p17_harmmid_6class
 ```
 
 Estimate: rebuild ~1 min; P16 5-repeat built runs took < 30 s each; 10 repeats with up to
