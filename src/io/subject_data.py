@@ -97,7 +97,7 @@ def _per_script_gate(X: np.ndarray, y: np.ndarray, names: Sequence[str], thresho
 def load_subject(sub_dir, conditions: Sequence[int] = CLASS_CODES, quality_mode: str = "shared",
                  bands: Sequence[str] = (), fs_override: Optional[float] = None,
                  scalp: Optional[Sequence[str]] = None, thresholds: Optional[dict] = None,
-                 channel_fail_fraction: Optional[float] = None) -> dict:
+                 channel_fail_fraction: Optional[float] = None, channels: Optional[Sequence[str]] = None) -> dict:
   """Windows of one subject folder for the given condition codes (module docstring).
 
   Returns a dict with: `subject`, `sub_dir`, `built`, `source` (text for report headers), `filter_mode`
@@ -112,6 +112,10 @@ def load_subject(sub_dir, conditions: Sequence[int] = CLASS_CODES, quality_mode:
   gate (None for shared decisions); `per-script` thresholds
   otherwise) and `meta` (the metadata dict, `{}` on legacy folders).
 
+  `channels` (built folders only, P21 PF-34): names of the channels to return, in that order, instead of the channels
+  kept by the gate (`channel_names` then lists them; `quality["channels_kept"]` still reports the gate's decision;
+  the window decision `valid_mask` is unchanged). Unknown names raise ValueError.
+
   `thresholds` (the four limits) and `channel_fail_fraction` are REQUIRED whenever the per-script gate runs
   (`quality_mode="per-script"`, and every mode on a legacy folder): ValueError otherwise (R5). `bands` names saved banks (`"fbcca"`, `"fbcsp"`, ...) and exists on built folders only. `scalp` names the
   channels of a legacy folder without `channels.json`. Raises ValueError for an unknown mode, FileNotFoundError
@@ -123,7 +127,9 @@ def load_subject(sub_dir, conditions: Sequence[int] = CLASS_CODES, quality_mode:
   conds = [int(c) for c in conditions]
   built = is_built(d)
   if built:
-    return _load_built(d, conds, quality_mode, tuple(bands), fs_override, thresholds, channel_fail_fraction)
+    return _load_built(d, conds, quality_mode, tuple(bands), fs_override, thresholds, channel_fail_fraction, channels)
+  if channels is not None:
+    raise ValueError(f"{d}: `channels` is available on built folders only")
   if bands:
     raise ValueError(f"{d}: legacy folders have no saved sub-bands (bands={tuple(bands)}); build windows with "
                      "scripts/build_windows.py")
@@ -140,7 +146,8 @@ def _fs(meta_fs: Optional[float], override: Optional[float]) -> tuple:
   return float(meta_fs), "meta"
 
 
-def _load_built(d: Path, conds: list, mode: str, banks: tuple, fs_override, thresholds, fail_fraction) -> dict:
+def _load_built(d: Path, conds: list, mode: str, banks: tuple, fs_override, thresholds, fail_fraction,
+                channels=None) -> dict:
   for n in BUILT_FILES:
     if not (d / f"{n}.npy").is_file():
       raise FileNotFoundError(f"{d / (n + '.npy')} is missing (built folder, 01_DATA_SPEC 5.2)")
@@ -175,6 +182,12 @@ def _load_built(d: Path, conds: list, mode: str, banks: tuple, fs_override, thre
     rej = None
     guard, art = dq.get("guard_sec"), dq.get("artifact_fraction")
   sel = rows[keep_local]
+  gate_kept = kept
+  if channels is not None:
+    unknown = [c for c in channels if c not in names_all]
+    if unknown:
+      raise ValueError(f"{d}: channels {unknown} are not in the folder's montage {names_all}")
+    kept = [str(c) for c in channels]
   kept_idx = [names_all.index(c) for c in kept]
   ids, offs = ids_all[sel], offs_all[sel]
   _check_trial_order(ids, offs)
@@ -212,7 +225,7 @@ def _load_built(d: Path, conds: list, mode: str, banks: tuple, fs_override, thre
     "smoothing": "trial", "n_trials": int(len(np.unique(ids))), "n_selected": int(len(rows)),
     "n_rejected": int(len(rows) - len(sel)),
     "quality": {"mode": mode, "source": source, "valid_mask": keep_local.astype(np.int8), "rows": rows,
-                "channels_kept": kept, "channels_dropped": dropped, "rejections_by_label": rej,
+                "channels_kept": gate_kept, "channels_dropped": dropped, "rejections_by_label": rej,
                 "guard_sec": guard, "artifact_fraction": art, "params": params},
     "meta": meta}
 
