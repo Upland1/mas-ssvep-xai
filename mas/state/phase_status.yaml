@@ -161,11 +161,11 @@ phases:
     passed: '2026-10-28'
   P20:
     slug: detection-online
-    status: pending
+    status: in_progress
     owner: orchestrator
-    branch: null
+    branch: phase/P20-detection-online
     commit: null
-    opened: null
+    opened: '2026-10-28'
     passed: null
   P21:
     slug: loso-colab
