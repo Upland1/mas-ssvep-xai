@@ -136,23 +136,45 @@ The ml-engineer and connectivity-stats start after data-signal is READY (they ne
 
 ## Run commands (for the verifier, in order)
 
+Amended after the pre-run audit Round 1 (07_review.md fix 6). The full list; nothing is
+deferred to the handoffs. `P=.venv/bin/python -m`; logs under `reports/logs/P16/` except
+command 1.
+
 ```bash
-.venv/bin/python -m scripts.freeze_baseline --tag v1 --note "Era A/B outputs before P16 (main 97a29be)"
-.venv/bin/python -m scripts.diagnostics.demo_edge_effects --subject S03
-.venv/bin/python -m scripts.build_windows --filter-mode per_window --subjects S01 S02 S03 S04 S05 --session OO --check-legacy-starts
-.venv/bin/python -m scripts.build_windows --filter-mode continuous --subjects S01 S02 S03 S04 S05 --session OO --check-legacy-starts
-# regression (settled point 4)
-.venv/bin/python -m scripts.benchmarks.feature_based.benchmark_n_subjects --out-suffix v1check
-.venv/bin/python -m scripts.connectivity.analysis.analyze_connectivity_cohort --methods coherence plv wpli pdc --permutations 200 --permutation-unit trial --n-jobs -1 --out-suffix v1check
-# v1/v2 decomposition (settled point 5): flagship rows a′, b, c, c′ (and a with --cv-repeats 5), connectivity b, c, c′
-# exact flags and suffixes: fixed by the ml-engineer and connectivity-stats handoffs
-.venv/bin/python -m scripts.diagnostics.compare_v1_v2
+# 1. freeze FIRST; its log goes to mas/state/scratch/p16_freeze.log until it exits, then is copied to reports/logs/P16/
+$P scripts.freeze_baseline --tag v1 --configs-git-rev 97a29be --note "Era A/B outputs before P16 (main 97a29be)"
+# 2. edge effects
+$P scripts.diagnostics.demo_edge_effects --subject S03
+# 3-4. builds + legacy-starts check
+$P scripts.build_windows --filter-mode per_window --subjects S01 S02 S03 S04 S05 --session OO --check-legacy-starts
+$P scripts.build_windows --filter-mode continuous --subjects S01 S02 S03 S04 S05 --session OO --check-legacy-starts
+# 5-6. legacy regression (settled point 4)
+$P scripts.benchmarks.feature_based.benchmark_n_subjects --out-suffix v1check
+$P scripts.connectivity.analysis.analyze_connectivity_cohort --methods coherence plv wpli pdc --permutations 200 --permutation-unit trial --n-jobs -1 --out-suffix v1check
+# 7-12. flagship rows a, a', a't, b, c, c'
+$P scripts.benchmarks.feature_based.benchmark_n_subjects --cv-repeats 5 --out-suffix v1rep5
+$P scripts.benchmarks.feature_based.benchmark_n_subjects --fs 256 --cv-repeats 5 --out-suffix v1fs256
+$P scripts.benchmarks.feature_based.benchmark_n_subjects --fs 256 --smoothing trial --cv-repeats 5 --out-suffix v1fs256trial
+$P scripts.benchmarks.feature_based.benchmark_n_subjects --data-root data/processed_per_window --quality shared --cv-repeats 5 --out-suffix v2pw
+$P scripts.benchmarks.feature_based.benchmark_n_subjects --data-root data/processed_continuous --quality shared --cv-repeats 5 --out-suffix v2cont
+$P scripts.benchmarks.feature_based.benchmark_n_subjects --data-root data/processed_continuous --quality shared-no-guard --cv-repeats 5 --out-suffix v2cont_noguard
+# 13-16. connectivity rows a', b, c, c' (row a = frozen baseline)
+$P scripts.connectivity.analysis.analyze_connectivity_cohort --methods coherence plv wpli pdc --permutations 200 --permutation-unit trial --n-jobs -1 --fs 256 --out-suffix v1fs256
+$P scripts.connectivity.analysis.analyze_connectivity_cohort --methods coherence plv wpli pdc --permutations 200 --permutation-unit trial --n-jobs -1 --data-root data/processed_per_window --quality shared --out-suffix v2pw
+$P scripts.connectivity.analysis.analyze_connectivity_cohort --methods coherence plv wpli pdc --permutations 200 --permutation-unit trial --n-jobs -1 --data-root data/processed_continuous --quality shared --out-suffix v2cont
+$P scripts.connectivity.analysis.analyze_connectivity_cohort --methods coherence plv wpli pdc --permutations 200 --permutation-unit trial --n-jobs -1 --data-root data/processed_continuous --quality shared-no-guard --out-suffix v2cont_noguard
+# 17-18. regression check, then the table
+$P scripts.diagnostics.compare_v1_v2 --check-regression
+$P scripts.diagnostics.compare_v1_v2
 ```
 
-Estimates (from P11/P13 logs): build 2 × ~5 min; flagship 5 runs × ~3 min; connectivity
-4 runs × ~6 min; total ~60 min plus the ~7 min suite, inside `LOCAL_RUN_BUDGET_MIN` 120.
-The builders measure one subject and confirm. If the total exceeds 120 min the
-orchestrator issues a human-run request.
+The optional connectivity downstream commands of `03_changes_connectivity-stats.md`
+(comparison, pairwise, confound on v2) are **excluded** from this phase's run.
+Flags that the Round 1 fixes add or rename are confirmed in the builders' Round 1
+sections; if a flag differs, the handoff wins and the verifier records it.
+
+Estimate (pre-run audit): ~40 min of commands + ~12 min suite, inside
+`LOCAL_RUN_BUDGET_MIN` 120.
 
 ## Acceptance checks (for the verifier)
 
