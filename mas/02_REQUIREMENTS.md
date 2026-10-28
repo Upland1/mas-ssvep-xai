@@ -128,7 +128,7 @@ quality:
   artifact_block_sec: 0.25
   guard_sec: auto                # = longest filter ringing time
   guard_rel_amplitude: 0.01
-  source: filtered               # P19 changes the default to: both
+  source: both                   # P19: filtered | raw | both
 filter_bank:                     # P17
   harmonics:    {enabled: true, n_harmonics: 3, half_width_hz: 1.0, order: 2}
   intermediate: {enabled: true, half_width_hz: 1.0, order: 2}
