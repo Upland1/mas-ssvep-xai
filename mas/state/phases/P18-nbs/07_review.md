@@ -1,6 +1,6 @@
 # P18 · 07 · Scientific review
 
-Status: READY (pre-run audit); results review pending
+Status: READY (pre-run audit PASS; results review APPROVE)
 Author: scientific-reviewer
 Reads: 00, 02, 03_changes_*, 04 and every changed file (pre-run); 05, 06 and the CSVs (results)
 
@@ -206,27 +206,213 @@ into `02_plan.md` before the run.
 
 ## Results review
 
-Verdict: APPROVE / REJECT
+Reviewed: HEAD `7fa6806`. The run ran at `32738cc`. `git diff --stat aa71e1c 32738cc -- src scripts tests configs` and
+`git diff --stat 0044229 HEAD -- src scripts tests configs` are both empty, so the audited code is the code that ran.
+Read: 05_run.md, 06_verify.md (verifier PASS, b96d5df), `reports/logs/P18/01`–`06`, `10_check_pairwise.txt`,
+`11_check_cohort.txt`, `12_directions.txt`, `reports/connectivity_cohort_summary_p18_nbs{,_p200}.csv`,
+`reports/connectivity_graph_size_p18_nbs.csv`, `reports/connectivity_nbs_sweep_p18_nbs.csv`,
+`reports/connectivity_cohort_flips_p18_nbs_p200_vs_p18_nbs.csv`,
+`reports/connectivity_comparison/{coherence,plv,wpli}_pairwise_{tests,null}_p18_nbs.csv`, the edge npz files
+(S01 wpli, S04 pdc, S05 plv) and `reports/n_subjects_benchmark_v2cont.csv`. All my recomputations were read-only, done
+with `.venv/bin/python -c` in this session; the commands are quoted where a number is new.
 
-### Deviations from references
+Verdict: APPROVE
 
-| Ref | Expected | Obtained (log) | Δ | Within tolerance? | Explanation | Accepted? |
-|---|---|---|---|---|---|---|
-| | | | | | | |
+### Acceptance (00_assignment.md, verbatim items)
+
+| Item | Result | Evidence |
+|---|---|---|
+| NBS unit tests | met | `tests/test_p18_nbs.py` and `tests/test_p18_independent_known_answer.py` are in the suite: `1204 passed, 1 skipped` on the clean checkout (`reports/logs/P18/01_pytest.log`). Mutants M1–M6 were killed (pre-run audit). |
+| Cohort tables with both FDR and NBS | met | Both summaries have 33 columns, A-FDR and A-NBS in separate columns (V2). The graph-size table carries `nbs_size_pct` with the FDR % in brackets, printed in `03_cohort_p1000.log:59-…`. The sweep table has 400 rows (V4). The FDR path is unchanged, |Δ| = 0 against v2cont (V3). |
+| The report compares graph sizes across subjects and frequencies (record) | data met; report pending | The per subject × method × frequency table exists (`12_directions.txt`, "largest pct (*=sig)"). `mas/state/reports/P18.md` does not exist yet. The scribe must write that comparison following S1–S9 below. |
+| V0–V8 | met | 06_verify.md. I re-checked V6 and F2 from the flips file (17 rows) and V7 from the CSVs. |
+
+### Pre-committed reporting rules applied
+
+**F1, A-FDR flips (14).** k = ceil(m/(201·0.05)) gives 3, 3, 5 and 6 for m = 21, 28, 42 and 56
+(`python3 -c "import math; [math.ceil(m/(201*0.05)) for m in (21,28,42,56)]"`).
+- **BH-resolution-limited: 11 flips.** Each goes from 0 edges at 200 permutations to between 1 and k−1 edges at 1000:
+  S01 pdc 101 (2/42), 103 (1/42), 105 (1/42); S03 coherence 104 (1/21), plv 105 (1/21), wpli 102 (2/21); S04 plv 105
+  (1/21), wpli 103 (2/21); S05 wpli 102 (1/28), pdc 102 (5/56), pdc 105 (2/56).
+- **Not BH-limited by F1: 3 flips.** These are Monte Carlo flips of the p grid.
+  - S01 wpli 104 (0 → 4/21). Its edge p at 200 were 0.005, 0.005, 0.01 and 0.0149, and BH needs p(4) ≤ 0.0095.
+  - S04 pdc 105 (0 → 6/42).
+  - S05 plv 101 (3 → 0/28), the only downward flip. Its p went from 0.005 ×3 to 0.003, 0.005 and 0.006, against BH
+    limits of 0.0054, 0.0036 and 0.0018. This came from reading the per-edge `p_<c>` at the FDR edges in both npz runs.
+
+All 14 flips are inconclusive (R7).
+
+**F2, A-NBS flips (6).** All 6 are **threshold-boundary**: the observed size changed in every one, and none is
+p-resolution. The cells are:
+
+| Cell | Size at 200 → 1000 | NBS p at 200 → 1000 |
+|---|---|---|
+| S01 pdc 101 | 3 → 1 | 0.0299 → 0.2717 |
+| S02 wpli 102 | 3 → 2 | 0.0448 → 0.1039 |
+| S03 plv 103 | 4 → 2 | 0.0100 → 0.0509 |
+| S04 plv 105 | 1 → 3 | 0.0846 → 0.0110 |
+| S05 wpli 101 | 3 → 5 | 0.0647 → 0.0290 |
+| S05 pdc 105 | 3 → 2 | 0.0348 → 0.1049 |
+
+By method there are 2 each for pdc, plv and wpli, and 0 for coherence. B had 0 flips. Every flip is inconclusive.
+This confirms the pre-run C4 mechanism at cohort scale: when the null is re-estimated, the standardization moves
+edges that sit near z = 2 across the threshold. The reported values are the 1000-permutation ones.
+
+**R1 (FDR × NBS at 1000).** The 2 × 2 tables, as [FDR−/NBS−, FDR−/NBS+; FDR+/NBS−, FDR+/NBS+], are:
+
+| Method | Table |
+|---|---|
+| coherence | [12, 0; 1, 12] |
+| pdc | [9, 2; 5, 9] |
+| plv | [16, 1; 0, 8] |
+| wpli | [11, 1; 3, 10] |
+
+The 13 disagreeing cells are listed in `12_directions.txt`.
+- **FDR+/NBS−: 9 cells.** In 8 of them the FDR count is ≤ 2 edges, and all 8 had 0 FDR edges at 200. The ninth is
+  S04 pdc 102 (see P3). These are focal edges whose component does not beat the null maximum.
+- **FDR−/NBS+: 4 cells.** S03 pdc 104 (size 3, p 0.0190), S03 pdc 105 (3, 0.0150), S05 plv 101 (3, 0.0280) and
+  S05 wpli 101 (5, 0.0290). These are extended moderate effects. The last two are flips.
+
+The PDC denominators (42/56 directed vs 21/28 symmetrized) and the symmetrization caveat must sit beside the PDC table.
+
+**R2.** The graph-size table and `12_directions.txt` give sizes in %. S02 and S05 have 8 channels, so they are compared
+with the others only as %. PDC on 8 channels is not comparable with PDC on 7 (P16 D-8).
+
+**R3–R5 (pairwise).** Pairwise NBS is centred, as pre-registered (C1). The wording of rule R3 is mandatory. The R4
+agreement tables against `p_mag_centred` were not in 06_verify.md, so I computed them. `p_mag_centred` is in
+`<m>_pairwise_null_p18_nbs.csv`, which joins one-to-one with the tests CSV on (subject, method, freq_a, freq_b), 50 rows
+per method. I used
+`.venv/bin/python -c "…t.merge(n,on=k); pd.crosstab(t.nbs_p<.05, n.p_mag_centred<.05)…"` (session command, read-only).
+Tables are [NBS−/x−, NBS−/x+; NBS+/x−, NBS+/x+]:
+
+| Method | vs `p_mag` (agree /50) | vs `p_mag_centred` (agree /50) | "null off-centre" cells (p_mag ≠ p_mag_centred side of 0.05): NBS agrees with mag / centred |
+|---|---|---|---|
+| coherence | [36, 6; 3, 5] (41) | [41, 1; 3, 5] (46) | 7: 1 / 6 |
+| plv | [33, 3; 9, 5] (38) | [35, 1; 5, 9] (44) | 6: 0 / 6 |
+| wpli | [41, 3; 2, 4] (45) | [43, 1; 2, 4] (47) | 4: 1 / 3 |
+
+The 13 "null off-centre" cells of P14 D-2 came from a different data source: legacy windows on the fs-250 axis
+(`reports/logs/P14/cmd3_final.log` header). P18's p_mag differs from P14's (`np.allclose` False for all three methods).
+The off-centre cells are therefore defined on P18's own data: 17 cells (7 + 6 + 4). **P18 is the first pairwise run on
+the continuous build** (fs 256, S02/S05 with 8 channels), and the report must state this source (R9) and not compare
+it with P14 as a re-run.
+
+**R5 (borderline).** There are 6, 8 and 5 borderline cells for coherence, plv and wpli (my list matches the verifier's
+counts). Five of the 28 NBS+ cells are borderline on `nbs_p` itself: S02 coherence 24–8.57 (0.0450) and 15–10.91
+(0.0470), S05 coherence 24–10.91 (0.0470), S03 plv 24–20 (0.0480) and S01 wpli 20–8.57 (0.0460). All five are labelled
+"borderline, not flip-checked (single permutation count)".
+
+**R6 / responder split.** From `reports/n_subjects_benchmark_v2cont.csv` (continuous build, session OO, 5 classes),
+1.0 s / 2.0 s smoothed accuracy is: S01 72.8 / 77.9 (SD 2.1), S02 72.42 / 75.26, S03 93.61 / 93.92, S04 99.49 / 99.49,
+S05 98.59 / 98.79. S01 is (80 − 77.9)/2.1 = 1.0 SD below the 80 % cut (`python3 -c`, this session). Its
+non-responder label is a fixed classifier rule (PF-21), not a finding.
+
+### A-priori directions (R-16: record; a miss is investigated, not tuned)
+
+| | Direction | Obtained | Reading |
+|---|---|---|---|
+| P1 | sweep non-increasing | held in all 100 cells of both runs (V5) | met (exact by construction) |
+| P2 | A-NBS ≥ A-FDR at 1000 | 43 vs 48; at 200, 45 vs 36 | **refuted at 1000** (D-2) |
+| P3 | ≥ 80 % of cells with ≥ 3 FDR edges are A-NBS | 36/37 = 97.3 % | met; the exception is explained (D-3) |
+| P4 | responders larger; non-responders ≤ 4/40 A-NBS | non-responders 1/40 (S01 wpli 104, size 4, p 0.0350; also 0.0398 at 200); responders 42/60; mean largest % S01 2.6, S02 1.6, S03 38.8, S04 32.1, S05 12.1 | met; non-responder count consistent with chance (Bin(40, 0.05) mean 2) |
+| P5 | B+ cells have larger NBS sizes | mean size B−/B+: coherence 2.0/14.0, pdc 1.81/4.33, plv 1.0/8.25, wpli 1.36/9.0 | met in 4/4 methods |
+| P6 | PDC graphs (%) smaller than coherence, PLV, wPLI | mean %: pdc 12.1, coherence 26.3, plv 10.1, wpli 21.3. PDC smaller / equal / larger than the same cell: vs coherence 13/4/8, vs wpli 11/5/9, vs plv 4/6/15 (of 25) | **partly refuted** (D-4): holds for coherence and wPLI on average, not for PLV |
+| P7 | coherence and PLV graphs small at 10.91/8.57 Hz | coherence 14.0/16.9 vs mean 33.5 at 24/20/15 Hz; PLV 8.6/5.7 vs 12.1 (PLV 15 Hz 6.7 lies between) | met on means. wPLI (not predicted) is high at 104/105 (23.1/26.9). One-tailed test only. Large per-subject spread (coherence 104: S04 57.1 %, S03 4.8 %, S05 3.6 %) |
+| P8 | pairwise NBS agrees more with `p_mag_centred` than `p_mag` | 46 vs 41, 44 vs 38, 47 vs 45; off-centre cells 15/17 with centred vs 2/17 with mag | met in 3/3 methods (D-5) |
+
+**P2 (own basis error).** My basis was that FDR edges at the BH threshold have z ≳ 2.4, so they are supra-threshold. I
+took supra-threshold to mean significant, and that does not follow. A 1- or 2-edge component must still beat the null
+maximum. For S01 PDC, P(null_max ≥ 1) is about 0.27–0.31 (pre-run C4). At 1000 permutations BH also admits 1- or
+2-edge results that are impossible at 200, so A-FDR rose 36 → 48 almost entirely through such cells (F1: 11
+resolution-limited flips). The arithmetic is 48 − 43 = 5 = 9 FDR+/NBS− − 4 FDR−/NBS+.
+
+Neither criterion is uniformly more sensitive. NBS gains on extended moderate effects and loses on focal ones. The
+200-permutation comparison (45 vs 36) is not a fair test either, because FDR is resolution-limited there. The report
+states P2 as refuted, with this decomposition, and does not call NBS "more sensitive".
+
+**P3 exception (S04 pdc 102).** There are 5 directed FDR edges, all at p 0.001–0.002 (`connectivity_edges_p18_nbs/S04_pdc.npz`):
+POz→Oz, O1→PO3, O1→Oz, Oz→PO3 and Oz→POz. They share nodes (Oz is in 4 of them), so neither exception listed under P3
+applies. The cause is the symmetrization caveat pre-registered in point 2 and P6: opposite directions cancel. The
+diffs are O1–Oz +0.2255 / −0.2229 and Oz–PO3 +0.1123 / −0.0641. Only POz↔Oz (+0.2624 / +0.200) stays strong, so the
+largest undirected component has 1 edge (p 0.3506). The mechanism was pre-stated, so this is an explained exception.
 
 ### Interpretation check
 
-<!-- Per-subject reading; inconclusive results stated as such; leakage in
-fitted objects, normalization, validation sets; statistics unit and
-multiple comparisons. -->
+- **Per subject.** S03 and S04 carry the graph results: 16 and 18 of 20 cells are A-NBS, with mean largest components of
+  38.8 % and 32.1 %. S05 is intermediate (8/20, 12.1 %). It is led by coherence at 24 Hz (57.1 %*) and wPLI at
+  8.57 Hz (39.3 %*), and PLV is near zero except at 24 Hz. S01 and S02 have no graph effect: 1/40 A-NBS cells, which is
+  chance level. S01's single cell, wPLI at 10.91 Hz, is an alpha frequency and S01 is 1 SD from the responder cut, so it
+  is not read as a responder-like effect. S05's weak graphs, despite 98.79 % accuracy, mean that classifier accuracy does
+  not predict graph size beyond the responder split. This is reported per subject, not as a group mean.
+- **Criteria separate (R7).** A-FDR, A-NBS and B are reported as three criteria with their own counts:
+  48 / 43 / 32 cells at 1000, with A-FDR ∧ B 27, A-NBS ∧ B 26 and A-FDR ∧ A-NBS 39. All 17 flipped cells are inconclusive.
+- **One-tailed cohort NBS.** Decreases (stimulus < baseline, for example alpha suppression at 104/105) are not tested
+  (N3). Small graphs at 10.91 and 8.57 Hz are therefore not evidence of "no coupling change".
+- **Pairwise pattern, exploratory.** NBS+ cells are more frequent in the non-responders: 19 of 60 subject × pair cells
+  (coherence 7, plv 6, wpli 6) against 9 of 90 in the responders (1, 8, 0) (`05_pairwise_p1000.log`). In addition,
+  26 of the 28 NBS+ cells involve 10.91 or 8.57 Hz, against a base rate of 35/50 pairs (expected 19.6). I computed this
+  from the tests CSVs with `freq < 12`. The test is centred (C1), it uses a single permutation count (C3), and 5 of the
+  28 are borderline. The reading allowed is: "the per-edge excess over the exchange null concentrates on pairs with an
+  alpha-band frequency, mostly in S01/S02". It must not be read as "non-responders have more frequency-specific
+  connectivity", and not as Δa ≠ Δb. Alpha-state variation between trials is a plausible, untested explanation.
+- **Leakage / fitting.** Not applicable: there is no classifier, and the pseudo-z uses only the permutation null. The
+  responders come from classifier accuracy only (PF-21).
+- **Cosmetic log label.** The pairwise group lines print "mean NBS largest component … of 28 edges" for groups that mix
+  21- and 28-edge subjects, and the header prints "(21 edges …)". The report quotes per-subject % instead (C-2).
 
-### Decisions for decisions.md
+### Binding items for the scribe (S1–S9)
 
-<!-- Accepted deviations, one line each; the orchestrator copies them. -->
+- S1. Quote counts from `11_check_cohort.txt`, `12_directions.txt` and `10_check_pairwise.txt`, and the tables above,
+  with their paths. Sizes go in % only (R2).
+- S2. Apply the F1 labels (11 BH-resolution-limited, 3 Monte Carlo) and the F2 labels (6 threshold-boundary, 0 p-resolution). All flips are inconclusive.
+- S3. P2 is stated as refuted at 1000 permutations, with the 9/4 decomposition. Avoid "NBS is more sensitive".
+- S4. Put the PDC denominators and the symmetrization caveat beside every PDC count. Give the S04 pdc 102 cancellation example.
+- S5. Use the R3 pairwise wording verbatim, the R4 tables above with my command, and the R5 borderline labels.
+  Pairwise results are worded as "excess beyond the per-edge exchange-null centre", never "the frequencies differ".
+- S6. Write "first pairwise run on the continuous build (fs 256, OO)". Do not compare it with P14 as a re-run.
+- S7. Quote the 1.0 s and 2.0 s accuracy of every subject from the v2cont CSV. Note that S01 is 1.0 SD below the cut.
+- S8. The cohort NBS is upper-tailed only (P7/N3).
+- S9. Cite the original NBS paper only if it is opened in that run (R10).
+
+### Deviations (for decisions.md)
+
+- **D-1.** Acceptance is met: NBS unit tests, cohort tables with FDR and NBS, and the graph-size and sweep tables. The
+  report item is pending with the scribe under S1–S9. R-16 has no numeric target. V0–V8 are met (06_verify.md).
+- **D-2.** A-priori P2 (A-NBS ≥ A-FDR) is refuted at 1000 permutations: 43 vs 48. Cause: BH at 1000 admits 1- or 2-edge
+  FDR results that are impossible at 200, and focal 1- or 2-edge components do not beat the NBS null maximum
+  (9 FDR+/NBS− vs 4 FDR−/NBS+). The reviewer's basis conflated supra-threshold with significant. Recorded, not tuned.
+- **D-3.** The single P3 exception, S04 pdc 102 (5 directed FDR edges, NBS size 1, p 0.3506), is explained by
+  opposite-direction cancellation in the PDC symmetrization (O1↔Oz +0.2255/−0.2229; Oz↔PO3 +0.1123/−0.0641). This was a
+  pre-stated mechanism, but it is not one of the two P3-listed exceptions.
+- **D-4.** A-priori P6 is partly refuted. Symmetrized PDC graphs are smaller than coherence (12.1 vs 26.3 %) and wPLI
+  (21.3 %), but not smaller than PLV (10.1 %): PDC is larger than PLV in 15/25 subject × frequency cells. Recorded.
+- **D-5.** The pairwise `p_mag_centred` agreement table (rule R4) is not required for acceptance. The reviewer computed
+  it by joining `<m>_pairwise_null_p18_nbs.csv`. NBS agrees with `p_mag_centred` in 46/44/47 of 50 cells and with
+  `p_mag` in 41/38/45, and in 15 of the 17 P18 off-centre cells it sides with the centred p (P8 met). The P14 13-cell
+  set comes from the legacy fs-250 source and is not reused.
+- **D-6.** P18's pairwise run is the first on the continuous build (fs 256; S02/S05 with 8 channels). Its p_mag differs
+  from P14's legacy run, and it is reported as a new data source (R9). The concentration of NBS+ cells on
+  alpha-frequency pairs in S01/S02 (26/28 involve 10.91 or 8.57 Hz, vs 19.6 expected) is exploratory: single
+  permutation count, 5 borderline cells.
+
+### Carry-forwards
+
+- **C-1.** connectivity-stats: write `p_mag_centred` (and the null centre) into `<m>_pairwise_tests_*.csv`, or print the
+  NBS × `p_mag_centred` table in the pairwise summary, so the verifier does not need a join.
+- **C-2.** connectivity-stats: the pairwise group lines and header print edge counts ("of 28 edges", "(21 edges …)") for
+  mixed 7/8-channel cohorts. Report the mean largest component as % of each subject's possible edges.
+- **C-3.** connectivity-stats: add `nbs_max_size` from both runs to the cohort flips file (pre-run N1), so F2 needs no join.
+- **C-4.** Open option: a lower-tailed cohort NBS (stimulus < baseline) for the alpha frequencies (pre-run N3; P7).
+- **C-5.** The pairwise test has only a 1000-permutation run on the continuous build. Any later phase that builds on
+  pairwise NBS, p_mag or p_pat claims needs a second permutation count (p500) before applying the R7 flip rule (pre-run C3).
+- **C-6.** FDR vs NBS comparisons must be read at a stated permutation count. At 200 permutations BH cannot return
+  1–(k−1) edges (k = 3, 3, 5, 6 for m = 21, 28, 42, 56), so cross-count comparisons of A-FDR mix resolution with sensitivity.
 
 ## Sources spot-check
 
-<!-- Fix rounds: append "## Pre-run audit — Round N". After two failed rounds,
-set Status: BLOCKED. -->
+No external source was cited by the builder, the tester or the verifier, and none was opened in this review (R10).
+`reference_access.log` has no P18 entry (06_verify.md: 40 lines before and after the run). R11: PASS.
+Privacy scan of `git diff main..HEAD` and of the branch commit messages, built from fragments: 0 and 0 hits. No data,
+recording or local-tooling paths are in `git diff --name-only main..HEAD` (0).
 
 ## Questions
