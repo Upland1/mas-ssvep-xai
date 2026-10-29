@@ -140,6 +140,40 @@ Verdict: FAIL
 
 Required fix: F1 (deep-learning, route (a); or data-signal, route (b)). The fix needs its failing-on-bug test and a full suite run alone. Round 2 re-checks only F1, its test, and that nothing else changed (`git diff 4a4799f -- src scripts tests configs notebooks`).
 
+## Pre-run audit — Round 2
+
+Scope, as set in round 1: F1, its test, and `git diff 4a4799f -- src scripts tests configs notebooks` (head 3b740ed).
+
+What changed since 4a4799f in code and tests:
+- `scripts/connectivity/graph_modeling/benchmark_gnn_loso.py`, MODIFIED in fe2bf94;
+- `tests/test_p23_gnn_loso.py`, +1 test, in e7c4bf2;
+- nothing else in `src/`, `configs/` or `notebooks/`. The notebook is unchanged and needs no change under route (a).
+
+| Item | Result | Evidence |
+|---|---|---|
+| F1 fix | PASS | `stored_specs(out, protocol)` reads the config of every `*__<protocol>__test-*.npz` in `folds/` (`benchmark_gnn_loso.py`, new function before `collect`). `build_outputs` collects all stored methods. Methods of the current invocation (`requested`) still go through `L.check_fold`, which raises SystemExit. Other stored methods are compared with `L.fold_problem` and left out with `[warn] …; left out` on any difference. This is the same contract as `benchmark_loso.build_summary` (`benchmark_loso.py:613-630`). Fold-count guards unchanged. |
+| Configs of non-requested methods | PASS | `config_of(spec, s, f)` builds the expected config from the stored spec (variant, norm, method, normalization label) and the current shared arguments. A stored method made with other seeds, hyperparameters, threads, device or code is therefore refused and left out, not mixed in (PF-37). |
+| Side changes | PASS | The `Seeds` cell now comes from the stored fold config, not the current args. That is correct once foreign methods are summarized. `gnn_loso_config.json` drops `variants`/`norms` and adds `methods_in_outputs` and `this_invocation`. It is a run-description file, not read back by any check. No change to fitting, normalization, splits, smoothing or fold configs, so the round-1 rule rows stand. |
+| Test fails on the bug | PASS | `test_two_invocations_into_one_out_dir_keep_both_methods_in_every_csv` runs pooled, then subject, into one out-dir. It requires both methods in summary (rows and Mean), predictions, confusion, folds, seeds and per_subject, plus the "use a new --out-dir" refusal for a requested method with another seed count. Builder: 1 failed on the pre-fix script (`03_changes_deep-learning.md`, Fix round 1). Own run: `pytest tests/test_p23_gnn_loso.py tests/test_p23_independent_known_answer.py tests/test_p23_notebook.py -q -o addopts="" -p no:cacheprovider` → `52 passed in 36.49s`. |
+| Suite alone | PASS | `1513 passed, 22 warnings in 853.91s (0:14:13)` (last line of `mas/state/scratch/p23_dl_suite2.log`), i.e. 1512 + 1 new test. |
+| R11, privacy | PASS | No new reference-access lines. The guard's term list (by reference) gives 0 hits in each of 4db28fc, fe2bf94, e7c4bf2, aff341f, 3b740ed, and 0 in the net `git diff main..HEAD`. |
+
+Non-blocking:
+- **N10.** The branch "stored method with another configuration is left out with a warning" has no dedicated test; only the refusal of a requested method is tested. It is a copy of the `benchmark_loso` contract, so the verifier item below covers it on real outputs.
+- **N11.** The round-1 V10 is now a positive check. The V8 hashes should cover the six CSVs only, because `gnn_loso_config.json` now records `this_invocation` and legitimately differs between the V10 run and the full rerun.
+
+Amendments to the binding items (copy into 02_plan.md together with round 1's):
+- **V8 (amended).** Hashes = sha256 of `summary.csv`, `per_subject.csv`, `predictions.csv`, `confusion.csv`, `folds.csv`, `seeds.csv`. `gnn_loso_config.json` is excluded.
+- **V10 (amended).** Run on `reports/loso_gnn` with `--variants nodes+F --norm pooled` and the step-3 arguments otherwise unchanged. Expected:
+  - 5 `[skip]`, 0 `[+]`, no `[warn] … left out`, exit 0;
+  - the six CSV hashes equal the V8 hashes taken after step 3;
+  - `summary.csv` holds all 4 methods.
+  Any difference is an anomaly in `05_run.md`. The final unchanged rerun of step 3 then follows as in round 1.
+
+Predictions PR-1..PR-9, binding items V1–V7, V9, V11, V12 and reporting rules RR-1..RR-7 of round 1 stand unchanged. No result has been seen since round 1.
+
+Verdict: PASS
+
 ## Results review
 
 Verdict: APPROVE / REJECT
