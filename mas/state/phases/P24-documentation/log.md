@@ -17,3 +17,4 @@
 | 5 Fix round 1 (scribe) | scribe | 2026-10-29 | D1–D14 + minor list fixed (ff7b556, 89cc1a0); 114 cited reports/ paths exist; SVG parses | 1 | R9, R10 | none | |
 | 5 Fix round 1 (data-signal) | data-signal | 2026-10-29 | F1–F4 + default audit (Makefile fix, 3436a5b, 88c2691); 17 Era-A commands --cv legacy --smoothing mod5; p16/p17 builds pin --quality-source filtered and banks; suite `1565 passed` | 1 | PF-01/02, R5 | none | stale stamps p05–p09 → fresh clone |
 | 7 Review round 2 | scientific-reviewer | 2026-10-29 | PASS (a3b3c6e); F1–F4 and D1–D14 hold; V-1..V-8 copied verbatim into 02_plan.md; N1–N4 wording items to the scribe before merge | 2 | R9, R10 | none | NBS columns are the only expected extra columns |
+| 5 Wording N1–N4 | scribe | 2026-10-29 | d6a053e; Table 7c (FBCCA per subject) added | 2 | | none | |
