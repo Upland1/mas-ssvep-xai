@@ -177,12 +177,12 @@ phases:
     passed: '2026-10-28'
   P22:
     slug: loso-extensions
-    status: in_progress
+    status: passed
     owner: orchestrator
     branch: phase/P22-loso-extensions
-    commit: null
+    commit: 9251e8d
     opened: '2026-10-28'
-    passed: null
+    passed: '2026-10-28'
   P23:
     slug: gnn-loso
     status: pending
