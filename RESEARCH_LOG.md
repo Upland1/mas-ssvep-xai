@@ -457,3 +457,23 @@ Sources: `reports/compact_cnn_benchmark_cpu.csv`, `reports/shallow_convnet_bench
 **R11.** None; the access log has no P20 entry [19].
 
 **Open.** B003 must be resolved before P21 opens. Carry-forwards C-1 (hash-pinned tests pin the thread count), C-2 (deep-learning flags folds with restored epoch ≤ 5 or train accuracy below chance + 10 pp; 4 folds flagged in P20), C-3 (≥ 3 repeats before interpreting a single CNN cell that moves a cohort by > 5 pp) and C-5 (P17 C-d, C-e) are open [9]. Merge pending, by the orchestrator.
+
+## P21 — Leave-one-subject-out (LOSO) generalization and the Colab notebook
+
+2026-10-28. Branch `phase/P21-loso-colab`; verifier PASS `f22bafa`; results review APPROVE `c325754` (round 2). Phase report: `mas/state/reports/P21.md`.
+
+**Aim.** Roadmap P21 [1]: subject generalization, "con todos menos con uno", run on Google Colab. LOSO at 1 s windows (stride 0.25 s) for `fbcca`, `lda`, `lda_subjnorm` (unsupervised per-subject normalization (test-time, whole-session statistics = offline upper bound)), `ccnn`, `compact_eegnet` and `eegnet`, against the within-subject reference. R-16 gives direction only [2, 21].
+
+**Data source.** Cohort decision B003, option B (2026-10-28) [20]. Cohort 5 (S01–S05): `common` 7 channels and `all` 8 channels; seeds 42, 43 and 44 for ccnn and eegnet [11–13]. Cohort 39 (39 subjects, S01–S040 without S020; S020 skipped because the shared gate dropped all its channels): `common` = 3 channels (POz, PO4, O1; cohort intersection) and `all` = 8 channels [14–16]. Protected S01–S05 built folders (65 files) unchanged before and after, sha256 `e7f55081…bebab4` [10].
+
+**Result (cohort 5, 1 s, `reports/loso_w1_s01-s05/summary.csv`, `reports/loso_w1_s01-s05_all/summary.csv`).** Cohort means over five subjects: `common` fbcca 82.40, lda 87.61, lda_subjnorm 90.03; `all` lda 86.34, lda_subjnorm 88.75. Networks at seed 42 (`common`): ccnn 86.17, compact_eegnet 79.11, eegnet 79.76. Three seeds: ccnn cohort means 86.17, 85.36, 86.58; eegnet 79.76, 78.58, 78.77 [11–13].
+
+**Result (cohort 39, 1 s, `reports/loso_w1_all/summary.csv`, `reports/loso_w1/summary.csv`).** `all` (8 channels): fbcca 75.80, lda 83.42, lda_subjnorm 86.13. `common` (3 channels): fbcca 64.56, lda 72.54, lda_subjnorm 75.16; ccnn 71.58 (one repeat, descriptive). The comparable classical cohort-39 result is `all` on 32 matched subjects [14, 15].
+
+**Directions (R-16).** Cohort 5: LOSO below within for lda (5 of 5 matched subjects, 86.63 against 89.89) and for each network (3 of 3 matched, seed 42); lda_subjnorm above lda (+2.42 pp on `common`); fbcca labels identical to within on matched channels, 0 mismatches [9, 10]. Cohort 39: the fbcca identity holds on the 32 matched subjects (0 mismatches); P2 for lda is "direction not observed" (22 of 32 subjects at or below within + 1 pp; mean 85.67 against 86.51); P3 holds (+2.72 pp, `all`) [9, 10, 15].
+
+**Checks.** Acceptance 1–7 met for cohort 5 and the cohort-39 classical runs. B3 (21 rows, max difference 0.0), B8 (10 of 10 equal), B10 (no held-out subject in any training set), P4 (0 degenerate network folds). After the 300 s interrupt, the rerun skipped the 6 finished network folds, and the four CSVs were identical after command 3 and command 4 [8, 9, 10]. Suite run alone: `1360 passed` in 783.33 s [8, 10].
+
+**Budget.** Local wall time 45.6 min (cohort 5) and 33.6 min (cohort-39 classical), own sums. The cohort-39 network job ran beyond the budget under Sebastian's authorisation (row 162). GPU sum 2.15 h against 2 h [7, 19, own].
+
+**Open.** Cohort-39 networks limited to ccnn (eegnet 2 of 39 folds, not a result; compact_eegnet not run; Sebastian's instruction, row 163). The Colab notebook has not run on a T4 (human run). S029: 0 prediction mismatches on an unmatched subject, not explained [9, 10]. Carry-forwards C-1 to C-6 for P22–P23 (decisions row 165) [9, 19]. Merge pending, by the orchestrator.
