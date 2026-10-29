@@ -41,7 +41,7 @@ Variables: `PYTHON ?= .venv/bin/python`; `RAW_DIR ?= data/raw`, passed as `--raw
 | p13 | two demos, `analyze_connectivity_cohort` (window200, trial100, final), two `--compare`, aligned S03, six-seed S05 wPLI diagnostic | `reports/connectivity_cohort_summary*.csv`, `connectivity_edges*/` |
 | p14 | `compare_connectivity_frequencies`, `test_connectivity_frequency_differences` (p500, final 1000), `--compare p500 ""`, `check_power_alpha_confound` | `reports/connectivity_comparison/` |
 | p15 | `build_graph_dataset --rebuild`, `benchmark_connectivity_gate`, `benchmark_gnn --smoke-test`, `benchmark_gnn` | `data/processed/S0x/graph_dataset.npz`, `reports/gnn_benchmark*.csv` |
-| p16 | `freeze_baseline` (only if `baselines/v1_*` is absent), `demo_edge_effects`, two `build_windows`, 6 flagship and 4 connectivity rows, `compare_v1_v2` (`--check-regression` prefixed `-`: exits 1 as recorded) | `data/processed_per_window`, `data/processed_continuous`, `reports/*_v1*`, `*_v2*` |
+| p16 | `freeze_baseline` (only if `baselines/v1_*` is absent), `demo_edge_effects`, two `build_windows`, 6 flagship and 4 connectivity rows, `compare_v1_v2 --check-regression` (stops make on failure), `compare_v1_v2` | `data/processed_per_window`, `data/processed_continuous`, `reports/*_v1*`, `*_v2*` |
 | p17 | `build_windows` 4 banks into `data/processed_continuous_p17`, D0 regression, 6 benchmarks (bank x classes) | `reports/n_subjects_benchmark_p17_*.csv` |
 | p18 | cohort 200 and 1000 with `--stats nbs`, `--compare`, pairwise 1000, `--summary-only` | `reports/connectivity_*_p18_nbs*`, `connectivity_comparison/` |
 | p19 | 3 builds (filtered into `mas/state/scratch/p19_filtered`, raw, both), 4 benchmarks | `data/processed_continuous_p19_*`, `reports/n_subjects_benchmark_p19_*.csv` |
@@ -87,7 +87,7 @@ Sources: the "Commands executed" tables of `mas/state/phases/Pxx/05_run.md` (ver
 | p21 | 0.6 | 32.0 | 32.6 | GPU networks about 1074 s (300 s interrupted + 774 s resumed in the record) + seeds 412+438 s |
 | p22 | 1.1 | | 1.1 | 24+29+9+6 s |
 | p23 | 20.5 | | 20.5 | smoke 37, within 472, LOSO 721 s |
-| **Total `make all`** | **325.6 (5.43 h)** | **110.5 (1.84 h)** | **436.1 (7.27 h)** | |
+| **Total `make all`** | **325.6 (5.43 h)** | **110.5 (1.84 h)** (110.1 without the p08 CUDA row, which is outside `all` by default) | **436.1 (7.27 h)** | |
 
 Over the 4 h limit of settled point 8: the recorded runs add up to 7.3 h (about 7.3 h also without p08's CUDA row). The orchestrator therefore asks Sebastian first (settled point 8). Eras: p00-p15 = 180.8 min (3.0 h), p16-p23 = 255.3 min (4.3 h). The largest items are p18 (79.4), p20 (81.0, of which the six CNN sweep invocations 60.8), p14 (67.5), p11 (40.9), p16 (32.5), p21 (32.6), p10 (24.9), p23 (20.5). Intermediate runs that only support a flip/sensitivity table and could be skipped to save time if Sebastian accepts it (they are in the targets because the reports quote their CSVs): p14 `p500` 22.4 min, p18 `p200` 6.2 min, p13 `window200` + `trial100` 8.6 min, p06 SFS diagnostic 11.2 min; together 48.4 min, giving 6.5 h; this is still above 4 h. A run of `make all` therefore needs a detached, resumable session (stamps), not the 4 h budget; I did not remove anything from the targets.
 
@@ -101,7 +101,7 @@ Arithmetic: `.venv/bin/python` snippet over the seconds above (printed `cpu 1953
 4. P08: only the CPU row by default; the CUDA row is `NN_DEVICES="cpu cuda"` (the recorded run also ran each device twice for the determinism check; only one run per device is in the target).
 5. P11: `demo_cv_leakage` gets `--subjects S01..S05` (no other flags were recorded).
 6. P13: the six-seed DIAG-A2 (S05 wPLI) from the verifier's report is in `p13` because the P13 report quotes `reports/connectivity_cohort_summary_diagA2_rs<B>.csv`.
-7. P16: `freeze_baseline` runs only when `baselines/v1_*` is absent (a repeated tag refuses by design); in a clean clone it snapshots the Era A/B outputs that p00-p15 just produced, with `configs/` taken from git at 97a29be (the clone must contain that commit). `compare_v1_v2 --check-regression` is prefixed `-` because the recorded run exits 1 (exit 1 is its recorded result, command 17).
+7. P16: `freeze_baseline` runs only when `baselines/v1_*` is absent (a repeated tag refuses by design); in a clean clone it snapshots the Era A/B outputs that p00-p15 just produced, with `configs/` taken from git at 97a29be (the clone must contain that commit). `compare_v1_v2 --check-regression` is NOT silenced (corrected in Fix round 1: the final P16 run exits 0; exit 1 was round 1).
 8. P19: the filtered regression build goes to `mas/state/scratch/p19_filtered` as recorded; the hash/identity checks A-F of the pre-run audit are not targets (read-only checks).
 9. P20: the three `pseudo_online` and sweep commands get `--subjects S01..S05`; `--quality-source both` was already in the pre-run additions. Recorded order kept (2b after 5-6). The stop rule S was a budget guard and is not in the Makefile.
 10. P21: `build_windows --resume` gets `--subjects S01..S05` (recorded: all raw subjects, 39 here); the SIGINT interrupt test (B7), the hashes and the checks are not targets; the rerun of the classical command (command 4) is a target. The 39-subject classical runs are `loso-all`; the 39-subject networks are excluded.
@@ -109,7 +109,7 @@ Arithmetic: `.venv/bin/python` snippet over the seconds above (printed `cpu 1953
 12. P23: the smoke test is a target (37 s, writes only to scratch); the resume/refusal reruns are not.
 13. P05: Round 1 command list (Round 2 repeated it with `_r2` logs). P06: the SFS diagnostic is the last line of `p06` and rewrites `feature_selection_ablation_S03.csv` identically (cmp identical in 05_run.md).
 
-Phases whose commands could not be reproduced exactly: none beyond the rows above. Not reproduced by design: pytest runs, hash and identity checks, interrupt tests, refusal checks, Colab. Commands that need a GPU: p20 (nn_sweep, pseudo_online, CNN sweep) and p21 (networks) run on CUDA when available (`--device` default), as recorded.
+Phases whose commands could not be reproduced exactly: P05-P10 (flags added, see Fix round 1) and the rows above. Not reproduced by design: pytest runs, hash and identity checks, interrupt tests, refusal checks, Colab. Commands that need a GPU: p20 (nn_sweep, pseudo_online, CNN sweep) and p21 (networks) run on CUDA when available (`--device` default), as recorded.
 
 ## Verification
 
@@ -125,3 +125,37 @@ No consultation of `reference/ssvep-eeg-xai/`.
 
 ## Questions
 <!-- receivers append: ACK <agent> <YYYY-MM-DD>, then questions; answers appended, never deleted -->
+
+
+## Fix round 1 (review 07_review.md, pre-run audit F1-F4)
+
+Status: READY
+
+**F1.** p10 now passes `--cv legacy --smoothing mod5 --freeze-legacy` (since P11 `--freeze-legacy` without `--cv legacy` is `parser.error`, exit 2).
+
+**F2.** Every P05-P10 command of a script with a `--cv` option now passes `--cv legacy --smoothing mod5` (17 commands: p05 `benchmark_cross_validation`, `benchmark_harmonic_fbcca`, `evaluate_confusion_matrix` x6; p06 `benchmark_feature_selection` x2 including the SFS diagnostic; p07 `benchmark_n_subjects`; p08 `benchmark_eegnet`; p09 `benchmark_compact_cnn`, `benchmark_shallow_convnet`; p10 x3). `mod5` is the script default and the `i % 5` reset of the final P05 round; it is passed explicitly. `test_sklearn_models`, `benchmark_5_subjects` and `visualize_data` have no `--cv` option, so they are unchanged. The p11 legacy snapshot lines already carried the flags.
+
+Deviation (path mapping). With `--cv legacy` the scripts write under `reports/legacy_leaky/` (`src/preprocessing/dataset/cv_utils.py` `LEGACY_DIR`; figures and classification reports in the matching `legacy_leaky` subfolders), while the main tree still holds the Era-A files that P11 did not rerun at `reports/<f>`. The comparison for the clone must therefore map:
+
+| Clone path (after p05-p10 and p11) | Main-tree path holding the same Era-A numbers |
+|---|---|
+| `reports/legacy_leaky/n_subjects_benchmark.csv`, `feature_selection_ablation_S03.csv`, `feature_space_benchmark_S03.csv`, `augmentation_ab_{eegnet,compact_cnn,shallow_conv_net}.csv` | the same name under `reports/legacy_leaky/` (P11 snapshot / P10 freeze) |
+| `reports/legacy_leaky/flagship_S0x.csv`, `eegnet_benchmark_cpu.csv`, `compact_cnn_benchmark_cpu.csv`, `shallow_convnet_benchmark_cpu.csv`, `classification_report_*` | `reports/<same name>` (Era-A files P11 did not rerun; verify per file that the main-tree one is not a grouped rerun by reading its `.meta.txt` splitter line) |
+| `reports/n_subjects_benchmark.csv`, `feature_selection_ablation_S03.csv`, `feature_space_benchmark_S03.csv`, `augmentation_ab_*.csv` (grouped, written by p11) | the same paths (P11 grouped numbers) |
+| `reports/five_subjects_benchmark.csv`, `sklearn_suite_S03.csv` (scripts without `--cv`, legacy by construction) | the same paths |
+
+p07's `n_subjects_benchmark.csv` is now written to `reports/legacy_leaky/` and p11 then rewrites `reports/n_subjects_benchmark.csv` with the grouped run, so the final state matches the main tree. Confusion-matrix figures of p05 go to the `legacy_leaky` figure folder; the main tree holds the Era-A ones at the P05 paths. Items that are rerun later by p11 (grouped) end identical to the main tree; the verifier compares the legacy files by the table above.
+
+**F3.** Four new tests (18 in the file now): every Era-A command of a `--cv` script has `cv == legacy` and `smoothing == mod5` (17 commands); every `--freeze-legacy` command has `--cv legacy`; the three p10 commands are run through `main()` with empty folders so `parser.error` would show as SystemExit 2 (the old p10 line fails here); the p16/p17 builds pin `--quality-source filtered` and `--banks`. Run against the previous Makefile, 5 tests fail (`test_era_a_commands_...`, `test_freeze_legacy_implies_cv_legacy_...`, `test_p10_commands_pass_the_scripts_own_post_parse_validation`, `test_builds_of_p16_and_p17_...`, `test_final_regression_check_is_not_silenced`); 13 pass. The vacuous bash `[ -f ]` half of the dry-run test was removed.
+
+**F4.** `compare_v1_v2 --check-regression` has no `-` prefix any more (the final P16 run exits 0, `05_run.md` command 17 after 9b297c0). Deviation 7 corrected above.
+
+**Other defaults changed after the recording phase (audit).** Scanned decisions.md, the parsers' defaults and `configs/pipeline_config.yaml`:
+- `quality.source` is `both` since P19 (config default; commit e090d20). The P16 builds and the P17 build were recorded on the filtered gate and the default banks of that time, so p16 (both builds) and p17 now pass `--quality-source filtered`; the p16 builds also pass `--banks fbcca fbcsp` (config `filter_bank` enables harmonic and intermediate since P17, which would add files to the P16 root whose hash P17 checks). p19, p20, p21 already pass the source explicitly or are `--resume` over p20 builds.
+- `analyze_connectivity_cohort --stats` default became `nbs` (P18) but only changes which criterion is printed; FDR, NBS and global p are always saved: no change needed.
+- `--quality` default `shared`, `--fs` default None on `benchmark_n_subjects` and the connectivity scripts: P16's `_v1check` regression reproduced R-6 and the P13 final summary exactly with these defaults, so they stay.
+- `--cv` default `grouped` and `--smoothing` default `mod5`: handled above. `build_windows --filter-mode` default `continuous` is passed explicitly in p16.
+
+Not changed: runtimes (same work), the 149-command count (unchanged), targets and outputs of p11-p23.
+
+Full suite alone after this round (`mas/state/scratch/pytest_p24_fix1.txt`): `1565 passed, 22 warnings in 984.01s (0:16:24)`.
