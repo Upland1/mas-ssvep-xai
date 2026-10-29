@@ -122,3 +122,20 @@ None. `reference/ssvep-eeg-xai/` was not opened.
 2. `scripts/benchmarks/benchmark_loso.py`, `scripts/connectivity/graph_modeling/benchmark_gnn.py`, `src/models/cnn/training.py`, `src/features/connectivity/graph_inputs.py`, `src/features/connectivity/graph_features_subject.py` (opened in this run).
 
 ## Questions
+
+## Fix round 1
+
+Status: READY
+Trigger: pre-run audit round 1, F1 (07_review.md c8ae9b7): `run_and_report` / `collect` / `write_outputs` rebuilt the six CSVs only from the methods of the current invocation, so one variant x norm per notebook cell left `summary.csv` with the last method only.
+
+Route (a), `scripts/connectivity/graph_modeling/benchmark_gnn_loso.py` (MODIFIED, commit fe2bf94):
+- New `stored_specs(out, protocol)` reads the config of every fold file of the protocol in the out-dir (variant-major, `VARIANTS` order, pooled before subject).
+- `build_outputs` builds every CSV from all stored methods; `collect(..., requested)` applies `check_fold` (SystemExit "use a new --out-dir") to the methods of the current invocation and, as `benchmark_loso.build_summary`, leaves out other stored methods whose configuration differs, with a warning.
+- The fold-count guard is unchanged (a method with fewer subjects than the cohort gets no Mean / SD; a within subject needs all folds).
+- `Seeds` per row now comes from the stored fold config; `gnn_loso_config.json` lists `methods_in_outputs` and the `this_invocation` variants / norms.
+
+Test (`tests/test_p23_gnn_loso.py`, commit e7c4bf2): `test_two_invocations_into_one_out_dir_keep_both_methods_in_every_csv` runs `--norm pooled`, then `--norm subject` into one out-dir and requires both methods in summary (rows and Mean), predictions, confusion, folds, seeds and per_subject, and a refusal for a requested method with another seed count. It fails on the pre-fix code (checked by restoring the previous script: 1 failed, 22 passed) and passes after (23 passed in 29.2 s).
+
+Full suite once, alone: `1513 passed, 22 warnings in 853.91s (0:14:13)` (log `mas/state/scratch/p23_dl_suite2.log`).
+
+R11: none.
