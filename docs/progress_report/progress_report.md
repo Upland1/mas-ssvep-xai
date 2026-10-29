@@ -37,7 +37,7 @@ The pre-committed criterion (ratio at least 5 and edge error at least 20 %) is m
 | v1 frozen (legacy, R-6 reference) | `i % 5` (legacy) | 79.28 | 82.61 |
 | a: legacy, fs 250, five seeds | `i % 5` (legacy) | 80.80 | 84.42 |
 | a′: fs 256 | `i % 5` (legacy) | 88.84 | 91.33 |
-| a′t: fs 256, trial reset | trial reset (true ids on legacy folders) | 88.84 | 90.70 |
+| a′t: fs 256, trial reset | trial reset (reconstructed ids on legacy folders) | 88.84 | 90.70 |
 | b: per-window build | trial reset (true ids) | 87.01 | 89.12 |
 | c: continuous build with guard (v2 headline) | trial reset (true ids) | 87.38 | 89.07 |
 | c′: continuous build, no guard | trial reset (true ids) | 88.38 | 89.83 |

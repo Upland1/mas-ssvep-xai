@@ -129,5 +129,7 @@ Status after the round: READY for the documents. Still open and not the scribe's
 
 Checks after the round: `check_docs.py` (scratch): Sources headings present in README, RESEARCH_LOG and progress report; the report v2 is saved (checked by the orchestrator); every cited `reports/...` path exists; the SVG parses (root `svg`, viewBox `0 0 1200 1700`). No recording read; no `tests/` or `Makefile` edit.
 
+Wording items N1–N4 (review round 2, a3b3c6e): progress §2 row a′t says "reconstructed ids on legacy folders"; RESEARCH_LOG P24 "Directions" sentence no longer repeats the S05 clause; RESEARCH_LOG "S06–S040"; report Table 7b caption names LDA, FBCCA and compact_eegnet, with FBCCA rows in Table 7c.
+
 ## Questions
 <!-- receivers append: ACK <agent> <YYYY-MM-DD>, then questions; answers appended, never deleted -->

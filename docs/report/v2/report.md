@@ -188,7 +188,7 @@ Table 7 gives the cohort means of the window sweep on the continuous build (`rep
 | 2.0 | 95.63 / 48.82 | 92.11 / 44.60 | 95.51 / 48.43 |
 | 4.0 | 98.03 / 28.93 | 96.86 / 28.15 | 83.10 / 21.56 |
 
-**Table 7b.** Per-subject accuracy (%) and window-level ITR (bits/min) of the two sweep methods that have a per-subject table in `reports/window_sweep/summary.csv` (continuous build, OO, five stimulus classes).
+**Table 7b.** Per-subject accuracy (%) of the three sweep methods, LDA, FBCCA and compact_eegnet, from `reports/window_sweep/summary.csv` (continuous build, OO, five stimulus classes). Per-subject window-level ITR is in the same file. The FBCCA rows are given in the second table below.
 
 | Subject | LDA 0.5 s | LDA 1.0 s | LDA 2.0 s | LDA 4.0 s | compact_eegnet 0.5 s | compact_eegnet 1.0 s | compact_eegnet 2.0 s | compact_eegnet 4.0 s |
 |---|---|---|---|---|---|---|---|---|
@@ -198,6 +198,17 @@ Table 7 gives the cohort means of the window sweep on the continuous build (`rep
 | S04 | 98.28 | 99.79 | 100.00 | 100.00 | 98.93 | 99.85 | 100.00 | 100.00 |
 | S05 | 95.31 | 99.09 | 100.00 | 100.00 | 98.55 | 100.00 | 100.00 | 100.00 |
 | Mean | 81.80 | 89.89 | 95.63 | 98.03 | 80.75 | 92.08 | 95.51 | 83.10 |
+
+**Table 7c.** Per-subject FBCCA accuracy (%) at the sweep windows (`reports/window_sweep/summary.csv`, method `fbcca`, continuous build, OO).
+
+| Subject | FBCCA 0.5 s | FBCCA 1.0 s | FBCCA 2.0 s | FBCCA 4.0 s |
+|---|---|---|---|---|
+| S01 | 46.97 | 58.68 | 75.00 | 86.50 |
+| S02 | 43.78 | 64.60 | 87.89 | 98.35 |
+| S03 | 77.18 | 91.07 | 98.60 | 99.46 |
+| S04 | 93.42 | 98.80 | 100.00 | 100.00 |
+| S05 | 84.45 | 95.43 | 99.04 | 100.00 |
+| Mean | 69.16 | 81.72 | 92.11 | 96.86 |
 
 Accuracy rises with window length for LDA and FBCCA. The ITR is highest at 0.5 s for every method, so short windows carry the most information per minute. The compact_eegnet value at 4 s is driven by S02 (39.56 %), where two folds restored an early-stopping state from epoch 1–3; these single-repeat cells measure an early-stopping failure on that subject, not the network's accuracy at that length [12]. At 1.0 s the networks ccnn, compact_eegnet and eegnet reach 91.25, 92.08 and 89.69 % (single repeat; differences under 3 pp are not distinguishable) [12]. Dynamic stopping with thresholds chosen in-sample gives 61.53 bits/min for LDA at 0.5 s against 60.23 for the time-matched single window; this is descriptive [12].
 
