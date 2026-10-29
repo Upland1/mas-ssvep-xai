@@ -32,14 +32,17 @@ The pre-committed criterion (ratio at least 5 and edge error at least 20 %) is m
 
 **Result** (cohort mean, 1.0 s / 2.0 s, %):
 
-| Version | 1.0 s | 2.0 s |
-|---|---|---|
-| v1 frozen (legacy, R-6 reference) | 79.28 | 82.61 |
-| a: legacy, fs 250, five seeds | 80.80 | 84.42 |
-| a′: fs 256 | 88.84 | 91.33 |
-| b: per-window build | 87.01 | 89.12 |
-| c: continuous build with guard (v2 headline) | 87.38 | 89.07 |
-| c′: continuous build, no guard | 88.38 | 89.83 |
+| Version | 2.0 s smoothing rule | 1.0 s | 2.0 s |
+|---|---|---|---|
+| v1 frozen (legacy, R-6 reference) | `i % 5` (legacy) | 79.28 | 82.61 |
+| a: legacy, fs 250, five seeds | `i % 5` (legacy) | 80.80 | 84.42 |
+| a′: fs 256 | `i % 5` (legacy) | 88.84 | 91.33 |
+| a′t: fs 256, trial reset | trial reset (true ids on legacy folders) | 88.84 | 90.70 |
+| b: per-window build | trial reset (true ids) | 87.01 | 89.12 |
+| c: continuous build with guard (v2 headline) | trial reset (true ids) | 87.38 | 89.07 |
+| c′: continuous build, no guard | trial reset (true ids) | 88.38 | 89.83 |
+
+The rule is stated per row because the two smoothing rules differ (R8): `i % 5` is the legacy rule of the rows a, a′; the trial reset over true trial identifiers is the rule of the built folders (`reports/n_subjects_benchmark_v2cont.meta.txt`: `smoothing=trial`).
 
 The sampling-rate correction is the material step (a′ − a = +8.04 / +6.91 pp, positive in every subject). The filter mode changes accuracy by +0.37 pp (not material). Continuous filtering is the correct signal path (R3) with no accuracy effect here.
 
@@ -62,6 +65,19 @@ The sampling-rate correction is the material step (a′ − a = +8.04 / +6.91 pp
 **What was done.** Bands k·f (k = 1..3) and midpoints (±1 Hz, order 2) were added to the filter bank, with 5 and 6 classes, ten CV repeats and the rest class from code 201 only. The narrow bands ring to 1.047 s, so the guard of the new build is 1.047 s; the new build went to its own folder (`data/processed_continuous_p17/`) and the P16 folder was not changed.
 
 **Result, five classes** (cohort mean, 1.0 s / 2.0 s, %; `reports/n_subjects_benchmark_p17_*_5class.csv`):
+
+Per subject (`reports/n_subjects_benchmark_p17_{base,harm,harmmid}_5class.csv`, 1.0 s / 2.0 s, %; the 2.0 s column is the trial-reset rule over true trial identifiers):
+
+| Subject | base | harm | harm + mid |
+|---|---|---|---|
+| S01 | 73.15 / 78.85 | 85.50 / 91.45 | 85.55 / 90.05 |
+| S02 | 73.05 / 76.63 | 86.74 / 88.16 | 86.32 / 87.84 |
+| S03 | 93.76 / 93.92 | 99.38 / 99.48 | 99.33 / 99.43 |
+| S04 | 99.38 / 99.38 | 100.00 / 100.00 | 100.00 / 100.00 |
+| S05 | 98.89 / 99.05 | 99.85 / 99.90 | 99.95 / 99.95 |
+| Mean | 87.65 / 89.57 | 94.29 / 95.80 | 94.23 / 95.45 |
+
+Cohort means of the banks:
 
 | Bank | 1.0 s | 2.0 s |
 |---|---|---|
@@ -100,6 +116,8 @@ The sampling-rate correction is the material step (a′ − a = +8.04 / +6.91 pp
 | 2.0 | 95.63 / 48.82 | 92.11 / 44.60 | 95.51 / 48.43 |
 | 4.0 | 98.03 / 28.93 | 96.86 / 28.15 | 83.10 / 21.56 |
 
+Per subject, accuracy % at 0.5 / 1.0 / 2.0 / 4.0 s (`reports/window_sweep/summary.csv`): LDA S01 64.26 / 75.88 / 87.58 / 95.00, S02 60.66 / 77.36 / 90.68 / 95.16, S03 90.50 / 97.31 / 99.88 / 100.00, S04 98.28 / 99.79 / 100.00 / 100.00, S05 95.31 / 99.09 / 100.00 / 100.00; `compact_eegnet` S01 69.87 / 84.12 / 89.42 / 77.00, S02 42.96 / 77.48 / 89.32 / 39.56, S03 93.42 / 98.94 / 98.80 / 98.92, S04 98.93 / 99.85 / 100.00 / 100.00, S05 98.55 / 100.00 / 100.00 / 100.00.
+
 The ITR is highest at 0.5 s for every method. The 4 s network value is driven by S02 (39.56 %), where two folds restored an early-stopping state from epoch 1–3 (single repeat; an early-stopping failure, not a finding about length). Dynamic stopping (thresholds chosen in-sample, descriptive) gives 61.53 bits/min for LDA at 0.5 s against 60.23 for the time-matched single window (`reports/dynamic_stopping/best_threshold.csv`; `mas/state/reports/P20.md`).
 
 **Open questions.** Early-stopping failures on S02 (flagged folds; a single-repeat rule of three repeats before a cohort change is interpreted). The dynamic-stopping thresholds were selected in-sample.
@@ -108,7 +126,7 @@ The ITR is highest at 0.5 s for every method. The 4 s network value is driven by
 
 **Question.** Does a causal detector trained on one run work when replayed on another run?
 
-**What was done.** The detector (`ccnn`) was trained on OO and replayed as a causal stream on mOO, with a label-free channel check and a 1 s fallback (`scripts/benchmarks/pseudo_online.py`).
+**What was done.** The detector (`ccnn`, 0.5 s windows) was trained on OO and replayed as a causal stream on mOO, with a label-free channel check and a 1 s fallback (`scripts/benchmarks/pseudo_online.py`).
 
 **Result** (`reports/pseudo_online/summary_ccnn_5class.csv`, `reports/pseudo_online/summary_ccnn_6class.csv`): five classes, accuracy 89.00 % and 27.5 % false activations; six classes (rest class), 74.00 % and 5.0 % false activations. The two runs have different class sets, so they are not a before/after pair. The six-class drop is missed stimulus periods in S01 (50.00 %) and S02 (52.50 %). The six-class ITR uses N = 5 (44.56 bits/min).
 
@@ -133,7 +151,7 @@ The ITR is highest at 0.5 s for every method. The 4 s network value is driven by
 
 The `within_lda` rows are within-subject. Their `Data source` text in the CSV still reads "LOSO" (a labelling defect, W-1, carried). For lda, LOSO is strictly below the matched within-subject reference for S01, S02 and S05 in the common set (z −2.74, −2.56, −2.68 SE_Δ). Warm-up (`reports/loso_warmup/cohort.csv`): warm-up minus no normalization is −25.03 pp at K = 1 and −16.95 pp at K = 2; at K = 10 the means are 88.19 % (none), 89.78 % (warm-up) and 90.69 % (whole session).
 
-**Result, cohort 39** (S01–S040 without S020; separate data source; `reports/loso_w1_all/summary.csv`, `reports/loso_w1/summary.csv`): `all` (eight channels, 32 matched subjects) fbcca 75.80, lda 83.42, lda_subjnorm 86.13. `common` (POz, PO4, O1: three channels, not comparable with cohort 5) fbcca 64.56, lda 72.54, lda_subjnorm 75.16. For lda, LOSO against within on this cohort: **direction not observed** (22 of 32 subjects at or below within + 1 pp; mean 85.67 against 86.51).
+**Result, cohort 39** (S01–S040 without S020; separate data source; `reports/loso_w1_all/summary.csv`, `reports/loso_w1/summary.csv`): `all` (eight channels; 39 subject rows per method) fbcca 75.80, lda 83.42, lda_subjnorm 86.13 (offline upper bound); the within-subject comparison uses the 32 matched subjects. `common` (POz, PO4, O1: three channels, not comparable with cohort 5) fbcca 64.56, lda 72.54, lda_subjnorm 75.16. For lda, LOSO against within on this cohort: **direction not observed** (22 of 32 subjects at or below within + 1 pp; mean 85.67 against 86.51).
 
 **Open questions.** Whether the S05 difference between warm-up and whole-session normalization at K = 10 (−2.16 SE_Δ) has a mechanism. The LOSO networks on cohort 39 were limited by Sebastian (ccnn 39 folds, eegnet 2 of 39 folds not reported, compact_eegnet not run). The Colab notebook has not been run on a T4 GPU (human run).
 
@@ -143,14 +161,27 @@ The `within_lda` rows are within-subject. Their `Data source` text in the CSV st
 
 **What was done.** The P15 edge-gated GNN was trained under LOSO and within subject on the same windows and channels (common, 7 channels), three seeds per fold. Labels: `pooled` (z-scored on training windows, R2) and `_subjnorm` (test-time normalization, offline upper bound).
 
-**Result, cohort S01–S05, 1.0 s, three-seed ensemble** (`reports/loso_gnn/summary.csv`, `reports/within_gnn/summary.csv`):
+**Result, cohort S01–S05, 1.0 s, three-seed ensemble (GNN rows)** (`reports/loso_gnn/summary.csv`, `reports/within_gnn/summary.csv`):
 
 | Variant | LOSO pooled | LOSO subject normalization | Within subject |
 |---|---|---|---|
-| nodes + F | 89.22 | 90.32 | 86.81 |
-| nodes + coh + F | 88.96 | 90.29 | 86.98 |
+| nodes + F (3-seed ensemble) | 89.22 | 90.32 | 86.81 |
+| nodes + coh + F (3-seed ensemble) | 88.96 | 90.29 | 86.98 |
 
-Classical references on the same channels: lda 87.61, lda_subjnorm 90.03, within_lda 90.79. Predictions: PR-2 is missed for nodes + F, which is above lda on S02 (+4.66 pp, SE_Δ 2.28) and on S05 (+2.06 pp, SE_Δ 0.77); the wording is "GNN ≥ lda on S02/S05", never "beats". For the GNN, "LOSO below within" is **direction not observed** (LOSO 89.22 against within 86.81).
+Per seed (seeds 42, 43, 44; cohort means): LOSO `nodes+F` pooled 87.69, 88.66, 89.06 (mean 88.47); LOSO `nodes+F` subject normalization 89.89, 90.49, 90.01; within `nodes+F` 85.42, 85.21, 86.01 (`reports/loso_gnn/seeds.csv`, `reports/within_gnn/seeds.csv`). The ensemble values are therefore higher than the mean of the single seeds; the cohort comparisons above use the ensemble, the per-seed values are the single-fit comparison.
+
+Per subject, 1.0 s, seven common channels (`reports/loso_w1_s01-s05/summary.csv`, `reports/loso_w1_p22_common/summary.csv`, `reports/loso_gnn/summary.csv`, `reports/within_gnn/summary.csv`):
+
+| Subject | fbcca (LOSO) | lda (LOSO) | lda_subjnorm (LOSO, offline upper bound) | within_lda | GNN nodes+F pooled (LOSO, 3-seed) | GNN nodes+F (within, 3-seed) |
+|---|---|---|---|---|---|---|
+| S01 | 58.68 | 69.26 | 74.85 | 75.88 | 70.15 | 70.88 |
+| S02 | 68.01 | 76.24 | 83.07 | 82.02 | 80.90 | 76.55 |
+| S03 | 91.07 | 96.07 | 95.61 | 97.31 | 96.37 | 90.32 |
+| S04 | 98.80 | 99.55 | 99.70 | 99.79 | 99.70 | 98.50 |
+| S05 | 95.43 | 96.91 | 96.91 | 98.97 | 98.97 | 97.79 |
+| Mean | 82.40 | 87.61 | 90.03 | 90.79 | 89.22 | 86.81 |
+
+Classical references on the same channels: lda 87.61, lda_subjnorm 90.03, within_lda 90.79. The GNN values are three-seed ensembles. Predictions: PR-2 is missed for nodes + F, the three-seed ensemble of which is above lda on S02 (+4.66 pp, SE_Δ 2.28) and on S05 (+2.06 pp, SE_Δ 0.77). The S02 gap is an ensemble effect: per seed +3.27 pp against 2·SE_Δ 4.62 pp, a tie. On S05 the gap survives per seed (+2.01 pp against 1.55 pp). The wording is "GNN ≥ lda on S02/S05" with this qualifier, never "beats". For the GNN, "LOSO below within" is **direction not observed** (LOSO 89.22 against within 86.81).
 
 **PF-30 readings.** No fold is near chance (lowest test accuracy 70.15 % LOSO and 68.38 % within; chance 20 %). LOSO S01 and S02 show train-test gaps of 13.8–27.8 pp (a generalization problem); LOSO S03–S05 test accuracy is above train by 1.4–5.6 pp.
 
@@ -178,12 +209,12 @@ These come from `mas/state/decisions.md` (the rows of P07 to P23) and from the b
 
 **For Sebastian (decisions needed or questions asked by the phases):**
 
-1. The original's sequential forward selection (R-4, p = 20): the configuration is not in the repository, and our SFS row (89.85 / 95.94, R-4 84.77 / 93.40) is ours (P06 D-1). Is the original report or run available?
+1. The original's sequential forward selection (R-4, p = 20): the configuration is not in the repository, and our SFS row (legacy leaky 89.85 / 95.94, `reports/legacy_leaky/feature_selection_ablation_S03.csv`; grouped rerun 84.26 / 91.88; R-4 84.77 / 93.40) is ours (P06 D-1). Is the original report or run available?
 2. The original's P07 change: did it restore PO7 and change `vpp_min` together (P07 D-1)?
 3. The 2.0 s smoothing on legacy folders: `i % 5` (reported) or the trial-reset rule (diagnostic, 3.56 pp lower on S03). True trial ids arrive with the continuous build (P11 C1, P16).
 4. Whether R-13 used a Fisher mean or an arithmetic mean of the similarity r (P14 D-4).
 5. The cause of the two unreproduced cells: Compact-CNN S03 2.0 s ON (B006, D-8) and the GNN S02 2.0 s (B007). Both are accepted deviations; a diagnostic on CUDA or on the original's random-number stream is an option.
-6. Blocker B003 (cohort) is resolved for P20–P23 (S01–S05 for the main results, cohort 39 for the classical LOSO as a separate data source).
+6. Blocker B003 (cohort) was resolved on 2026-10-28 with option B: the P21 classical LOSO uses cohort 39 (S01–S040 without S020) as a separate data source, and the amendment of the same day limits P22–P23 to S01–S05 (decisions row 163). The main results are S01–S05.
 
 **Carry-forwards to P25 (open at the end of P23):**
 
@@ -194,11 +225,11 @@ These come from `mas/state/decisions.md` (the rows of P07 to P23) and from the b
 - P23 C-1 to C-4 (per-seed means; `_subjnorm` labelled offline upper bound; PF-30 reading; seeded-cell margins).
 - The P21 notebook and the P23 notebook section 10b have not been run on Colab.
 
-**Blockers (`mas/state/blockers/`):** B001 (spec files) resolved; B002 (raw data) resolved; B003 (cohort) resolved for P21–P23 with the S06–S40 recordings placed by Sebastian, and S01–S05 for the main results; B004 (bias-free convolutions) resolved; B005 (10 of 23 recordings) accepted as delivered; B006 (Compact-CNN S03 2.0 s) accepted as a documented deviation; B007 (GNN S02 2.0 s) accepted as a documented deviation.
+**Blockers (`mas/state/blockers/`):** B001 (spec files) resolved; B002 (raw data) resolved; B003 (cohort) resolved on 2026-10-28 with option B (the P21 classical cohort 39 uses S01–S040 without S020 as a separate data source; amended for P22–P23 to S01–S05 only, decisions row 163); B004 (bias-free convolutions) resolved; B005 (10 of 23 recordings) accepted as delivered; B006 (Compact-CNN S03 2.0 s) accepted as a documented deviation; B007 (GNN S02 2.0 s) accepted as a documented deviation.
 
 ## Sources
 
-1. PAPER — Chailloux Peguero, J. D., et al. (2023). SSVEP detection assessment by combining visual stimuli paradigms and no-training detection methods. Frontiers in Neuroscience 17:1142892. DOI not given in the spec. Opened: `mas/01_DATA_SPEC.md` §3 (the specification, not the paper). Used for: the paradigm reference.
+1. PAPER — Chailloux Peguero et al. (2023). SSVEP detection assessment by combining visual stimuli paradigms and no-training detection methods. Frontiers in Neuroscience 17:1142892. DOI not given in the spec. Opened: `mas/01_DATA_SPEC.md` §3 (the specification, not the paper). Used for: the paradigm reference.
 2. DATA — `mas/01_DATA_SPEC.md` §3 and §6 (opened). Used for: codes, paradigms, class conventions, trial structure.
 3. DATA — `mas/04_REFERENCE_RESULTS.md` R-6, R-12 to R-16 and the tolerance table (opened). Used for: the reference values, labelled as the original project's.
 4. REQUEST — `mas/03_ROADMAP.md`, P24 task 5 (opened, P24 section). Used for: the list of assignments.
@@ -212,3 +243,5 @@ These come from `mas/state/decisions.md` (the rows of P07 to P23) and from the b
 12. DECISION — `mas/state/decisions.md` (rows 2026-10-24 to 2026-10-29): the settled definitions, accepted deviations D-x and carry-forwards in section 11.
 13. RULE — `mas/RULES.md` R1–R11 and the era matrix (loaded in the project instructions). Used for: the labels (legacy, R2 offline upper bound, R7 inconclusive flips, R9 data source).
 14. BLOCKER — `mas/state/blockers/B001-missing-spec-files.md` to `B007-p15-gnn-s02-2s-systematic.md`. Used for: the status of each blocker in section 11.
+
+Not opened in this run: the phase run files (`05_run.md`, `06_verify.md`, `07_review.md`); the phase reports P00–P22 (quoted through the previous research log and `mas/state/decisions.md`); the phase report P23 beyond its header; the original paper of the paradigm reference (the specification was opened, not the paper); the reference repository (the consultations are recorded in the phase reports, not reopened here).

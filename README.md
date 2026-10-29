@@ -68,7 +68,7 @@ Corrected continuous pipeline (P16 onward; 8-channel montage with the tier-1 cha
 header, continuous filtering, true trial ids). Data source: `data/processed_continuous/` (`reports/v1_vs_v2/flagship.csv`,
 column c, five seeds 42–46; `reports/n_subjects_benchmark_v2cont.csv`).
 
-| Subject | Clean | Rejected | 1.0 s (%) | 2.0 s smoothed (%) |
+| Subject | Clean | Rejected | 1.0 s (%) | 2.0 s, trial reset over true ids (%) |
 |---|---|---|---|---|
 | S01 | 200 | 0 | 72.80 | 77.90 |
 | S02 | 190 | 10 | 72.42 | 75.26 |
@@ -77,7 +77,7 @@ column c, five seeds 42–46; `reports/n_subjects_benchmark_v2cont.csv`).
 | S05 | 199 | 1 | 98.59 | 98.79 |
 | **Mean** | | | **87.38** | **89.07** |
 
-Five-class results with the six-class and harmonic bank (§3.4) are higher (harm bank: 94.29 / 95.80).
+The five-class harmonic filter bank gives 94.29 / 95.80 (`reports/n_subjects_benchmark_p17_harm_5class.csv`, §3.4).
 The flagship and the continuous build differ in fs, filtering, channels and the number of clean windows, so
 the step from 79.28 to 87.38 is a decomposition, not one effect (§9).
 
@@ -93,10 +93,31 @@ Leak-free augmentation A/B on the grouped folds, seed 42 (P11). Data source: leg
 | Compact-CNN (`compact_cnn`, class `CompactCNN`) | 56,021 | 37.09 / 50.65 | +13.56 | 41.21 / 56.28 | +15.07 | +17.16 |
 | ShallowConvNet (`shallow_convnet`) | 14,485 | 72.67 / 75.30 | +2.63 | 75.50 / 78.33 | +2.83 | +2.53 |
 
-Cohort means over S01–S05 (per-subject values in the CSVs). Three-base EEGNet drop from the leaky run is
-−2.71 pp (OFF). One network cell is not reproduced within tolerance (Compact-CNN S03 2.0 s ON: 65.48 %, against
-the original's 71.07 % with a window of ±5 pp); Sebastian accepted it as a documented deviation (D-8, B006).
-The EEGNet training-seed range on S03 (16.75 pp) is of the same order as its seed-42 leak effect.
+Cohort means over S01–S05. Like for like: the three-base EEGNet cohort drop is −2.71 pp (OFF) and −2.82 pp (ON),
+against the seed-42 cohort drop of −5.57 pp; on S03 the seed-42 drop of −20.81 pp is of the same order as the
+three-base training-seed range of 16.75 pp. One network cell is not reproduced within tolerance (Compact-CNN S03 2.0 s
+ON: 65.48 %, against the original's 71.07 % with a window of ±5 pp); Sebastian accepted it as a documented deviation
+(D-8, B006). The leaky counterparts of these rows are in `reports/legacy_leaky/augmentation_ab_<model>.csv` (P10).
+
+| Network | Subject | 1.0 s OFF | 1.0 s ON | 1.0 s Δ | 2.0 s OFF | 2.0 s ON | 2.0 s Δ |
+|---|---|---|---|---|---|---|---|
+| EEGNet | S01 | 30.50 | 32.50 | +2.00 | 36.00 | 35.50 | −0.50 |
+| EEGNet | S02 | 26.02 | 29.08 | +3.06 | 27.04 | 31.63 | +4.59 |
+| EEGNet | S03 | 54.82 | 64.47 | +9.65 | 59.90 | 71.07 | +11.17 |
+| EEGNet | S04 | 98.48 | 100.00 | +1.52 | 98.48 | 98.98 | +0.50 |
+| EEGNet | S05 | 82.00 | 90.00 | +8.00 | 85.00 | 92.50 | +7.50 |
+| Compact-CNN | S01 | 22.50 | 23.50 | +1.00 | 23.50 | 27.50 | +4.00 |
+| Compact-CNN | S02 | 27.55 | 18.88 | −8.67 | 26.53 | 22.96 | −3.57 |
+| Compact-CNN | S03 | 40.10 | 57.87 | +17.77 | 44.67 | 65.48 | +20.81 |
+| Compact-CNN | S04 | 51.78 | 98.48 | +46.70 | 57.36 | 98.48 | +41.12 |
+| Compact-CNN | S05 | 43.50 | 54.50 | +11.00 | 54.00 | 67.00 | +13.00 |
+| ShallowConvNet | S01 | 54.00 | 55.50 | +1.50 | 58.00 | 62.50 | +4.50 |
+| ShallowConvNet | S02 | 30.61 | 35.71 | +5.10 | 32.65 | 36.73 | +4.08 |
+| ShallowConvNet | S03 | 85.28 | 88.32 | +3.04 | 90.86 | 94.42 | +3.56 |
+| ShallowConvNet | S04 | 98.48 | 99.49 | +1.01 | 98.98 | 98.98 | 0.00 |
+| ShallowConvNet | S05 | 95.00 | 97.50 | +2.50 | 97.00 | 99.00 | +2.00 |
+
+Data source: `reports/augmentation_ab_<model>.csv` (grouped folds, seed 42, CPU, seven channels; means in Table 8 of the report).
 
 Note the naming (PF-31): `compact_cnn` is the P09 `CompactCNN` (56,021 parameters). `compact_eegnet` is the
 `EEGNetSSVEP(F1=96, D=1, F2=96, dropout 0.5)` network of the P20 sweep and the P21 LOSO; the two are not
@@ -121,11 +142,17 @@ Reproduced: all 45 subject × set cells within 0.05 pp of R-14 and the cohort me
 
 Cohort means over S01–S05, ten CV repeats, `reports/n_subjects_benchmark_p17_*`.
 
-| Bank | 5 classes 1.0 s / 2.0 s (%) | 6 classes 2.0 s: StimCorrect / FalseAct / Missed (%) |
+| Bank | 5 classes 1.0 s / 2.0 s (%), cohort mean | 6 classes 2.0 s: StimCorrect / FalseAct / Missed (%), cohort mean |
 |---|---|---|
 | base (five FBCSP sub-bands) | 87.65 / 89.57 | 85.63 / 7.85 / 8.67 |
 | harm (base + k·f harmonics, k = 1..3) | 94.29 / 95.80 | 88.39 / 2.10 / 10.15 |
 | harm + mid (+ midpoints) | 94.23 / 95.45 | 88.52 / 2.05 / 9.93 |
+
+Per subject, five classes, 1.0 s / 2.0 s (%): base S01 73.15 / 78.85, S02 73.05 / 76.63, S03 93.76 / 93.92, S04 99.38 / 99.38,
+S05 98.89 / 99.05; harm S01 85.50 / 91.45, S02 86.74 / 88.16, S03 99.38 / 99.48, S04 100.00 / 100.00, S05 99.85 / 99.90;
+harm + mid S01 85.55 / 90.05, S02 86.32 / 87.84, S03 99.33 / 99.43, S04 100.00 / 100.00, S05 99.95 / 99.95.
+Data source: `reports/n_subjects_benchmark_p17_{base,harm,harmmid}_5class.csv` (continuous build, shared quality, ten repeats).
+The 2.0 s column is the trial-reset rule over true trial identifiers.
 
 The harmonic gain is worded "consistent with an SNR gain of the ±1 Hz bands at k·f, fundamentals included".
 Six classes are not comparable with five-class accuracy.
@@ -164,18 +191,31 @@ Cohort S01–S05, 1 s windows, stride 0.25 s, channels `common` (7). Data source
 | ccnn | LOSO, seed 42 (three-seed cohort means 85.36–86.58) | 86.17 | in-fold |
 | eegnet (sweep network, kernel 128) | LOSO, seed 42 (three-seed cohort means 78.58–79.76) | 79.76 | in-fold |
 | GNN nodes+F | LOSO, three seeds, pooled | 89.22 | in-fold (z-scored on training windows) |
-| GNN nodes+F | LOSO, subject normalization | 90.32 | test-time (offline upper bound) |
-| GNN nodes+F | within-subject, three seeds | 86.81 | in-fold |
+| GNN nodes+F (3-seed ensemble) | LOSO, subject normalization | 90.32 | test-time (offline upper bound) |
+| GNN nodes+F (3-seed ensemble) | within-subject | 86.81 | in-fold |
+
+The GNN rows are three-seed ensembles (seeds 42, 43, 44). Per-seed cohort means: LOSO `nodes+F` pooled 87.69, 88.66 and 89.06 (mean 88.47); LOSO `nodes+F` subject normalization 89.89, 90.49 and 90.01; within-subject `nodes+F` 85.42, 85.21 and 86.01 (`reports/loso_gnn/seeds.csv`, `reports/within_gnn/seeds.csv`).
 
 The within-subject `within_lda` rows are within-subject results; the `Data source` text in the P22 CSV still reads
 "LOSO" (labelling defect W-1, carried). For the GNN, "LOSO below within" is **direction not observed** (LOSO 89.22
-against within 86.81). The GNN is at or above `lda` on S02 and S05, which is reported as "GNN ≥ lda on S02/S05",
+against within 86.81). The three-seed GNN ensemble is at or above `lda` on S02 (+4.66 pp, an ensemble effect: per seed +3.27 pp against 2·SE_Δ 4.62 pp, a tie) and on S05 (+2.06 pp; per seed +2.01 pp against 1.55 pp, which survives), reported as "GNN ≥ lda on S02/S05",
 never as "beats".
 
 Cohort 39 (39 subjects, S01–S040 without S020; `reports/loso_w1_all/summary.csv`, `reports/loso_w1/summary.csv`):
-`all` (8 channels) fbcca 75.80, lda 83.42, lda_subjnorm 86.13 (32 matched subjects, the comparable classical result).
+`all` (8 channels; 39 subject rows per method) fbcca 75.80, lda 83.42, lda_subjnorm 86.13 (an offline upper bound); the within-subject comparison uses the 32 matched subjects only (lda 85.67 % against within 86.51 %).
 `common` (POz, PO4, O1; three channels) fbcca 64.56, lda 72.54, lda_subjnorm 75.16; ccnn 71.58 (one repeat). The `common`
 rows are three-channel results, not comparable with cohort 5 or with within-subject results.
+
+**Per-subject LOSO and within-subject accuracy at 1.0 s**, seven common channels (%). Data source: `reports/loso_w1_s01-s05/summary.csv`, `reports/loso_w1_p22_common/summary.csv`, `reports/loso_gnn/summary.csv`, `reports/within_gnn/summary.csv` (continuous build `w1_s0.25`, OO).
+
+| Subject | fbcca (LOSO) | lda (LOSO) | lda_subjnorm (LOSO, offline upper bound) | within_lda | GNN nodes+F pooled (LOSO, 3-seed) | GNN nodes+F (within, 3-seed) |
+|---|---|---|---|---|---|---|
+| S01 | 58.68 | 69.26 | 74.85 | 75.88 | 70.15 | 70.88 |
+| S02 | 68.01 | 76.24 | 83.07 | 82.02 | 80.90 | 76.55 |
+| S03 | 91.07 | 96.07 | 95.61 | 97.31 | 96.37 | 90.32 |
+| S04 | 98.80 | 99.55 | 99.70 | 99.79 | 99.70 | 98.50 |
+| S05 | 95.43 | 96.91 | 96.91 | 98.97 | 98.97 | 97.79 |
+| Mean | 82.40 | 87.61 | 90.03 | 90.79 | 89.22 | 86.81 |
 
 ### 3.7 Detection and window length (P20)
 
@@ -193,9 +233,13 @@ Window-level ITR is highest at 0.5 s for every method; accuracy rises with lengt
 which is driven by S02 (early-stopping failures in single-repeat folds, §9). One-second networks: ccnn 91.25, compact_eegnet
 92.08, eegnet 89.69 %, a single repeat; all differences below 3 pp, not distinguishable.
 
-Pseudo-online (trained on OO, replayed on mOO as a causal stream): 89.00 % accuracy and 27.5 % false activations with five
+Pseudo-online (`ccnn`, 0.5 s windows; trained on OO, replayed on mOO as a causal stream): 89.00 % accuracy and 27.5 % false activations with five
 classes; 74.00 % and 5.0 % with six classes (the rest class absorbs false activations; two runs, not a before/after pair).
 Dynamic stopping: LDA reaches 61.53 bits/min at 0.5 s (`reports/dynamic_stopping/best_threshold.csv`) against 60.23 for the time-matched single window (`mas/state/reports/P20.md`; thresholds chosen in-sample, descriptive).
+
+**Per-subject window sweep** (`reports/window_sweep/summary.csv`, accuracy %, continuous build, five stimulus classes): LDA 0.5 / 1.0 / 2.0 / 4.0 s: S01 64.26 / 75.88 / 87.58 / 95.00; S02 60.66 / 77.36 / 90.68 / 95.16; S03 90.50 / 97.31 / 99.88 / 100.00; S04 98.28 / 99.79 / 100.00 / 100.00; S05 95.31 / 99.09 / 100.00 / 100.00. `compact_eegnet` 0.5 / 1.0 / 2.0 / 4.0 s: S01 69.87 / 84.12 / 89.42 / 77.00; S02 42.96 / 77.48 / 89.32 / 39.56; S03 93.42 / 98.94 / 98.80 / 98.92; S04 98.93 / 99.85 / 100.00 / 100.00; S05 98.55 / 100.00 / 100.00 / 100.00. The S02 values of `compact_eegnet` at 0.5 and 4 s are the early-stopping failures described above.
+
+**Per-subject pseudo-online** (`ccnn`, 0.5 s windows; `reports/pseudo_online/summary_ccnn_{5class,6class}.csv`): five classes S01–S05, accuracy 60.00, 90.00, 97.50, 100.00, 97.50 % (false activations 52.5, 45.0, 20.0, 0.0, 20.0 %); six classes 35.00, 47.50, 92.50, 100.00, 95.00 % (false activations 17.5, 7.5, 0.0, 0.0, 0.0 %).
 
 ### 3.8 Era-C checks (P16, P19)
 
@@ -221,7 +265,7 @@ Dynamic stopping: LDA reaches 61.53 bits/min at 0.5 s (`reports/dynamic_stopping
 | `ccnn` (CCNN, filter bank 3–50 Hz at 0.25 Hz steps) | P20, P21 | reference network R-8 |
 | Edge-gated connectivity GNN (`nodes+F`, `nodes+coh+F`) | P15 within, P23 LOSO and within | reference class, R-8 and R-15; consultation under R11 (`mas/state/reports/P15.md`) |
 
-The paradigm (the on-off and checkerboard flicker and their frequencies) is described in Chailloux Peguero et al. (2023),
+The reference paper for the paradigms is Chailloux Peguero et al. (2023), as the specification gives it;
 cited as given in `mas/01_DATA_SPEC.md` §3 (see Sources).
 
 ## 5. Deep-learning training convention
@@ -298,7 +342,7 @@ groups windows by trial. Before → after, cohort mean (`reports/n_subjects_benc
 
 | Protocol | 1.0 s (%) | 2.0 s smoothed (%) |
 |---|---|---|
-| Leaky, window-level (P06–P10, legacy) | 83.33 | 87.57 |
+| Leaky, window-level (P06–P10, legacy; `reports/legacy_leaky/n_subjects_benchmark.csv`) | 83.33 | 87.57 |
 | Trial-grouped (P11, R-6 reproduced) | 79.28 | 82.61 |
 | Change | −4.06 pp | −4.96 pp |
 
@@ -307,7 +351,7 @@ Compact-CNN at seed 42 (`reports/cv_leakage_demo_networks.csv`), within the trai
 original is not reproduced. Smoothing: the 2.0 s column uses `i % 5` on legacy folders; the trial-reset rule (diagnostic) is 3.56 pp
 lower on S03 (86.80 against 90.36 at 2.0 s, `reports/cv_leakage_demo.csv`). Which rule is leak-free on legacy folders is an open
 question until true trial ids arrive (P16). **Other before → after steps:** the sampling rate 250 → 256 Hz (+8.04 / +6.91 pp, fs
-effect), the filter (per-window → continuous, no accuracy effect), the guard (negative on S02 only), the montage (PO7 restored), the
+effect), the filter (per-window → continuous, no accuracy effect), the guard (material only on S02 at 1.0 s, −4.50 pp, cause not established; slightly negative on S04 and S05), the montage (PO7 restored), the
 two-tier gate; the decomposition is in `reports/v1_vs_v2/flagship.csv` (`docs/report/v2/report.md`, §3.1).
 
 ## 10. Interpretation notes and open questions
@@ -450,7 +494,7 @@ Measured minutes come from the "Commands executed" tables of each `mas/state/pha
 | **Total `make all`** | | **325.6 (5.43 h)** | **110.5 (1.84 h)** | **436.1 (7.27 h)** |
 | `loso-all` (outside `all`) | `reports/window_sweep_w1_all`, `loso_w1_fbcca_all`, `loso_w1`, `loso_w1_all` | | | 33.6 min CPU (P21 record, classical) |
 
-The total exceeds the 4 h limit of the project's run policy, so the orchestrator asks Sebastian before a full local run. `make all` writes a
+The GPU total includes the p08 CUDA row (0.4 min), which `make all` runs only with `NN_DEVICES="cpu cuda"`; without it the GPU total is 110.1 min. The total exceeds the 4 h limit of the project's run policy, so the orchestrator asks Sebastian before a full local run. `make all` writes a
 `.done` stamp per phase under `mas/state/scratch/make_stamps/` and resumes at the first unstamped phase. The 39-subject networks (ccnn, eegnet,
 compact_eegnet on the 39-subject cohort) are not in any target (about 1.5 h GPU, limited by Sebastian on 2026-10-28).
 
@@ -476,6 +520,6 @@ decisions, blockers) is under `mas/state/`. `python mas/tools/mas_status.py chec
 12. DECISION — `mas/state/decisions.md` (rows 2026-10-24 to 2026-10-29): settled definitions, accepted deviations (D-x), wording rulings, carry-forwards.
 13. RULE — `mas/state/blockers/B001`–`B007`: the recording inventory (B005), the cohort decision (B003), accepted deviations (B006, B007).
 14. REQUEST — `mas/03_ROADMAP.md` (P24 tasks 1–6): the content of this README.
-15. OWN-CODE — ssvep-eeg-xai (the original project), read under R11 by the phases that record it; definitions only, nothing copied (`mas/state/reports/P05.md`, `P06.md`, `P11.md`, `P15.md`).
+15. OWN-CODE — ssvep-eeg-xai (the original project), not opened in this run; the consultations are recorded by the phases that made them (`mas/state/reports/P05.md`, `P06.md`, `P11.md`, `P15.md`), definitions only, nothing copied.
 16. PAPER — Chailloux Peguero et al. (2023). SSVEP detection assessment by combining visual stimuli paradigms and no-training detection methods. Frontiers in Neuroscience 17:1142892. DOI not given in the spec. The spec `mas/01_DATA_SPEC.md` §3 was opened; the paper itself was not opened in this run. Used for: the paradigms.
 17. DOCS — not opened in this run: FBCSP and FBCCA primary papers, the EEGNet, Compact-CNN and ShallowConvNet papers. Methods are named as they appear in the code docstrings and the phase reports; no claim relies on a paper that was not opened.

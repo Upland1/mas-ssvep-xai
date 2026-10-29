@@ -170,7 +170,7 @@ labelled diagnostic. (2) The mask limits are the original extractors' vpp 0.5–
 (3) The harmonic script gives FBCCA the visual cluster PO8, O1, Oz, O2 by name. Counts and 1.0 s values were
 unchanged in all subjects. The reviewer judged each demonstrated, not tuned.
 
-Round 2 results (legacy, leaky): S03 197 / 3, 1.0 s 90.36 %, 2.0 s 95.43 % (`reports/flagship_S03.csv`). The hybrid
+Round 2 results (legacy, leaky): S03 197 / 3, 1.0 s 90.36 %, 2.0 s 95.43 % (`reports/legacy_leaky/n_subjects_benchmark.csv` for S03; the feature-space rows in `reports/legacy_leaky/feature_space_benchmark_S03.csv`; the current files under `reports/` hold the grouped reruns). The hybrid
 FBCSP + FBCCA with Shrinkage-LDA is the best space at 1.0 s (90.36 %, 5.59 pp above FBCSP at 84.77 %); the
 FBCCA argmax (48.73 %) is the lowest reference. All ten R-5 values reproduce exactly (S01 64.50 / 75.50,
 S02 66.33 / 71.94, S03 90.36 / 95.43, S04 98.98 / 98.48, S05 96.50 / 96.50; mean 83.33 / 87.57). The 24 Hz
@@ -186,9 +186,9 @@ leaky), with the historical technical report v1 and its infographic. ANOVA, mutu
 sequential forward selection (SFS) and sub-band pruning are fitted on the training rows of each fold only
 (R2, PF-11).
 
-Results (legacy, leaky; `reports/feature_selection_ablation_S03.csv`), 1.0 s / 2.0 s smoothed: full baseline
+Results (legacy, leaky; `reports/legacy_leaky/feature_selection_ablation_S03.csv`; the current `reports/feature_selection_ablation_S03.csv` holds the grouped rerun, SFS 84.26 / 91.88), 1.0 s / 2.0 s smoothed: full baseline
 (p 55) 90.36 / 95.43; sub-band pruning (p 45) 87.31 / 94.92; ANOVA (p 25) 86.29 / 94.42; mutual information
-(p 25) 87.82 / 93.40; SFS (p 20) 89.85 / 95.94. Cohort (`reports/five_subjects_benchmark.csv`): S01 64.50 / 75.50,
+(p 25) 87.82 / 93.40; SFS (p 20) 89.85 / 95.94. Cohort (leaky; `reports/legacy_leaky/n_subjects_benchmark.csv`): S01 64.50 / 75.50,
 S02 66.33 / 71.94, S03 90.36 / 95.43, S04 98.98 / 98.48, S05 96.50 / 96.50; mean 83.33 / 87.57. Four of five
 R-4 rows and all ten R-5 values reproduce exactly.
 
@@ -214,7 +214,7 @@ filtering (R3), `i % 5` smoothing (R8), fs 250 (PF-04), per-script gates (R5). T
 
 Results (legacy, leaky): clean and rejected windows equal R-6 for all five subjects (200/0, 196/3, 197/3,
 197/1, 200/0); channels kept 7, none dropped. 1.0 s / 2.0 s: S01 64.50 / 75.50, S02 66.33 / 71.94, S03 90.36 /
-95.43, S04 98.98 / 98.48, S05 96.50 / 96.50; mean 83.33 / 87.57 (`reports/n_subjects_benchmark.csv`).
+95.43, S04 98.98 / 98.48, S05 96.50 / 96.50; mean 83.33 / 87.57 (leaky; `reports/legacy_leaky/n_subjects_benchmark.csv`).
 
 **PF-07 (accepted deviation D-1).** The count is reproduced: with `--vpp-min 5.0 --no-channel-drop`, S03
 rejects 320 of 320 windows (`reports/logs/P07/run_preprocessing_vppmin5_nodrop_20261025_133206.log`). The
@@ -274,13 +274,13 @@ circular time shift, intra-class mixup) and an OFF/ON A/B for EEGNet, Compact-CN
 the legacy leaky protocol (frozen copies `reports/legacy_leaky/augmentation_ab_<model>.csv`). Suite `604 passed in
 219.16s`.
 
-Results (legacy, leaky, CPU, 7 channels; `reports/augmentation_ab_eegnet.csv`): EEGNet cohort mean, 1.0 s 63.93 → 67.04 %,
+Results (legacy, leaky, CPU, 7 channels; `reports/legacy_leaky/augmentation_ab_eegnet.csv`; the grouped rerun is `reports/augmentation_ab_eegnet.csv`, 58.36 → 63.21 %): EEGNet cohort mean, 1.0 s 63.93 → 67.04 %,
 Δ +3.11 pp; 2.0 s 68.18 → 71.08 %, Δ +2.90 pp. Per subject, EEGNet Δ at 1.0 s: S01 +7.50 (+15 windows), S02 −1.53 (−3),
 S03 +5.08 (+10), S04 +1.01 (+2), S05 +3.50 (+7). Compact-CNN cohort Δ +14.12 / +11.39 pp; ShallowConvNet +2.01 / +2.72 pp.
 EEGNet S03 OFF = 75.63 / 85.79 % (149 / 169 of 197), equal to P08's CPU run.
 
 Reading: the 1.0 s gain of +3.11 pp lies inside the recorded range [+3.00, +7.34] pp (R-9a), at its lower edge; one CPU
-seed set, no significance claim. PF-30: EEGNet OFF test accuracy on S01 and S02 is 28.00 / 27.04 % (chance 20 %) with
+seed set, no significance claim. PF-30: legacy leaky EEGNet OFF test accuracy on S01 and S02 is 28.00 / 27.04 % (`reports/legacy_leaky/augmentation_ab_eegnet.csv`; grouped 30.50 / 26.02 %) (chance 20 %) with
 training accuracy 83.25 / 81.38 %: a generalization failure. The Compact-CNN S04 Δ (+43.15 pp) equals R-9b's leak-free
 S04 Δ by coincidence of two different quantities.
 
@@ -499,7 +499,7 @@ Checks A–F met; `p19_filtered` equals the P17 folder file by file, and the CSV
 
 ### P20 · Detection: window length, ITR, networks, dynamic stopping and pseudo-online (2026-10-28)
 
-Aim: treat SSVEP as a detection problem. Accuracy and window-level information transfer rate (ITR) against window length (0.5–4 s, stride 0.25 s) for FBCCA, in-fold FBCSP+FBCCA LDA and a CNN (`compact_eegnet`, the sweep name for `EEGNetSSVEP(F1=96, D=1, F2=96, dropout 0.5)`; PF-31); a 1 s comparison of `ccnn`, `compact_eegnet` and `eegnet` under grouped early stopping; dynamic stopping on window probabilities; a causal pseudo-online detector trained on OO and replayed on mOO at 5 and 6 classes. No numeric target exists (R-16). Data source: OO session, S01–S05 (B003: both options coincide up to P20), continuous builds `data/processed_continuous/w<L>_s0.25/` with `--quality-source both`; channels kept 7 on S01, S03, S04 and 8 on S02, S05.
+Aim: treat SSVEP as a detection problem. Accuracy and window-level information transfer rate (ITR) against window length (0.5–4 s, stride 0.25 s) for FBCCA, in-fold FBCSP+FBCCA LDA and a CNN (`compact_eegnet`, the sweep name for `EEGNetSSVEP(F1=96, D=1, F2=96, dropout 0.5)`; PF-31); a 1 s comparison of `ccnn`, `compact_eegnet` and `eegnet` under grouped early stopping; dynamic stopping on window probabilities; a causal pseudo-online detector (`ccnn`, 0.5 s windows) trained on OO and replayed on mOO at 5 and 6 classes. No numeric target exists (R-16). Data source: OO session, S01–S05 (B003: both options coincide up to P20), continuous builds `data/processed_continuous/w<L>_s0.25/` with `--quality-source both`; channels kept 7 on S01, S03, S04 and 8 on S02, S05.
 
 Window sweep (cohort mean over five subjects; `reports/window_sweep/summary.csv`, Acc % and window-level ITR in bits/min): LDA 81.80 → 98.03 % and 84.37 → 28.93 bits/min from 0.5 to 4 s; FBCCA 69.16 → 96.86 %, ITR 57.50 at 0.5 s; compact_eegnet 80.75 % (ITR 87.25) at 0.5 s, 92.08 % at 1.0 s, 95.51 % at 2.0 s, 83.10 % at 4.0 s (ITR 21.56). The window-level ITR is highest at 0.5 s for all three methods. The cnn value at 4 s is driven by S02 (39.56 %) and S01 (77.00 %); two S02 folds at 0.5 s and two at 4 s restored an early-stopping state from epoch 1–3, single-repeat cells that measure an early-stopping failure on S02, not the network's accuracy at those lengths.
 
@@ -507,7 +507,7 @@ Window sweep (cohort mean over five subjects; `reports/window_sweep/summary.csv`
 
 Dynamic stopping (`reports/dynamic_stopping/best_threshold.csv`): thresholds are selected in-sample and are descriptive. LDA reaches 61.53 bits/min at 0.5 s (threshold 0.7) against 60.23 for the time-matched single window; the per-subject split is mixed (S04 negative) and several thresholds sit on the grid edge.
 
-Pseudo-online (`reports/pseudo_online/summary_ccnn_{5class,6class}.csv`): mean accuracy 89.00 % (5 classes) and 74.00 % (6 classes); mean false activations 27.5 % (5 classes) and 5.0 % (6 classes). These are two runs with different class sets, not a before/after pair: the rest class of the 6-class run absorbs the false activations. The 6-class drop is missed stimulus periods in S01 (50.00 %) and S02 (52.50 %); the 6-class ITR uses N = 5 (44.56 bits/min).
+Pseudo-online (0.5 s windows, `reports/pseudo_online/summary_ccnn_{5class,6class}.csv`): mean accuracy 89.00 % (5 classes) and 74.00 % (6 classes); mean false activations 27.5 % (5 classes) and 5.0 % (6 classes). These are two runs with different class sets, not a before/after pair: the rest class of the 6-class run absorbs the false activations. The 6-class drop is missed stimulus periods in S01 (50.00 %) and S02 (52.50 %); the 6-class ITR uses N = 5 (44.56 bits/min).
 
 Checks: A–I met; acceptance 1–7 met; protected hashes unchanged. Suite first run `2 failed, 1295 passed` (two hash-pinned P09/P10 tests, explained by the intra-op thread count, not P20 code), isolated re-run `1297 passed`. Directions P1–P6: P1, P2, P3, P4, P5 and P6(b), P6(c) hold; P6(a) fails as worded (S04 0.0 against 0.0, at the floor). Review: ACCEPT with D-1 to D-6.
 
@@ -519,7 +519,7 @@ Cohort decision (B003, option B, 2026-10-28): cohort 5 (S01–S05) for the main 
 
 Cohort 5 (1 s; `reports/loso_w1_s01-s05/summary.csv`, `reports/loso_w1_s01-s05_all/summary.csv`): `common` fbcca 82.40, lda 87.61, lda_subjnorm 90.03; `all` lda 86.34, lda_subjnorm 88.75. Networks, `common`, seed 42: ccnn 86.17, compact_eegnet 79.11, eegnet 79.76; three seeds for ccnn (86.17, 85.36, 86.58) and eegnet (79.76, 78.58, 78.77).
 
-Cohort 39 (1 s; `reports/loso_w1_all/summary.csv`, `reports/loso_w1/summary.csv`): `all` (8 channels) fbcca 75.80, lda 83.42, lda_subjnorm 86.13 (the comparable classical cohort-39 result, 32 matched subjects). `common` (3 channels, POz, PO4, O1): fbcca 64.56, lda 72.54, lda_subjnorm 75.16; ccnn 71.58 (one repeat). The `common` rows of cohort 39 are three-channel results and are not comparable with cohort 5 or with within-subject results.
+Cohort 39 (1 s; `reports/loso_w1_all/summary.csv`, `reports/loso_w1/summary.csv`): `all` (8 channels) fbcca 75.80, lda 83.42, lda_subjnorm 86.13 (39 subject rows per method; lda_subjnorm is an offline upper bound; the within-subject comparison uses the 32 matched subjects). `common` (3 channels, POz, PO4, O1): fbcca 64.56, lda 72.54, lda_subjnorm 75.16; ccnn 71.58 (one repeat). The `common` rows of cohort 39 are three-channel results and are not comparable with cohort 5 or with within-subject results.
 
 Directions (R-16). Cohort 5: LOSO below within for lda (5 of 5 matched subjects, 86.63 against 89.89) and for each network (3 of 3 matched, seed 42); lda_subjnorm above lda (+2.42 pp on `common`); fbcca identical to within on matched channels (0 mismatches). Cohort 39: P2 for lda is **direction not observed** (22 of 32 subjects at or below within + 1 pp; mean 85.67 against 86.51; maximum S015 +4.94; signs 15 positive and 17 negative); P3 holds (+2.72 pp, `all`). No mechanism is shown and nothing was changed.
 
@@ -547,7 +547,7 @@ Aim: the P15 edge-gated connectivity GNN trained under leave-one-subject-out on 
 
 Cohort 5, 1.0 s, three-seed ensemble (`reports/loso_gnn/summary.csv`, `reports/within_gnn/summary.csv`): LOSO `nodes+F` 89.22 (`pooled`) and 90.32 (`subject`, `_subjnorm`); LOSO `nodes+coh+F` 88.96 and 90.29; within `nodes+F` 86.81, within `nodes+coh+F` 86.98. Classical references on the same channels: lda 87.61, lda_subjnorm 90.03, within_lda 90.79.
 
-Directions (PR-1 to PR-9): held: PR-1, PR-4 (15 of 15 coherence-edge ties), PR-5 as worded, PR-6, PR-8, PR-9. Missed: PR-2 for `nodes+F` (material above lda on S02, +4.66 pp, SE_Δ 2.28, and on S05, +2.06 pp, SE_Δ 0.77). Partly missed: PR-3 (no material gain on S01 or S02) and PR-7 (the two S02 `_subjnorm` gaps, 13.93 and 13.83 pp, are below 15 pp). Wording: **GNN ≥ lda on S02 and S05**, never "beats". R-16 "LOSO below within" for the GNN is **direction not observed** (LOSO cohort mean 89.22 against within 86.81); "subjnorm ≥ pooled" holds as ties (+1.10 and +1.33 pp).
+Directions (PR-1 to PR-9): held: PR-1, PR-4 (15 of 15 coherence-edge ties), PR-5 as worded, PR-6, PR-8, PR-9. Missed: PR-2 for `nodes+F` (the three-seed ensemble is above lda on S02, +4.66 pp, SE_Δ 2.28, an ensemble effect: per seed +3.27 pp against 2·SE_Δ 4.62 pp, a tie; on S05 the ensemble gives +2.06 pp, SE_Δ 0.77, and per seed +2.01 pp against 1.55 pp, which survives, and on S05, +2.06 pp, SE_Δ 0.77). Partly missed: PR-3 (no material gain on S01 or S02) and PR-7 (the two S02 `_subjnorm` gaps, 13.93 and 13.83 pp, are below 15 pp). Wording: **GNN ≥ lda on S02 and S05**, never "beats". R-16 "LOSO below within" for the GNN is **direction not observed** (LOSO cohort mean 89.22 against within 86.81); "subjnorm ≥ pooled" holds as ties (+1.10 and +1.33 pp).
 
 PF-30: no fold near chance (lowest test accuracies 70.15 % LOSO and 68.38 % within, chance 20 %; lowest training accuracy 93.20 % LOSO). LOSO S01 and S02 show gaps of 13.8–27.8 pp (a generalization problem); LOSO S03–S05 test is above training by 1.4–5.6 pp.
 
@@ -559,7 +559,7 @@ Phases P00–P23 have passed their gates (verifier PASS and reviewer APPROVE, wi
 
 ## Sources
 
-1. DATA — `mas/state/reports/P00.md` to `mas/state/reports/P23.md` (the phase reports; the phase-level records above are taken from the phase records and the decisions log, which cite them; each claim cites its CSV or log).
+1. DATA — `mas/state/reports/P00.md` to `mas/state/reports/P23.md`: not opened in this run (only P23.md was opened, for its header). The phase-level records above were taken from the previous version of this log and from `mas/state/decisions.md`, which cite the phase reports; each number cites its CSV or log where one is given.
 2. RULE — `mas/RULES.md`, R1–R11 and the era matrix. Used for: the legacy/corrected labels and the rules applied in each phase.
 3. RULE — `mas/CITING.md` (opened) for the citation formats; the golden rules quoted in the phase records (labelling of legacy behaviour, no tuning to references, reference consultation under R11).
 4. DATA — `mas/04_REFERENCE_RESULTS.md`, R-1 to R-16 and the tolerance table. Used for: the reference targets (the original project's numbers, labelled as such).

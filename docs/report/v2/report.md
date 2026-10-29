@@ -4,7 +4,7 @@
 
 ## Abstract
 
-We rebuilt a five-class steady-state visually evoked potential (SSVEP) decoder for eight parieto-occipital channels recorded at 256 Hz and reproduced the original project's history in gated phases. The legacy protocol used window-level cross-validation, which places windows of one trial in both training and test folds. With trial-grouped cross-validation the classical flagship (FBCSP and FBCCA features, scaler, Shrinkage-LDA) falls from 83.33 % to 79.28 % at 1.0 s on five subjects (S01–S05), a classical inflation of 4.06 percentage points (pp) (`reports/cv_leakage_demo.csv`). Correcting the sampling rate to the recorded 256 Hz and filtering continuously before windowing gives 87.38 % at 1.0 s (`reports/v1_vs_v2/flagship.csv`); a narrow harmonic filter bank raises the five-class result to 94.29 % (`reports/n_subjects_benchmark_p17_harm_5class.csv`). Leave-one-subject-out (LOSO) Shrinkage-LDA reaches 87.61 % and a within-subject reference 90.79 % on the same channels (`reports/loso_w1_p22_common/summary.csv`). A connectivity-edge graph neural network (GNN) gives 89.22 % under LOSO and 86.81 % within subject (`reports/loso_gnn/summary.csv`, `reports/within_gnn/summary.csv`). Several results do not replicate the original project's numbers: a leave-one-subject-out differential at 2 s, a sequential forward selection row, one Compact-CNN cell and one GNN cell. We report them as documented deviations. The cohort is five subjects; the findings are descriptive for that cohort and do not establish performance on new participants.
+We rebuilt a five-class steady-state visually evoked potential (SSVEP) decoder for eight parieto-occipital channels recorded at 256 Hz and reproduced the original project's history in gated phases. The legacy protocol used window-level cross-validation, which places windows of one trial in both training and test folds. With trial-grouped cross-validation the classical flagship (FBCSP and FBCCA features, scaler, Shrinkage-LDA) falls from 83.33 % to 79.28 % at 1.0 s on five subjects (S01–S05), a classical inflation of 4.06 percentage points (pp) (`reports/cv_leakage_demo.csv`). The corrected continuous build (recorded 256 Hz, continuous filtering before windowing, eight-channel montage, true trial identifiers, one shared quality gate) gives 87.38 % at 1.0 s (`reports/v1_vs_v2/flagship.csv`); a narrow harmonic filter bank raises the five-class result to 94.29 % (`reports/n_subjects_benchmark_p17_harm_5class.csv`). Leave-one-subject-out (LOSO) Shrinkage-LDA reaches 87.61 % and a within-subject reference 90.79 % on the same channels (`reports/loso_w1_p22_common/summary.csv`). The P23 connectivity-edge graph neural network (GNN), a three-seed ensemble, gives 89.22 % under LOSO and 86.81 % within subject (`reports/loso_gnn/summary.csv`, `reports/within_gnn/summary.csv`). Several results do not replicate the original project's numbers: the sequential forward selection row, one Compact-CNN cell (S03, 2.0 s, augmentation ON) and one legacy GNN cell (S02, 2.0 s). We report them as documented deviations. The cohort is five subjects; the findings are descriptive for that cohort and do not establish performance on new participants.
 
 ## 1. Introduction
 
@@ -50,7 +50,7 @@ Each phase ran its commands from a clean checkout, and the verifier reproduced t
 
 Table 1 gives the flagship with trial-grouped cross-validation on the legacy folders (seven channels, fs 250 in features, per-script gate; `reports/n_subjects_benchmark.csv`), against the leaky values of the same features and the original project's leak-free targets (R-6).
 
-**Table 1.** Flagship classical pipeline, accuracy (%). Data source: legacy folders `data/processed/<S>/`, OO, 7 channels, seed 42, trial-grouped CV. R-6: the original project's leak-free table [3].
+**Table 1.** Flagship classical pipeline, accuracy (%). Data source: legacy folders `data/processed/<S>/`, OO, 7 channels, seed 42. Grouped columns: `reports/n_subjects_benchmark.csv` (trial-grouped CV). Leaky columns: `reports/legacy_leaky/n_subjects_benchmark.csv` (window-level CV, the P11 snapshot of the legacy run; labelled leaky). Smoothing: the 2.0 s columns use the legacy `i % 5` rule (R8, PF-02), which is the rule R-6 defines. R-6: the original project's leak-free table [3].
 
 | Subject | Clean | Rejected | Leaky 1.0 s | Grouped 1.0 s | R-6 1.0 s | Leaky 2.0 s (`i % 5`) | Grouped 2.0 s (`i % 5`) | R-6 2.0 s |
 |---|---|---|---|---|---|---|---|---|
@@ -61,13 +61,13 @@ Table 1 gives the flagship with trial-grouped cross-validation on the legacy fol
 | S05 | 200 | 0 | 96.50 | 95.00 | 95.00 | 96.50 | 95.50 | 95.50 |
 | Mean | | | 83.33 | 79.28 | 79.28 | 87.57 | 82.61 | 82.61 |
 
-The grouped values equal the original's leak-free targets on every cell. The classical inflation is −4.06 pp at 1.0 s and −4.96 pp at 2.0 s (`reports/cv_leakage_demo.csv`). The per-subject change at 1.0 s is −3.50, −10.21, −3.56, −1.52 and −1.50 pp. Its largest part is on S02, whose approximate identifiers are the least reliable [5, 7].
+The grouped values equal the original's leak-free targets on every cell. The leak changes the cohort mean by −4.06 pp at 1.0 s and −4.96 pp at 2.0 s, that is a classical inflation of +4.06 and +4.96 pp (`reports/cv_leakage_demo.csv`; the leaky columns are the P11 snapshot `reports/legacy_leaky/n_subjects_benchmark.csv`). The per-subject change at 1.0 s is −3.50, −10.21, −3.56, −1.52 and −1.50 pp. Its largest part is on S02, whose approximate identifiers are the least reliable [5, 7].
 
 Table 2 gives the continuous build (P16): fs 256 from the header, continuous filtering, the eight-channel montage with the tier-1 channel drop, true trial identifiers and the shared guard (`reports/v1_vs_v2/flagship.csv`, column c, five seeds; `reports/n_subjects_benchmark_v2cont.csv`).
 
-**Table 2.** Continuous build, accuracy (%), cohort S01–S05. Data source: `data/processed_continuous/<S>/`, OO, shared quality with guard, seed 42–46 (five repeats).
+**Table 2.** Continuous build, accuracy (%), cohort S01–S05. Data source: `data/processed_continuous/<S>/`, OO, shared quality with guard, five seeds (42–46, `reports/n_subjects_benchmark_v2cont.meta.txt`: `cv=grouped, smoothing=trial`). The 2.0 s column is the trial-reset rule over true trial identifiers (R8), not the legacy `i % 5` rule.
 
-| Subject | Clean | Rejected | 1.0 s | 2.0 s (`i % 5`) |
+| Subject | Clean | Rejected | 1.0 s | 2.0 s (trial reset over true ids) |
 |---|---|---|---|---|
 | S01 | 200 | 0 | 72.80 | 77.90 |
 | S02 | 190 | 10 | 72.42 | 75.26 |
@@ -76,7 +76,7 @@ Table 2 gives the continuous build (P16): fs 256 from the header, continuous fil
 | S05 | 199 | 1 | 98.59 | 98.79 |
 | Mean | | | 87.38 | 89.07 |
 
-The step from 79.28 % to 87.38 % at 1.0 s is a decomposition with several parts (`reports/v1_vs_v2/flagship.csv`). The sampling-rate correction (fs 250 to 256 Hz in the features) contributes +8.04 pp at 1.0 s (+6.91 pp at 2.0 s) and is positive in every subject, largest where the legacy accuracy is lowest (S02 +18.47 pp). The build (channels, the trial-id leak, six fewer clean windows) contributes −1.83 pp, almost all on S02 (−8.03 pp). Filter mode (per-window to continuous) changes accuracy by +0.37 pp (no material change). The guard changes it by −1.00 pp (only S02 at 1.0 s is material). Continuous filtering is therefore the correct signal path, with no accuracy effect here; the guard is kept for signal validity rather than accuracy.
+The step from 79.28 % to 87.38 % at 1.0 s is a decomposition with several parts (`reports/v1_vs_v2/flagship.csv`). The sampling-rate correction (fs 250 to 256 Hz in the features) contributes +8.04 pp at 1.0 s (+6.91 pp at 2.0 s) and is positive in every subject, largest where the legacy accuracy is lowest (S02 +18.47 pp). The build (channels, the trial-id leak, six fewer clean windows) contributes −1.83 pp, almost all on S02 (−8.03 pp). Filter mode (per-window to continuous) changes accuracy by +0.37 pp (no material change). The guard changes the cohort mean by −1.00 pp (`d_guard`); the change is material only on S02 at 1.0 s (−4.50 pp, cause not established), while S04 (−0.10, −0.10 pp) and S05 (−0.41 and −0.31 pp at 1.0 and 2.0 s) move slightly. Continuous filtering is therefore the correct signal path, with no accuracy effect here; the guard is kept for signal validity rather than accuracy.
 
 ### 3.2 Edge effects and filter bank
 
@@ -86,11 +86,16 @@ The filter bank (Table 3) changes the five-class result. The narrow harmonic ban
 
 **Table 3.** Filter banks, five classes, cohort means of S01–S05 (%). Data source: `data/processed_continuous_p17/`, shared quality, ten repeats.
 
-| Bank | 1.0 s | 2.0 s |
-|---|---|---|
-| base (five FBCSP sub-bands) | 87.65 | 89.57 |
-| harm (base + harmonics, k = 1..3) | 94.29 | 95.80 |
-| harm + mid (plus midpoints) | 94.23 | 95.45 |
+| Subject | base 1.0 s | base 2.0 s | harm 1.0 s | harm 2.0 s | harm + mid 1.0 s | harm + mid 2.0 s |
+|---|---|---|---|---|---|---|
+| S01 | 73.15 | 78.85 | 85.50 | 91.45 | 85.55 | 90.05 |
+| S02 | 73.05 | 76.63 | 86.74 | 88.16 | 86.32 | 87.84 |
+| S03 | 93.76 | 93.92 | 99.38 | 99.48 | 99.33 | 99.43 |
+| S04 | 99.38 | 99.38 | 100.00 | 100.00 | 100.00 | 100.00 |
+| S05 | 98.89 | 99.05 | 99.85 | 99.90 | 99.95 | 99.95 |
+| Mean | 87.65 | 89.57 | 94.29 | 95.80 | 94.23 | 95.45 |
+
+Per-subject rows as in `reports/n_subjects_benchmark_p17_{base,harm,harmmid}_5class.csv`; the 2.0 s column is the trial-reset rule over true trial identifiers.
 
 The harmonic gain is worded as "consistent with an SNR gain of the ±1 Hz bands at k·f, fundamentals included"; the bank contains the fundamentals, so no gain is attributed to harmonics alone. The narrow bands ring to 1.047 s, so the guard of the new build is 1.047 s, above the 0.902 s of the P16 build; the new build is written to its own folder and the P16 folder is unchanged (65 files, hash checked) [8].
 
@@ -133,7 +138,9 @@ The frequency comparison (P14) found that coherence similarity across frequencie
 
 The connectivity gate asks whether edge information adds to node power and FBCCA features. Shrinkage-LDA at 1.0 s with five repeats gives Base (75 features) 73.75 %, Base + Ec 77.57 % and Ec alone 48.59 % (cohort means of subject means computed for this report from `reports/connectivity_gate_benchmark.csv`, `k_select = 0`). The gate does not pass: none of the three responders gains at least 2 pp (S03 +1.22, S04 +0.10, S05 −1.70 pp); S01 (+16.30) and S02 (+3.16) gain. The reference cohort result is R-14: 77.6 % for Base + Ec [3].
 
-The within-subject GNN (`nodes+F` and `nodes+coh+F`, three repeats) gives cohort means of 86.81 % and 86.98 % at 1.0 s (`reports/within_gnn/summary.csv`). The reference values (R-15) for S02, S03 and S05 are reproduced within tolerance on 11 of 12 subject cells. One cell is not: `nodes+F` on S02 at 2.0 s gives 37.07 % against the original's 46.1 %, and all three repeats fall below. Sebastian accepted this as a documented deviation (B007; cause not established) [10, 14]. Train accuracy is above the original's on all graded cells; the definition is the same, so the cause (device or random-number stream) is open.
+Two GNN results must be kept apart. The legacy GNN of P15 (legacy folders, fs 250, three repeats, CPU) is the one compared with the original's R-15: on S02, S03 and S05 the reference is reproduced within tolerance on 11 of 12 subject cells, and one cell is not, `nodes+F` on S02 at 2.0 s, 37.07 % against the original's 46.1 % (all three repeats fall below; `reports/gnn_benchmark.csv`). Sebastian accepted this as a documented deviation (B007; cause not established) [10, 14]. Its cohort mean at 1.0 s for `nodes+F` over S01–S05 is 64.33 % (computed for this report from the same CSV). Train accuracy of the legacy GNN is above the original's on all graded cells; the definition is the same, so the cause (device or random-number stream) is open.
+
+The P23 within-subject GNN (continuous build, seven common channels, 1.0 s, three-seed ensemble, `reports/within_gnn/summary.csv`) has no R-15 target; it is compared only with the P23 LOSO rows and the classical references. Its cohort means are 86.81 % (`nodes+F`) and 86.98 % (`nodes+coh+F`). Per seed, the `nodes+F` cohort means are 85.42, 85.21 and 86.01 % (seeds 42, 43, 44; `reports/within_gnn/seeds.csv`).
 
 ### 3.6 Leave-one-subject-out and within-subject reference
 
@@ -151,9 +158,20 @@ Table 6 gives the cohort means at 1.0 s on the seven common channels (`reports/l
 | gnn nodes+F, subject normalization (offline upper bound) | LOSO | 90.32 |
 | gnn nodes+F | within subject | 86.81 |
 
-For the classical flagship, LOSO lda is below the matched within-subject reference for S01, S02 and S05 (z −2.74, −2.56 and −2.68 standard errors of the difference, SE_Δ). For the GNN, the reference statement "LOSO below within" is **direction not observed**: the LOSO cohort mean (89.22 %) is above the within-subject one (86.81 %). The GNN is at or above lda on S02 and S05 (`nodes+F` exceeds lda by 4.66 pp on S02, SE_Δ 2.28, and by 2.06 pp on S05, SE_Δ 0.77); we report this as "GNN ≥ lda on S02/S05", not as a general advantage.
+For the classical flagship, LOSO lda is below the matched within-subject reference for S01, S02 and S05 (z −2.74, −2.56 and −2.68 standard errors of the difference, SE_Δ). For the GNN, the reference statement "LOSO below within" is **direction not observed**: the LOSO cohort mean (89.22 %) is above the within-subject one (86.81 %). The three-seed ensemble of `nodes+F` exceeds lda by 4.66 pp on S02 (SE_Δ 2.28) and by 2.06 pp on S05 (SE_Δ 0.77). The advantage on S02 is an ensemble effect: per seed the difference is +3.27 pp against a threshold of 2·SE_Δ = 4.62 pp (a tie); on S05 it survives per seed (+2.01 pp against 1.55 pp). We therefore report "GNN ≥ lda on S02/S05" with this qualifier, and not as a general advantage (P23 directions, `mas/state/reports/P23.md`).
 
-On the 39-subject cohort (S01–S040 without S020), the comparable classical result is the 8-channel `all` set on 32 matched subjects: fbcca 75.80 %, lda 83.42 %, lda_subjnorm 86.13 % (`reports/loso_w1_all/summary.csv`). The `common` rows of that cohort are three-channel results (POz, PO4, O1; 64.56, 72.54 and 75.16 %), not comparable with cohort 5 or with within-subject results (`reports/loso_w1/summary.csv`). For LOSO lda against within on that cohort, the direction is **direction not observed**: 22 of 32 subjects lie at or below within plus 1 pp (mean 85.67 % against 86.51 %) [11].
+**Table 6b.** Per-subject LOSO and within-subject accuracy at 1.0 s, S01–S05, seven common channels (%). Data source: built continuous folders `processed_continuous/w1_s0.25`, session OO; `loso_w1_s01-s05`, `loso_w1_p22_common` and `loso_gnn`, `within_gnn` summaries (GNN rows are three-seed ensembles).
+
+| Subject | fbcca (LOSO) | lda (LOSO) | lda_subjnorm (LOSO, offline upper bound) | within_lda | GNN nodes+F, pooled (LOSO, 3-seed ensemble) | GNN nodes+F (within, 3-seed ensemble) |
+|---|---|---|---|---|---|---|
+| S01 | 58.68 | 69.26 | 74.85 | 75.88 | 70.15 | 70.88 |
+| S02 | 68.01 | 76.24 | 83.07 | 82.02 | 80.90 | 76.55 |
+| S03 | 91.07 | 96.07 | 95.61 | 97.31 | 96.37 | 90.32 |
+| S04 | 98.80 | 99.55 | 99.70 | 99.79 | 99.70 | 98.50 |
+| S05 | 95.43 | 96.91 | 96.91 | 98.97 | 98.97 | 97.79 |
+| Mean | 82.40 | 87.61 | 90.03 | 90.79 | 89.22 | 86.81 |
+
+On the 39-subject cohort (S01–S040 without S020), the 8-channel `all` set has 39 subject rows per method; its means are fbcca 75.80 %, lda 83.42 % and lda_subjnorm 86.13 % (offline upper bound; `reports/loso_w1_all/summary.csv`). The comparison with within-subject results uses the 32 matched subjects only (lda 85.67 % against within 86.51 %, below). The `common` rows of that cohort are three-channel results (POz, PO4, O1; 64.56, 72.54 and 75.16 %), not comparable with cohort 5 or with within-subject results (`reports/loso_w1/summary.csv`). For LOSO lda against within on that cohort, the direction is **direction not observed**: 22 of 32 subjects lie at or below within plus 1 pp (mean 85.67 % against 86.51 %) [11].
 
 **Warm-up.** Normalizing a held-out subject from its first K unlabelled trials (online variant) is far worse than whole-session normalization at small K: warm-up minus no normalization is −25.03 pp at K = 1 and −16.95 pp at K = 2. At K = 10 the cohort means are 88.19 % (none), 89.78 % (warm-up) and 90.69 % (whole session, offline upper bound) (`reports/loso_warmup/cohort.csv`) [11].
 
@@ -170,15 +188,53 @@ Table 7 gives the cohort means of the window sweep on the continuous build (`rep
 | 2.0 | 95.63 / 48.82 | 92.11 / 44.60 | 95.51 / 48.43 |
 | 4.0 | 98.03 / 28.93 | 96.86 / 28.15 | 83.10 / 21.56 |
 
+**Table 7b.** Per-subject accuracy (%) and window-level ITR (bits/min) of the two sweep methods that have a per-subject table in `reports/window_sweep/summary.csv` (continuous build, OO, five stimulus classes).
+
+| Subject | LDA 0.5 s | LDA 1.0 s | LDA 2.0 s | LDA 4.0 s | compact_eegnet 0.5 s | compact_eegnet 1.0 s | compact_eegnet 2.0 s | compact_eegnet 4.0 s |
+|---|---|---|---|---|---|---|---|---|
+| S01 | 64.26 | 75.88 | 87.58 | 95.00 | 69.87 | 84.12 | 89.42 | 77.00 |
+| S02 | 60.66 | 77.36 | 90.68 | 95.16 | 42.96 | 77.48 | 89.32 | 39.56 |
+| S03 | 90.50 | 97.31 | 99.88 | 100.00 | 93.42 | 98.94 | 98.80 | 98.92 |
+| S04 | 98.28 | 99.79 | 100.00 | 100.00 | 98.93 | 99.85 | 100.00 | 100.00 |
+| S05 | 95.31 | 99.09 | 100.00 | 100.00 | 98.55 | 100.00 | 100.00 | 100.00 |
+| Mean | 81.80 | 89.89 | 95.63 | 98.03 | 80.75 | 92.08 | 95.51 | 83.10 |
+
 Accuracy rises with window length for LDA and FBCCA. The ITR is highest at 0.5 s for every method, so short windows carry the most information per minute. The compact_eegnet value at 4 s is driven by S02 (39.56 %), where two folds restored an early-stopping state from epoch 1–3; these single-repeat cells measure an early-stopping failure on that subject, not the network's accuracy at that length [12]. At 1.0 s the networks ccnn, compact_eegnet and eegnet reach 91.25, 92.08 and 89.69 % (single repeat; differences under 3 pp are not distinguishable) [12]. Dynamic stopping with thresholds chosen in-sample gives 61.53 bits/min for LDA at 0.5 s against 60.23 for the time-matched single window; this is descriptive [12].
 
-The pseudo-online detector, trained on OO and replayed on mOO, reaches a mean accuracy of 89.00 % with five classes (27.5 % false activations) and 74.00 % with six classes (5.0 % false activations). The two runs have different class sets, so they are not a before/after pair. Most missed stimulus periods of the six-class run are in S01 (50.00 %) and S02 (52.50 %) [12].
+The pseudo-online detector (`ccnn`, 0.5 s windows, `--window-sec 0.5`), trained on OO and replayed on mOO, reaches a mean accuracy of 89.00 % with five classes (27.5 % false activations) and 74.00 % with six classes (5.0 % false activations). Per subject (S01–S05), five classes: 60.00, 90.00, 97.50, 100.00 and 97.50 %, with false activations of 52.5, 45.0, 20.0, 0.0 and 20.0 %; six classes: 35.00, 47.50, 92.50, 100.00 and 95.00 %, with false activations of 17.5, 7.5, 0.0, 0.0 and 0.0 % (`reports/pseudo_online/summary_ccnn_{5class,6class}.csv`). The two runs have different class sets, so they are not a before/after pair. Most missed stimulus periods of the six-class run are in S01 (50.00 %) and S02 (52.50 %) [12].
+
+### 3.8 Augmentation A/B, per subject (grouped folds, P11)
+
+**Table 8.** Augmentation A/B, accuracy (%), per subject, leak-free grouped folds, seed 42, CPU, seven channels. Data source: `reports/augmentation_ab_eegnet.csv`, `reports/augmentation_ab_compact_cnn.csv`, `reports/augmentation_ab_shallow_conv_net.csv`. Parameter counts (7 × 256, five classes): EEGNet 2,349; ShallowConvNet 14,485; Compact-CNN (`compact_cnn`) 56,021 (`reports/network_parameter_counts.csv`).
+
+| Network | Subject | 1.0 s OFF | 1.0 s ON | 1.0 s Δ | 2.0 s OFF | 2.0 s ON | 2.0 s Δ |
+|---|---|---|---|---|---|---|---|
+| EEGNet | S01 | 30.50 | 32.50 | +2.00 | 36.00 | 35.50 | −0.50 |
+| EEGNet | S02 | 26.02 | 29.08 | +3.06 | 27.04 | 31.63 | +4.59 |
+| EEGNet | S03 | 54.82 | 64.47 | +9.65 | 59.90 | 71.07 | +11.17 |
+| EEGNet | S04 | 98.48 | 100.00 | +1.52 | 98.48 | 98.98 | +0.50 |
+| EEGNet | S05 | 82.00 | 90.00 | +8.00 | 85.00 | 92.50 | +7.50 |
+| EEGNet | Mean | 58.36 | 63.21 | +4.85 | 61.28 | 65.94 | +4.65 |
+| Compact-CNN | S01 | 22.50 | 23.50 | +1.00 | 23.50 | 27.50 | +4.00 |
+| Compact-CNN | S02 | 27.55 | 18.88 | −8.67 | 26.53 | 22.96 | −3.57 |
+| Compact-CNN | S03 | 40.10 | 57.87 | +17.77 | 44.67 | 65.48 | +20.81 |
+| Compact-CNN | S04 | 51.78 | 98.48 | +46.70 | 57.36 | 98.48 | +41.12 |
+| Compact-CNN | S05 | 43.50 | 54.50 | +11.00 | 54.00 | 67.00 | +13.00 |
+| Compact-CNN | Mean | 37.09 | 50.65 | +13.56 | 41.21 | 56.28 | +15.07 |
+| ShallowConvNet | S01 | 54.00 | 55.50 | +1.50 | 58.00 | 62.50 | +4.50 |
+| ShallowConvNet | S02 | 30.61 | 35.71 | +5.10 | 32.65 | 36.73 | +4.08 |
+| ShallowConvNet | S03 | 85.28 | 88.32 | +3.04 | 90.86 | 94.42 | +3.56 |
+| ShallowConvNet | S04 | 98.48 | 99.49 | +1.01 | 98.98 | 98.98 | 0.00 |
+| ShallowConvNet | S05 | 95.00 | 97.50 | +2.50 | 97.00 | 99.00 | +2.00 |
+| ShallowConvNet | Mean | 72.67 | 75.30 | +2.63 | 75.50 | 78.33 | +2.83 |
+
+Reference values R-9b of the original project (cohort Δ at 1.0 s): EEGNet +2.01 pp, Compact-CNN +17.16 pp, ShallowConvNet +2.53 pp [3].
 
 ## 4. Discussion
 
-**The leak and its size.** Window-level cross-validation inflates the classical flagship by 4.06 pp at 1.0 s and 4.96 pp at 2.0 s on five subjects. The inflation is reproduced on every subject and is largest on S02 (−10.21 pp), where approximate trial identifiers survive [5]. The network inflation in the original is not reproduced here. The EEGNet drop of −5.57 pp at seed 42 falls within a training-seed range of 16.75 pp on S03, and 13 of 14 out-of-band augmentation cells are explained by seed variance; the one cell that is not (Compact-CNN S03 2.0 s ON, 129, 127 and 129 of 197 windows against the reference window's lower edge of 131) is a documented deviation [5, 6, 14]. The leaky numbers are therefore not a basis for claims about networks.
+**The leak and its size.** Window-level cross-validation inflates the classical flagship by 4.06 pp at 1.0 s and 4.96 pp at 2.0 s on five subjects. The inflation is reproduced on every subject and is largest on S02 (−10.21 pp), where approximate trial identifiers survive [5]. The network inflation in the original is not reproduced here. Like for like, the three-base EEGNet cohort drop is −2.71 pp (OFF) and −2.82 pp (ON), against the seed-42 cohort drop of −5.57 pp; on S03 the seed-42 drop of −20.81 pp is of the same order as the three-base training-seed range of 16.75 pp (`mas/state/reports/P11.md`). 13 of 14 out-of-band augmentation cells are explained by seed variance; the one that is not (Compact-CNN S03 2.0 s ON: 129, 127 and 129 of 197 windows over three seeds, against a smallest in-band count of 131) is a documented deviation [5, 6, 14]. The leaky numbers are therefore not a basis for claims about networks.
 
-**Augmentation.** Leak-free augmentation helps all three networks on average, most for Compact-CNN (+13.56 pp at 1.0 s, against the original's +17.16 pp). The gain is not a ranking of networks: the cohort means are on five subjects and one seed set for the legacy networks, with standard seed ranges of up to 8.23 pp per subject for EEGNet in the LOSO study [6, 11].
+**Augmentation.** Leak-free augmentation helps all three networks on average, most for Compact-CNN (+13.56 pp at 1.0 s, against the original's +17.16 pp). The gain is not a ranking of networks: the cohort means are on five subjects, and the legacy networks have one seed set in the A/B (Table 8; the per-subject seed ranges are in the P11 record) [6].
 
 **Continuous filtering and sampling rate.** The largest corrected change is the sampling rate, not the filter. Continuous filtering improves the signal path (no window-edge effects) but does not change accuracy here, which is the expected result for a filter that acts on signal validity rather than on class information. The narrow harmonic bank carries the gain of the five-class result: its improvement is consistent with an SNR gain in the ±1 Hz bands at the harmonic frequencies, but the bank contains the fundamentals and the ablation (fundamentals only) is still open.
 
@@ -186,17 +242,17 @@ The pseudo-online detector, trained on OO and replayed on mOO, reaches a mean ac
 
 **Confusions.** Table 4 shows that most stimulus errors of the six-class model go to the rest class, which is consistent with the rest class absorbing weak responses. The low-frequency pair (10.91 and 8.57 Hz) is the most confused among the stimulus classes, as R-3 reports for the legacy model.
 
-**Generalization.** Test accuracy is far below train accuracy on S01 and S02 for the legacy networks (PF-30: 28.00 and 27.04 % test against 83.25 and 81.38 % train for EEGNet, OFF) and for the LOSO GNN (gaps of 13.8 to 27.8 pp). This is a generalization failure, not an optimization failure. On S03 to S05 the LOSO test accuracy is above train accuracy by 1.4 to 5.6 pp. LOSO on five subjects gives the same ordering as within subject for the classical methods, and the GNN ordering is reported as direction not observed [11, 13].
+**Generalization.** Test accuracy is far below train accuracy on S01 and S02 for the legacy networks and for the LOSO GNN (gaps of 13.8 to 27.8 pp). For EEGNet with augmentation off, the legacy leaky values are 28.00 and 27.04 % test against 83.25 and 81.38 % train (`reports/legacy_leaky/augmentation_ab_eegnet.csv`, P10); the grouped values are 30.50 and 26.02 % test against 82.99 and 79.60 % train (`reports/augmentation_ab_eegnet.csv`, Table 8). This is a generalization failure, not an optimization failure. On S03 to S05 the LOSO test accuracy is above train accuracy by 1.4 to 5.6 pp. For lda the LOSO cohort mean is below the matched within-subject reference (§3.6); for the GNN the reference direction is not observed [11, 13].
 
 **Limitations.** The cohort has five subjects (39 for LOSO only in the classical study), one OO session per subject for the main results, and one or three training seeds for the networks. Several differences are a few windows; one window is 0.51 pp at 197 windows. The sequential forward selection row (ours 89.85 / 95.94, R-4 84.77 / 93.40) is ours, not a reproduction. Within-subject GNN training reached the 150-epoch cap in 19 of 50 folds, a stated limitation. The trial-level permutation statistics are reported with their resolution limits [5, 9, 10].
 
 ## 5. Conclusion
 
-Trial-grouped cross-validation corrects the legacy leak: the classical flagship is 79.28 % at 1.0 s and 82.61 % at 2.0 s on five subjects, against 83.33 % and 87.57 % for the leaky protocol (`reports/n_subjects_benchmark.csv`). With the recorded sampling rate and continuous filtering the flagship reaches 87.38 % (`reports/v1_vs_v2/flagship.csv`), and a narrow harmonic bank 94.29 % (`reports/n_subjects_benchmark_p17_harm_5class.csv`). Under LOSO, Shrinkage-LDA reaches 87.61 % and the within-subject reference 90.79 % on the common channels; the connectivity-edge GNN reaches 89.22 % under LOSO and 86.81 % within subject. Each result is for five subjects, and the deviations of §3 and §4 are reported rather than removed. The next steps are the open items of the progress report: the sequential forward selection configuration, the smoothing rule on legacy folders, the cause of the single unreproduced cells, and a second cohort.
+Trial-grouped cross-validation corrects the legacy leak: the classical flagship is 79.28 % at 1.0 s and 82.61 % at 2.0 s on five subjects, against 83.33 % and 87.57 % for the leaky protocol (`reports/n_subjects_benchmark.csv`). The corrected continuous build reaches 87.38 % (`reports/v1_vs_v2/flagship.csv`), and a narrow harmonic bank 94.29 % (`reports/n_subjects_benchmark_p17_harm_5class.csv`). Under LOSO, Shrinkage-LDA reaches 87.61 % and the within-subject reference 90.79 % on the common channels; the connectivity-edge GNN, as a three-seed ensemble, reaches 89.22 % under LOSO and 86.81 % within subject. Each result is for five subjects, and the deviations of §3 and §4 are reported rather than removed. The next steps are the open items of the progress report: the sequential forward selection configuration, the smoothing rule on legacy folders, the cause of the single unreproduced cells, and a second cohort.
 
 ## 6. References
 
-1. Chailloux Peguero, J. D., et al. (2023). SSVEP detection assessment by combining visual stimuli paradigms and no-training detection methods. *Frontiers in Neuroscience*, 17:1142892. Cited as given in `mas/01_DATA_SPEC.md` §3; the specification was opened, the paper was not.
+1. Chailloux Peguero et al. (2023). SSVEP detection assessment by combining visual stimuli paradigms and no-training detection methods. *Frontiers in Neuroscience*, 17:1142892. Cited as given in `mas/01_DATA_SPEC.md` §3; the specification was opened, the paper was not.
 2. Project data specification, `mas/01_DATA_SPEC.md` §3 and §6 (event codes, paradigms, class conventions).
 3. Original project reference values R-1 to R-16, `mas/04_REFERENCE_RESULTS.md`.
 4. Project rules R1–R11 and the era matrix, `mas/RULES.md`.
@@ -213,7 +269,7 @@ Trial-grouped cross-validation corrects the legacy leak: the classical flagship 
 
 ## Sources
 
-1. PAPER — Chailloux Peguero, J. D., et al. (2023). SSVEP detection assessment by combining visual stimuli paradigms and no-training detection methods. Frontiers in Neuroscience 17:1142892. DOI not given in the spec. Opened: the specification `mas/01_DATA_SPEC.md` §3 (not the paper). Used for: the paradigm reference, as the spec gives it.
+1. PAPER — Chailloux Peguero et al. (2023). SSVEP detection assessment by combining visual stimuli paradigms and no-training detection methods. Frontiers in Neuroscience 17:1142892. DOI not given in the spec. Opened: the specification `mas/01_DATA_SPEC.md` §3 (not the paper). Used for: the paradigm reference, as the spec gives it.
 2. DATA — `mas/01_DATA_SPEC.md` §3 and §6 (opened). Used for: event codes, paradigms, class conventions. The inventory of §4 is taken from `mas/state/blockers/B005-inventory-10-of-23-files.md`.
 3. DATA — `mas/04_REFERENCE_RESULTS.md`, R-1 to R-16 and the tolerance table (opened). Used for: the original project's reference values, labelled R-x.
 4. RULE — `mas/RULES.md`, R1–R11 and the era matrix (loaded in the project instructions). Used for: the legacy/corrected labels and the rules applied.
@@ -227,3 +283,5 @@ Trial-grouped cross-validation corrects the legacy leak: the classical flagship 
 12. DATA — `reports/window_sweep/summary.csv`, `reports/nn_sweep/summary.csv`, `reports/pseudo_online/summary_ccnn_5class.csv`, `reports/pseudo_online/summary_ccnn_6class.csv`, `reports/dynamic_stopping/best_threshold.csv`. Used for: §3.7, Table 7. The dynamic-stopping comparator 60.23 bits/min is from `mas/state/reports/P20.md`.
 13. HANDOFF — `mas/state/reports/P13.md`, `mas/state/reports/P14.md`, `mas/state/reports/P18.md` (quoted through the research log for the numbers, not opened line by line in this run). Used for: the permutation and frequency-comparison wording.
 14. DECISION — `mas/state/decisions.md` (rows 2026-10-24 to 2026-10-29); `mas/state/blockers/B003-cohort-beyond-S05.md`, `B005-inventory-10-of-23-files.md`, `B006-p11-compact-cnn-s03-2s-on.md`, `B007-p15-gnn-s02-2s-systematic.md`. Used for: cohort decisions, accepted deviations D-x and blockers.
+
+Not opened in this run: the phase run files (`05_run.md`, `06_verify.md`, `07_review.md`) of P00–P23; the phase reports P00–P22 (their content is quoted through the previous research log and `mas/state/decisions.md`); the phase report P23 beyond its header; the original paper of the paradigm reference (only the specification was opened); the legacy `reports/logs/` files, which are cited as the phase reports cite them. The per-seed and per-subject values in §3.6, §3.8 and Table 7b were read from the CSVs named above.

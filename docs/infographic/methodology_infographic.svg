@@ -72,9 +72,9 @@
   <text x="165" y="648" font-size="15" font-weight="bold" text-anchor="middle" fill="#111111">Leak (legacy → grouped)</text>
   <text x="165" y="684" font-size="26" font-weight="bold" text-anchor="middle" fill="#111111">83.33 → 79.28 %</text>
   <text x="165" y="710" font-size="14" text-anchor="middle" fill="#333333">1.0 s flagship, mean</text>
-  <text x="165" y="734" font-size="13" text-anchor="middle" fill="#333333">inflation −4.06 pp (1.0 s)</text>
+  <text x="165" y="734" font-size="13" text-anchor="middle" fill="#333333">change −4.06 pp (1.0 s)</text>
   <text x="165" y="752" font-size="13" text-anchor="middle" fill="#333333">−4.96 pp (2.0 s)</text>
-  <text x="165" y="778" font-size="11" text-anchor="middle" fill="#555555">reports/n_subjects_benchmark.csv</text>
+  <text x="165" y="778" font-size="11" text-anchor="middle" fill="#555555">reports/n_subjects_benchmark.csv; cv_leakage_demo.csv</text>
 
   <rect x="315" y="620" width="270" height="170" rx="6" fill="#eef7ee" stroke="#2e7d32" stroke-width="2"/>
   <text x="450" y="648" font-size="15" font-weight="bold" text-anchor="middle" fill="#111111">Corrected build (P16)</text>
@@ -95,8 +95,8 @@
   <rect x="900" y="620" width="270" height="170" rx="6" fill="#eef7ee" stroke="#2e7d32" stroke-width="2"/>
   <text x="1035" y="648" font-size="15" font-weight="bold" text-anchor="middle" fill="#111111">GNN (P23)</text>
   <text x="1035" y="684" font-size="26" font-weight="bold" text-anchor="middle" fill="#111111">89.22 %</text>
-  <text x="1035" y="710" font-size="14" text-anchor="middle" fill="#333333">LOSO, nodes+F, pooled</text>
-  <text x="1035" y="734" font-size="13" text-anchor="middle" fill="#333333">within subject 86.81 %</text>
+  <text x="1035" y="710" font-size="14" text-anchor="middle" fill="#333333">LOSO, nodes+F, 3-seed ensemble</text>
+  <text x="1035" y="734" font-size="13" text-anchor="middle" fill="#333333">within subject 86.81 % (3-seed)</text>
   <text x="1035" y="752" font-size="13" text-anchor="middle" fill="#333333">direction not observed (LOSO vs within)</text>
   <text x="1035" y="778" font-size="11" text-anchor="middle" fill="#555555">reports/loso_gnn/summary.csv</text>
 
@@ -121,7 +121,7 @@
   <text x="735" y="870" font-size="26" font-weight="bold" text-anchor="middle" fill="#111111">89.00 %</text>
   <text x="735" y="896" font-size="13" text-anchor="middle" fill="#333333">five classes, train OO, replay mOO</text>
   <text x="735" y="920" font-size="13" text-anchor="middle" fill="#333333">74.00 % with six classes (rest class)</text>
-  <text x="735" y="942" font-size="13" text-anchor="middle" fill="#333333">single repeat; ccnn at 1 s</text>
+  <text x="735" y="942" font-size="13" text-anchor="middle" fill="#333333">ccnn, 0.5 s windows; single repeat</text>
   <text x="735" y="964" font-size="11" text-anchor="middle" fill="#555555">reports/pseudo_online/summary_ccnn_5class.csv</text>
 
   <rect x="900" y="806" width="270" height="170" rx="6" fill="#eef7ee" stroke="#2e7d32" stroke-width="2"/>
@@ -136,7 +136,7 @@
   <text x="30" y="1024" font-size="20" font-weight="bold" fill="#111111">4 · Limits and open items</text>
   <rect x="30" y="1040" width="1140" height="150" rx="6" fill="#fff4e0" stroke="#b36b00" stroke-width="1.5"/>
   <text x="46" y="1066" font-size="14" fill="#333333">· Five subjects; results are descriptive for this cohort. The 39-subject LOSO cohort is a separate data source.</text>
-  <text x="46" y="1090" font-size="14" fill="#333333">· Accepted deviations: sequential forward selection row (R-4, ours 89.85 / 95.94); Compact-CNN S03 2.0 s ON (B006); GNN S02 2.0 s (B007).</text>
+  <text x="46" y="1090" font-size="14" fill="#333333">· Accepted deviations: sequential forward selection row (R-4; ours, legacy leaky 89.85 / 95.94); Compact-CNN S03 2.0 s ON (B006); GNN S02 2.0 s (B007).</text>
   <text x="46" y="1114" font-size="14" fill="#333333">· Open: the smoothing rule on legacy folders (trial-reset vs i % 5); the cause of the unreproduced cells; the fundamentals-only filter ablation.</text>
   <text x="46" y="1138" font-size="14" fill="#333333">· 6-class results are not compared with 5-class accuracy; ITR uses N = 5 for the six-class pseudo-online run.</text>
   <text x="46" y="1162" font-size="14" fill="#333333">· Trial-level permutation results are inconclusive where a flip crosses p = 0.05 between permutation counts (R7).</text>
