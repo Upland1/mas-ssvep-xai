@@ -75,6 +75,8 @@ def test_symlinks_cover_reports_models_and_raw(nb):
 def _commands(nb):
   out = []
   for s in code_cells(nb):
+    if "benchmark_gnn_loso" in s:  # section 10b (P23): tests/test_p23_notebook.py
+      continue
     for ln in s.splitlines():
       m = re.match(r"!python -m (scripts[\w.]*)\s*(.*)$", ln.strip())
       if m:
