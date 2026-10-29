@@ -7,3 +7,4 @@
 | 2 Assignment | orchestrator | 2026-10-28 | 00_assignment.md READY; P23.1–P23.3 + P22 C-1, C-3, C-6 | 1 | 03_ROADMAP P23 | none | ml-engineer added for the benchmark_loso carry-forwards |
 | 3 Research | orchestrator | 2026-10-28 | skipped (P15 definitions, roadmap) | 1 | | none | |
 | 4 Plan | orchestrator | 2026-10-28 | 02_plan.md READY (auto); settled 1–9; order connectivity-stats → ml-engineer → deep-learning → data-signal | 1 | PF-28/30/32..37, R-15, R-16 | none | roadmap budget ≈ 75 min CPU for cohort 5 |
+| 5 Build (connectivity-stats) | connectivity-stats | 2026-10-29 | 03_changes READY (7349b5b, e1fd733, 47768d4); suite `1450 passed` (13.5 min); features ≈ 0.2–0.3 s per subject, no cache | 1 | R3, R4, R6 | none | NEW graph_features_subject.py (graph_inputs.py name taken); legacy 250 Hz path pinned by a test |
