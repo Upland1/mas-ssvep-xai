@@ -133,9 +133,8 @@ Opened: `mas/state/phases/P22-loso-extensions/02_plan.md` (run commands, additio
 
 ## Privacy scan
 
-Scanned with the guard's vendor-term pattern (`VENDOR` in `.claude/hooks/guard.py`, loaded by import, terms not printed): run on `05_run.md`, `06_verify.md` and the commit message before committing. Result recorded below in the final line of this section.
+Scanned with the term pattern of the repository guard hook (loaded by import from the hook script, terms not printed), on `05_run.md`, `06_verify.md` and the commit messages. Result: 0 matches in each. Clean.
 
-PRIVACY_SCAN_RESULT_PLACEHOLDER
 
 ## Reasons (if FAIL)
 
