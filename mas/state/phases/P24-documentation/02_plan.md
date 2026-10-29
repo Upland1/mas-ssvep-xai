@@ -114,6 +114,21 @@ single `make all` that regenerates every CSV from the raw recordings on a clean 
 # 3. document-number cross-check (each number in README, report, progress report, infographic → CSV/log)
 ```
 
+### Review additions (07_review.md round 2, a3b3c6e; copied verbatim)
+
+#### Binding run items for the verifier's `make all` comparison (for 02_plan.md)
+
+- **V-1 Clone.** A fresh clone at the fixed head; empty `mas/state/scratch/make_stamps/`; `RAW_DIR` = the main raw folder; `NN_DEVICES="cpu cuda"` (so `eegnet_benchmark_cuda.csv` is produced); torch intra-op threads left at the default of the recorded runs on the same 16-core workstation (record `torch.get_num_threads()` in the run log); p23 sets `--threads 2` itself.
+- **V-2 Path mapping (Era A).** Clone `reports/legacy_leaky/<f>` is compared with the main-tree `reports/<f>` for the Era-A files P11 did not rerun: `flagship_S01..S05.csv`, `eegnet_benchmark_cpu.csv`, `eegnet_benchmark_cuda.csv`, `compact_cnn_benchmark_cpu.csv`, `shallow_convnet_benchmark_cpu.csv`, `classification_report_*.txt`, `feature_selection_sfs_{audit,diagnostics}_S03.csv`. Clone `reports/legacy_leaky/{n_subjects_benchmark, feature_selection_ablation_S03, feature_space_benchmark_S03, augmentation_ab_*}.csv` against the main-tree files of the same name under `reports/legacy_leaky/`. `five_subjects_benchmark.csv`, `sklearn_suite_S03.csv` and every Era-B/C file at the same path. Before comparing, confirm from each main-tree `.meta.txt` that the file is the leaky one it is mapped to.
+- **V-3 Columns.** Compare on the intersection of columns and list columns present in only one file. Expected and accepted: the 18 NBS columns in the clone's P13/P16 cohort summaries and `connectivity_edges*/` npz keys, the 4 NBS columns in the clone's P14 pairwise files. Any other column-set difference is an anomaly to explain.
+- **V-4 Exact (CPU).** Value equality (|Δ| = 0 after parsing) for: every classical and connectivity CSV (seeded permutations), P00/P01 inventories, the P02 arrays `data/processed/<S>/*.npy` (sha256), the built roots `data/processed_per_window`, `data/processed_continuous`, `_p17`, `_p19_raw`, `_p19_both` and `data/processed_continuous/w<L>_s0.25/S01..S05` (sha256 of every `.npy`; `windows_meta.json` excluded, V-3 of metadata), the classical rows of `window_sweep`, `dynamic_stopping*`, `loso_*`, `loso_warmup`. CPU networks (p08 cpu, p09, p10, p11 A/B, p15 GNN, p23 GNN): exact if the thread count equals the recorded one; otherwise report the thread count and apply V-5.
+- **V-5 Tolerance (GPU, or CPU networks at another thread count).** `mas/04_REFERENCE_RESULTS.md` network rule: per subject ±5 pp, cohort mean ±3 pp, no sign flip of a cohort A/B delta or of a direction the reports state (P20 ITR peak at 0.5 s; P21 LOSO < within on matched subjects; ccnn/eegnet ordering not claimed). Applies to `eegnet_benchmark_cuda.csv`, `nn_sweep/`, the `cnn (compact_eegnet)` rows of `window_sweep/summary.csv` and `dynamic_stopping/`, `pseudo_online/`, and the network rows of `loso_w1_s01-s05{,_seed43,_seed44}/`. List every cell outside tolerance; none is "fixed".
+- **V-6 Not compared** (not produced by `all`): `reports/loso_w1`, `loso_w1_all`, `loso_w1_fbcca_all`, `window_sweep_w1_all` (`loso-all`); the S06–S040 built folders; `baselines/v1_*` byte content (the clone freezes its own tag; compare its CSVs through V-2 instead); logs, `.meta.txt`, `*_config.json`, `windows_meta.json`.
+- **V-7 Exits.** Every recipe exits 0 except the p07 demo prefixed `-` (exit 1 by design); `compare_v1_v2 --check-regression` must exit 0.
+- **V-8 Runtime.** Record per-phase wall time from the stamps; p13, p14, p16 run longer than the table because of the NBS pass (V-3); stop and ask only if the projected total exceeds Sebastian's authorisation (decisions 2026-10-29).
+
+Verdict: PASS
+
 ## Acceptance checks
 
 1. The reviewer has checked every number in the documents against a CSV.
