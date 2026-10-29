@@ -1,6 +1,6 @@
 # P24 · 03 · Changes — scribe
 
-Status: BLOCKED (two deliverables and the test file are not written; see "Blocked")
+Status: READY (documents, fix round 1 applied; see "Fix round 1". The test file `tests/test_p24_docs.py` is owned by the test agent)
 Author: scribe
 Reads: 00_assignment.md, 01_brief.md (not re-read in this run), 02_plan.md (settled 1–8, work split row 2, tests), 03_changes_data-signal.md (targets, runtime table), mas/03_ROADMAP.md P24, mas/CITING.md, mas/01_DATA_SPEC.md §3 and §6, mas/04_REFERENCE_RESULTS.md (all), mas/state/decisions.md (all rows), mas/state/blockers/B001–B007 (all), README.md (before), RESEARCH_LOG.md (before, all 528 lines), docs/report/v1/report.md (all), docs/report/v1/methodology_infographic_v1.svg (head), CHANGELOG.md (not read), reports/*.csv listed under "Numbers" (opened through a read-only script), Makefile (targets and headers), scripts/**/*.py (argparse options and docstrings read through `ast`; no script was run, no recording was read), mas/state/reports/P23.md (header only), and the phase records of P00–P22 through RESEARCH_LOG.md and decisions.md (see "Not opened").
 Branch: phase/P24-documentation
@@ -104,6 +104,30 @@ See `git log` on phase/P24-documentation (commits `docs:` and `test:` as listed 
 ## R11
 
 No consultation of `reference/ssvep-eeg-xai/` in this run (`mas/state/scratch/reference_access.log` was counted, not read beyond its line count).
+
+## Fix round 1 (review 07_review.md, 1a99104; documents only)
+
+Status after the round: READY for the documents. Still open and not the scribe's: `tests/test_p24_docs.py` (test agent) and the data-signal items F1–F4 of the same review (Makefile; the verifier re-runs p05–p10 after the fix). The report v2 text was saved by the orchestrator (42e4021); this round edits it in place.
+
+| Item | Where fixed | What changed |
+|---|---|---|
+| D1 | report §3.5, README §3.6 | legacy P15 GNN (`reports/gnn_benchmark.csv`, R-15, 37.07 vs 46.1, cohort 1.0 s nodes+F 64.33 computed) separated from the P23 within GNN (`reports/within_gnn/summary.csv`, no R-15 target) |
+| D2 | report §3.6, README §3.6, RESEARCH_LOG P21, progress §8 | cohort-39 `all` means are over 39 subject rows; 32 matched subjects only for the within comparison; lda_subjnorm labelled offline upper bound |
+| D3 | report Table 2 and caption, progress §2 table, README §3.1 | smoothing rule stated per column and per row (`cv=grouped, smoothing=trial` in `reports/n_subjects_benchmark_v2cont.meta.txt`); legacy rows `i % 5`; a′t, b, c, c′ trial reset |
+| D4 | infographic pseudo-online box, README §3.7, report §3.7, progress §7, RESEARCH_LOG P20 | pseudo-online is 0.5 s windows (`--window-sec 0.5`) |
+| D5 | report abstract | "a leave-one-subject-out differential at 2 s" removed (no CSV or record supports it) |
+| D6 | README §3.6, report §3.6, progress §9, infographic | GNN rows labelled 3-seed ensembles; per-seed cohort means (LOSO nodes+F pooled 87.69 / 88.66 / 89.06, mean 88.47; subject normalization 89.89 / 90.49 / 90.01; within 85.42 / 85.21 / 86.01; `reports/loso_gnn/seeds.csv`, `reports/within_gnn/seeds.csv`) |
+| D7 | report §3.6, README §3.6, progress §9, RESEARCH_LOG P23 | S02 gap is an ensemble effect (per seed +3.27 pp against 2·SE_Δ 4.62, a tie); S05 survives per seed (+2.01 against 1.55) |
+| D8 | RESEARCH_LOG P05, P06, P07, P10 paragraphs; report Table 1 caption; README §9 | leaky values cited to `reports/legacy_leaky/` (n_subjects_benchmark, feature_selection_ablation_S03, feature_space_benchmark_S03, augmentation_ab_eegnet); the current `reports/` files are labelled as the grouped reruns |
+| D9 | report §4, README §3.2, progress §11 item 1, RESEARCH_LOG P10, infographic limits | PF-30 values and the SFS 89.85 / 95.94 labelled legacy leaky with the path; grouped values 30.50 / 26.02 against 82.99 / 79.60 given beside them |
+| D10 | report §3.1 and §4, README §3.2 | like for like: three-base cohort drop −2.71 / −2.82 pp against the seed-42 cohort drop −5.57; S03 seed-42 drop −20.81 against the S03 range 16.75; the sweep `eegnet` seed range (8.23) removed from the legacy A/B paragraph |
+| D11 | report §3.1, README §9 | guard: material only on S02 at 1.0 s (−4.50); S04 −0.10 and S05 −0.41 / −0.31 named; "negative on S02 only" removed |
+| D12 | README §3.2, §3.4, §3.6, §3.7; report Tables 3, 6, 6b, 7b, 8; progress §4, §6, §8, §9 | per-subject rows with data source added for the banks, LOSO and within, GNN, window sweep, pseudo-online and the A/B |
+| D13 | report (references, Sources), progress Sources, README §4 | initials "J. D." removed; the paradigm paper cited as the spec gives it; README sentence reworded to "the reference paper for the paradigms … as the specification gives it" |
+| D14 | report, RESEARCH_LOG, progress, README Sources | each "Not opened in this run" list added (phase run files, P00–P22 reports, the paper, the reference repository, legacy logs) |
+| minor | report Abstract and Conclusion, report §3.1 (inflation sign), infographic leak box, README §3.1 five-class sentence, progress blocker B003 wording and item 6, README §14.1 GPU total note | wording and sources corrected; "S06–S40" removed from the progress report (cohort 39 is S01–S040 without S020) |
+
+Checks after the round: `check_docs.py` (scratch): Sources headings present in README, RESEARCH_LOG and progress report; the report v2 is saved (checked by the orchestrator); every cited `reports/...` path exists; the SVG parses (root `svg`, viewBox `0 0 1200 1700`). No recording read; no `tests/` or `Makefile` edit.
 
 ## Questions
 <!-- receivers append: ACK <agent> <YYYY-MM-DD>, then questions; answers appended, never deleted -->
