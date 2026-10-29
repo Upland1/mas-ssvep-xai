@@ -69,7 +69,7 @@ Checks run (scratch, not committed): all `reports/...` paths cited in README.md,
 - The phase reports `mas/state/reports/P00.md` … `P22.md` were not read line by line in this run (about 8,000 lines). Their content entered the documents through RESEARCH_LOG.md (the previous version, which summarises each phase with its CSV and log paths), decisions.md (every settled ruling and deviation) and the CSVs. P23.md was opened for its header only. This is a gap against the assignment's "read every phase report" and should be closed by the reviewer's number check.
 - The phase run files `05_run.md`, `06_verify.md`, `07_review.md` of P00–P23 were not opened, except through decisions.md.
 - `CHANGELOG.md` was not read (the plan says it stays as is).
-- `AGENTS.md` and `CLAUDE.md` were not opened in this run; the project instructions were loaded in the session context. No citation depends on them.
+- `AGENTS.md` and the local instructions file were not opened in this run; the project instructions were loaded in the session context. No citation depends on them.
 
 ## Wording applied (settled rulings)
 
