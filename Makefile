@@ -131,40 +131,42 @@ p04:
 
 # P05 feature-space benchmark and confusion matrices.
 p05:
-	$(P) $(FB).benchmark_cross_validation --subject S03
-	$(P) $(FB).benchmark_harmonic_fbcca --subject S03
+	$(P) $(FB).benchmark_cross_validation --subject S03 --cv legacy --smoothing mod5
+	$(P) $(FB).benchmark_harmonic_fbcca --subject S03 --cv legacy --smoothing mod5
 	$(P) scripts.evaluation.test_sklearn_models --subject S03
-	$(P) scripts.evaluation.evaluate_confusion_matrix --subject S03
-	$(P) scripts.evaluation.evaluate_confusion_matrix --subject S03 --m 2
-	$(foreach s,S01 S02 S04 S05,$(P) scripts.evaluation.evaluate_confusion_matrix --subject $(s)$(NL))
+	$(P) scripts.evaluation.evaluate_confusion_matrix --subject S03 --cv legacy --smoothing mod5
+	$(P) scripts.evaluation.evaluate_confusion_matrix --subject S03 --m 2 --cv legacy --smoothing mod5
+	$(foreach s,S01 S02 S04 S05,$(P) scripts.evaluation.evaluate_confusion_matrix --subject $(s) --cv legacy --smoothing mod5$(NL))
 	$(P) scripts.exploration.visualize_data --subject S03
 
 # P06 feature selection (S03) and the five-subject benchmark; the last line is the recorded SFS diagnostic.
 p06:
-	$(P) $(FB).benchmark_feature_selection --subject S03 --k-features 20
+	$(P) $(FB).benchmark_feature_selection --subject S03 --k-features 20 --cv legacy --smoothing mod5
 	$(P) $(FB).benchmark_5_subjects $(S)
-	$(P) $(FB).benchmark_feature_selection --subject S03 --k-features 20 --sfs-diagnostics --n-jobs 8
+	$(P) $(FB).benchmark_feature_selection --subject S03 --k-features 20 --cv legacy --smoothing mod5 --sfs-diagnostics --n-jobs 8
 
+# Era A (P05-P10) commands pass --cv legacy --smoothing mod5: since P11 the default is trial-grouped CV and the leaky
+# outputs go to reports/legacy_leaky/. Builds of P16/P17 pass --quality-source filtered --banks (config default since P19: both).
 # P07 PF-07 regression demos (vpp_min 5.0; the second run exits 1 by design: S03 has no accepted window) and the cohort table.
 p07:
 	$(P) scripts.preprocessing.run_preprocessing --subject S03 --vpp-min 5.0 --processed-dir data/processed_p07_demo/vppmin5 --no-figures $(RAW)
 	-$(P) scripts.preprocessing.run_preprocessing --subject S03 --vpp-min 5.0 --no-channel-drop --processed-dir data/processed_p07_demo/vppmin5_nodrop --no-figures $(RAW)
 	$(P) scripts.preprocessing.run_preprocessing --subject S03 --processed-dir data/processed_p07_demo/pinned --no-figures $(RAW)
-	$(NSUB) $(S) --data-root data/processed --n-jobs 5
+	$(NSUB) $(S) --data-root data/processed --n-jobs 5 --cv legacy --smoothing mod5
 
 # P08 EEGNet on S03, legacy leaky CV (NN_DEVICES: cpu, and cuda when a GPU is present).
 p08:
-	$(foreach d,$(NN_DEVICES),$(P) $(NNB).benchmark_eegnet --subject S03 --epochs 150 --batch-size 32 --lr 1e-3 --device $(d) --augment off$(NL))
+	$(foreach d,$(NN_DEVICES),$(P) $(NNB).benchmark_eegnet --subject S03 --epochs 150 --batch-size 32 --lr 1e-3 --device $(d) --augment off --cv legacy --smoothing mod5$(NL))
 
 # P09 Compact-CNN and ShallowConvNet on S03, parameter counts.
 p09:
 	$(P) $(NNB).count_parameters
-	$(P) $(NNB).benchmark_compact_cnn --subject S03 --epochs 150 --batch-size 32 --lr 1e-3 --device cpu --augment off
-	$(P) $(NNB).benchmark_shallow_convnet --subject S03 --epochs 150 --batch-size 32 --lr 1e-3 --device cpu --augment off
+	$(P) $(NNB).benchmark_compact_cnn --subject S03 --epochs 150 --batch-size 32 --lr 1e-3 --device cpu --augment off --cv legacy --smoothing mod5
+	$(P) $(NNB).benchmark_shallow_convnet --subject S03 --epochs 150 --batch-size 32 --lr 1e-3 --device cpu --augment off --cv legacy --smoothing mod5
 
 # P10 augmentation A/B, legacy leaky CV (also writes reports/legacy_leaky/).
 p10:
-	$(foreach m,eegnet compact_cnn shallow_conv_net,$(P) $(NNB).benchmark_nn_augmentation $(S) --model $(m) --epochs 150 --device cpu --freeze-legacy$(NL))
+	$(foreach m,eegnet compact_cnn shallow_conv_net,$(P) $(NNB).benchmark_nn_augmentation $(S) --model $(m) --epochs 150 --device cpu --cv legacy --smoothing mod5 --freeze-legacy$(NL))
 
 # ---------------------------------------------------------------- Era B (trial-grouped CV, connectivity)
 
@@ -217,11 +219,12 @@ p15:
 # ---------------------------------------------------------------- Era C (built folders, continuous filtering)
 
 # P16 freeze the Era A/B outputs (once; a tag is frozen only once), edge-effect demo, builds, regression and v1/v2 rows.
+# The regression check exits 0 in the final P16 run, so a failure stops make.
 p16:
 	ls -d baselines/v1_* > /dev/null 2>&1 || $(P) scripts.freeze_baseline --tag v1 --configs-git-rev 97a29be --note "Era A/B outputs before P16 (main 97a29be)"
 	$(P) scripts.diagnostics.demo_edge_effects --subject S03 $(RAW)
-	$(BUILD) --filter-mode per_window $(S) --session OO --check-legacy-starts $(RAW)
-	$(BUILD) --filter-mode continuous $(S) --session OO --check-legacy-starts $(RAW)
+	$(BUILD) --filter-mode per_window $(S) --session OO --banks fbcca fbcsp --quality-source filtered --check-legacy-starts $(RAW)
+	$(BUILD) --filter-mode continuous $(S) --session OO --banks fbcca fbcsp --quality-source filtered --check-legacy-starts $(RAW)
 	$(NSUB) $(S) --out-suffix v1check
 	$(CC) $(S) $(COH4) --out-suffix v1check
 	$(NSUB) $(S) --cv-repeats 5 --out-suffix v1rep5
@@ -234,12 +237,12 @@ p16:
 	$(CC) $(S) $(COH4) --data-root data/processed_per_window --quality shared --out-suffix v2pw
 	$(CC) $(S) $(COH4) --data-root data/processed_continuous --quality shared --out-suffix v2cont
 	$(CC) $(S) $(COH4) --data-root data/processed_continuous --quality shared-no-guard --out-suffix v2cont_noguard
-	-$(P) scripts.diagnostics.compare_v1_v2 --check-regression
+	$(P) scripts.diagnostics.compare_v1_v2 --check-regression
 	$(P) scripts.diagnostics.compare_v1_v2
 
 # P17 rest class and filter banks: build the four banks, the base regression check, then the six benchmarks.
 p17:
-	$(BUILD) --filter-mode continuous $(S) --session OO $(BANKS4) --out-root data/processed_continuous_p17 $(RAW)
+	$(BUILD) --filter-mode continuous $(S) --session OO $(BANKS4) --quality-source filtered --out-root data/processed_continuous_p17 $(RAW)
 	$(NSUB) $(S) --data-root data/processed_continuous_p17 --quality shared --cv-repeats 5 --bank base --classes 5 --out-suffix p17_diag_base_5class_rep5
 	$(foreach b,base harm harm+mid,$(foreach c,5 6,$(NSUB) $(S) --data-root data/processed_continuous_p17 --quality shared --cv-repeats 10 --bank $(b) --classes $(c) --out-suffix p17_$(subst +,,$(b))_$(c)class$(NL)))
 
