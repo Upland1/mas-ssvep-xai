@@ -157,12 +157,22 @@ S="--subjects S01 S02 S03 S04 S05"
 # 1. smoke test
 $P scripts.connectivity.graph_modeling.benchmark_gnn_loso --smoke-test --out-dir <scratch>
 # 2. within reference, pooled, both variants, 3 seeds
-$P scripts.connectivity.graph_modeling.benchmark_gnn_loso --data-root data/processed_continuous --window 1 --stride-sec 0.25 $S --channels common --variants nodes+F nodes+coh+F --norm pooled --protocol within --seeds 3 --out-dir reports/within_gnn
+$P scripts.connectivity.graph_modeling.benchmark_gnn_loso --data-root data/processed_continuous --window 1 --stride-sec 0.25 $S --channels common --variants nodes+F nodes+coh+F --norm pooled --protocol within --seeds 3 --threads 2 --device cpu --out-dir reports/within_gnn
 # 3. LOSO, both variants × both norms, 3 seeds
-$P scripts.connectivity.graph_modeling.benchmark_gnn_loso --data-root data/processed_continuous --window 1 --stride-sec 0.25 $S --channels common --variants nodes+F nodes+coh+F --norm pooled subject --protocol loso --seeds 3 --out-dir reports/loso_gnn
+$P scripts.connectivity.graph_modeling.benchmark_gnn_loso --data-root data/processed_continuous --window 1 --stride-sec 0.25 $S --channels common --variants nodes+F nodes+coh+F --norm pooled subject --protocol loso --seeds 3 --threads 2 --device cpu --out-dir reports/loso_gnn
 # 4. resume check on 3 (interrupt + rerun; summary/per_subject/predictions/confusion hashes unchanged)
 # 5. hash S01–S05 (after)
 ```
+
+**Measured (builders' handoffs, 2026-10-29).**
+- Graph features: 0.2–0.3 s per subject.
+- Smoke test: 35 s on 2 threads.
+- One fold, `--threads 2` on CPU: LOSO 36.7 s; within 8.9 s.
+- Full run, CPU, 2 threads: within ≈ 7.4 min (50 folds), LOSO ≈ 12.2 min (20 folds), so
+  ≈ 20 min in total; worst case (every seed at 150 epochs) ≈ 28 min.
+- Every run is pinned to `--threads 2 --device cpu`, since both are part of the fold
+  config.
+- Suite ≈ 14.3 min, run alone.
 
 **Budget.**
 - The roadmap gives about 45 min (LOSO) + 30 min (within) on 2 CPU cores for 5 subjects,
