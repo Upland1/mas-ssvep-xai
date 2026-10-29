@@ -18,3 +18,4 @@
 | 5 Fix round 1 (data-signal) | data-signal | 2026-10-29 | F1–F4 + default audit (Makefile fix, 3436a5b, 88c2691); 17 Era-A commands --cv legacy --smoothing mod5; p16/p17 builds pin --quality-source filtered and banks; suite `1565 passed` | 1 | PF-01/02, R5 | none | stale stamps p05–p09 → fresh clone |
 | 7 Review round 2 | scientific-reviewer | 2026-10-29 | PASS (a3b3c6e); F1–F4 and D1–D14 hold; V-1..V-8 copied verbatim into 02_plan.md; N1–N4 wording items to the scribe before merge | 2 | R9, R10 | none | NBS columns are the only expected extra columns |
 | 5 Wording N1–N4 | scribe | 2026-10-29 | d6a053e; Table 7c (FBCCA per subject) added | 2 | | none | |
+| 8 make all rerun | verifier | 2026-10-29 | fresh clone at bb9c091, started 08:14:07, PID 889269, torch threads 12, NN_DEVICES "cpu cuda"; expected ≈ 15:30 | 1 | V-1..V-8 | none | |
