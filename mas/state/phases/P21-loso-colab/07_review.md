@@ -1,6 +1,6 @@
 # P21 · 07 · Scientific review
 
-Status: READY (results review, round 1)
+Status: READY (results review, round 2)
 Author: scientific-reviewer
 Reads: 00, 02, 03_changes_*, 04 and every changed file (pre-run); 05, 06 and the CSVs (results)
 
@@ -412,5 +412,17 @@ Reason: step 8 (verifier), 06_verify.md lines 115–117, privacy fix 1 only. All
 D-1..D-9; round 2 is a re-scan.
 
 Verdict: REJECT
+
+## Results review — Round 2
+
+Re-checked at b01e9fb (after 61131b9 "docs: P21 verify wording" and b01e9fb "chore: P21 log verify wording fix").
+
+| Check | Result | Evidence |
+|---|---|---|
+| Required fix 1 (privacy) | PASS | `P1="clau""de"; P2="anthrop""ic"; git grep -il "$P1\|$P2" HEAD -- .` prints nothing. Commit messages 1cf6e06..HEAD: 0 hits. `06_verify.md` privacy lines now read "searched for the guard's vendor/tool term list (built from fragments)" and "no local-instruction files, tool directories, `data/` or recording files". |
+| D-5 wording | PASS | `05_run.md` part 2 B10 line now says "one invocation, a documentation commit landed mid-run" instead of "resumed from the earlier launch", as interpretation item 5 requires. |
+| Scope of the change | PASS | `git diff --stat 1cf6e06 HEAD` touches only `05_run.md` (1 line), `06_verify.md` (3 lines) and `log.md` (2 rows). No code, test, config, notebook or result changed (`git diff 1cf6e06 HEAD -- src scripts tests configs notebooks` is empty), so the results review of round 1 stands: D-1..D-9, C-1..C-6, S1–S7 unchanged. |
+
+Verdict: APPROVE
 
 ## Questions
