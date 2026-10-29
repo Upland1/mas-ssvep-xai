@@ -176,4 +176,87 @@ Verdict: PASS
 
 ## Results review
 
-Verdict: APPROVE / REJECT
+Reads: 05_run.md, 06_verify.md (3f39d42, Verdict PASS), `reports/loso_gnn/` and `reports/within_gnn/` (summary.csv, folds.csv, seeds.csv), `reports/loso_w1_p22_common/summary.csv`, `reports/logs/P23/` (file list, `analysis.txt` line count 250).
+
+**Traceability.**
+- The run head a9ba18b differs from the audited head 3b740ed only in `mas/state/` files: `git diff 3b740ed a9ba18b --stat -- src scripts tests configs notebooks` is empty. The outputs therefore come from the code audited in round 2.
+- Every fold config has one `git_head` (a9ba18b…), with dirty false, threads 2 and device cpu (V2).
+- The suite on the clean checkout gave `1513 passed, 22 warnings in 870.26s` (`reports/logs/P23/pytest_full.log`).
+- The data hash `e7f55081…bebab4` is the same before and after.
+- Privacy, using the guard's term list by reference: 0 hits in a9ba18b, 3f39d42 and 45df903, and 0 in the net `git diff main..HEAD`.
+- R11 log: the last line is dated 2026-10-28T07:41, with nothing in P23.
+
+**Own recomputation.** I recomputed from the CSVs, read only, with `.venv/bin/python -c` over `reports/loso_gnn/summary.csv`, `seeds.csv` and `reports/loso_w1_p22_common/summary.csv`, using the same SE_Δ definition as round 1. The results match the verifier's values:
+- nodes+F − lda: S01 +0.89 (SE_Δ 2.49), S02 +4.66 (2.28), S03 +0.30, S04 +0.15, S05 +2.06 (0.77).
+- Seed ranges: 5.59 / 4.50 / 1.06 / 0.15 / 0.30.
+- subjnorm − pooled on S01/S02: nodes+F +5.00 / +1.09 (2·SE_Δ 4.83 / 4.33); nodes+coh+F +3.83 / +3.26 (4.82 / 4.37).
+- Cohort means: 89.22, 90.32, 88.96, 90.29.
+- All `_subjnorm` rows carry "offline upper bound". All within rows say within-subject.
+
+### Predictions, judged against the round-1 wording (never reworded)
+
+| PR | Verdict | Note |
+|---|---|---|
+| PR-1 | **held** | No material loss against fbcca. All 4 cohort means are ≥ 82.40. Both pooled variants are materially above fbcca on S01 and S02. |
+| PR-2 | **missed** for nodes+F (material above lda on 2 subjects: S02 +4.66, S05 +2.06). For nodes+coh+F, the count clause held (1 subject: S05 +1.91), but the S03–S05 clause ("ties or material losses ≤ 3 pp") **missed** on S05 for both variants. | Leak check below: not a leak trigger. |
+| PR-3 | **partly missed** | No material loss and cohort-mean Δ ≥ 0 (+1.10, +1.33): held. The required material gain on S01 or S02: missed. S01 nodes+F +5.00 exceeds 2·SE_Δ 4.83 but not the pooled cell's seed range 5.59. My wording ("the GNN cell's per-subject seed range") does not say which cell for a GNN−GNN Δ. The verifier applied the stricter reading (both cells), and I accept that reading as binding. Under the subjnorm-cell-only reading, S01 nodes+F would be material, but only by 0.17 pp above 2·SE_Δ. This is reported as a miss, with the ambiguity of my wording as the reason it is close (C-2). |
+| PR-4 | **held** | 15/15 ties. Coherence edges add nothing, the same direction as R-15. |
+| PR-5 | **held as worded** | Within GNN is materially above LOSO on 0 subjects; LOSO is materially above within on S03 (both variants) and S04 (nodes+F). R-16 "LOSO below within": **direction not observed** for the GNN. Wording: N8 plus D-3 (data-limited and epoch-capped within GNN), never "the GNN generalizes across subjects". |
+| PR-6 | **held** | within_lda is materially above the within GNN on 4 (nodes+F) and 3 (nodes+coh+F) subjects, and below it on none. |
+| PR-7 | **partly missed** | Train ≥ 90 % (min 93.20), no UNDERFITTING, and val > test on S01/S02: held. "OVERFITTING on S01 and S02 of every method": missed on the 2 S02 `_subjnorm` folds (gap 13.93 and 13.83 < 15). |
+| PR-8 | **held** | 0 degenerate folds in either protocol. Min best epoch: 64.33 in LOSO, 93.0 in within. |
+| PR-9 | **held** | Max seed range 5.59 ≤ 8.23. Ensemble ≥ per-seed mean − 1 pp in all 20 cells. |
+
+Score: 6 held (PR-1, 4, 5, 6, 8, 9; PR-5 as worded), 1 missed (PR-2), 2 partly missed (PR-3, PR-7). None is an acceptance criterion.
+
+**PR-2: leak trigger or noise?** The miss is plausible; it is not a leak signature. Reasons:
+1. **No LOSO cell exceeds the within-subject ceiling.** nodes+F LOSO − within_lda is −5.73 / −1.12 / −0.94 / −0.09 / 0.00 pp. A leak from the held-out subject would show as LOSO above its own trial-grouped within value.
+2. **The R2 channels are closed.**
+   - Graph features and FBCCA scores are label-free and fixed per window.
+   - Pooled statistics use training rows only (bit-exact sentinel tests).
+   - Validation never holds held-out rows (asserted at run time in every fold).
+   - Window identity with the P22 fbcca rows holds (V4).
+   - `n_windows_train` equals the 4 training subjects' counts (V5).
+3. **The gain is partly the ensemble (N2).** The per-seed mean is lower: S02 +3.27, which is a tie against 2·SE_Δ 4.62; S05 +2.01, which stays material against 2·SE_Δ 1.55. Only S05 survives single-fit comparison.
+4. **The features differ from lda.** lda sees CSP m=1 + FBCCA. The GNN sees log power at the targets and the 2nd harmonics on every channel, plus FBCCA, so a gain on S05 (lda 96.91, below its within value 98.97) is plausible, and the GNN reaches that within value.
+5. **The window-level SE understates noise (N6).** S05 +2.06 pp is 14 windows out of 679.
+
+Verdict on the miss: report it plainly as missed. Interpret it as "GNN ≥ lda on S02/S05 under LOSO", with S02 only an ensemble effect. Make no claim that the GNN beats lda overall: the cohort means are 89.22 against 87.61, and the across-subject SDs are 13.12 and 13.84.
+
+### PF-30 reading (RR-4)
+
+- **No near-chance fold.** No fold shows "train ≈ 100 % / test ≈ chance". The minimum test accuracy is 70.15 % (LOSO) and 68.38 % (within), with chance at 20 %. The report must say this explicitly instead of implying the pattern.
+- **LOSO S01/S02.** Train is 95.9–98.7 %, validation (training subjects' trials) 92.4–95.1 %, test 70.2–82.6 %, and the gap is 13.8–27.8 pp. This is a generalization problem.
+- **S01's gap is not only subject shift.** The within GNN on S01 also has train 90.22 against test 70.83, a gap of about 19 pp (`within_gnn/folds.csv`, means over 10 folds). within_lda reaches only 75.88. S01 is low-SNR within-subject too. The subject-shift share of the S01 gap is the LOSO-vs-within difference, which is a tie (+0.73 / −0.14 pp).
+- **S02 with subjnorm.** The gap shrinks below 15 pp (13.9). This is consistent with subject-level offset removal, labelled offline upper bound.
+- **LOSO S03–S05.** Test is above train (gap −1.4 to −5.6 pp), because the pooled training set includes the hard S01/S02 trials. This is not an anomaly.
+
+### Deviations accepted
+
+- **D-1. Verifier's V10 first attempt (10a) used both variants.** No fold ran, nothing was refused, and the hashes were unchanged. The correct 10b and a final unchanged rerun followed (05_run.md Anomaly 1). No effect on any output.
+- **D-2. V5 "5 build_git_commits entries" cannot hold for a within fold.** A within fold has one entry, its training and test subject. That is correct by construction, and my wording was LOSO-specific.
+- **D-3. The within GNN is epoch-capped as well as data-limited.** In 19 of 50 within folds every seed ran the full 150 epochs, and the best epoch is ≥ 125 in 34 of 50 (own count over `reports/within_gnn/folds.csv`). LOSO stops at ≤ 133.3 epochs, with best epochs 64–108. The PR-5 tie and PR-6 gap are therefore partly a training-budget effect of the P15 constants. The report states this as a limitation. It is not to be fixed by tuning (golden rule 5) inside P23.
+- **D-4. `[+]` count in rerun logs.** It includes the data-loading lines (05_run.md Anomaly 2). The fold lines are `[+] gnn_…`, with 0 in every rerun.
+
+### Carry-forwards (P24/P25)
+
+- **C-1 (scribe, P24/P25 reports).** Any later comparison with the GNN must:
+  - use the per-seed mean for single-fit comparisons, keeping the ensemble as a labelled column;
+  - keep `_subjnorm` as an offline upper bound;
+  - repeat the PF-30 reading above, including "no near-chance fold".
+- **C-2 (reviewer, orchestrator).** For a Δ between two seeded cells, pre-registered margins must name the seed range explicitly ("the larger of the two cells' ranges"). PR-3 was decided by that ambiguity.
+- **C-3 (deep-learning, if the GNN is reused).** Within-subject GNN folds hit the 150-epoch cap (D-3). Any change of epochs or patience is pre-registered as its own A/B with ≥ 3 seeds and reported against these P23 numbers, never silently.
+- **C-4 (verifier).** Write binding items that differ by protocol with per-protocol expectations (D-2).
+
+### Binding items for the scribe (P23 report)
+
+- **S1.** Per subject, 1.0 s and 2-tap smoothed, for all 4 LOSO and 2 within GNN methods. Include `Data source` (built continuous folders `processed_continuous/w1_s0.25`, session OO, cohort S01–S05, channels common (7), LOSO or within-subject (trial-grouped CV), 1.0 s windows, stride 0.25 s), `Protocol` and `Normalization` (R9). Numbers come verbatim from `reports/loso_gnn/summary.csv`, `reports/within_gnn/summary.csv` or `06_verify.md`.
+- **S2.** The RR-2 comparison table as in `06_verify.md`. Label the sources: P22 `loso_w1_p22_common`, with `within_lda` relabelled within-subject (5 split repeats) and the CSV's own "LOSO" string noted (N4); P21 networks as the mean and range over seeds 42/43/44; compact_eegnet as a single seed.
+- **S3.** Every `_subjnorm` and `lda_subjnorm` mention reads "test-time normalization, offline upper bound (whole-session unlabeled statistics of the held-out subject)". There is no online GNN claim (P22 C-4).
+- **S4.** The prediction table as judged above: held / missed / partly missed, with values. PR-2 and the PR-3 gain clause are written as **missed**, PR-7 as **partly missed**. Include the PR-2 leak-check paragraph (reasons 1–5) and the PR-3 wording ambiguity (C-2).
+- **S5.** R-16 "LOSO below within" for the GNN: "direction not observed". Explain with N8 and D-3, and note that the classical within_lda remains above every LOSO cell. R-16 "subjnorm ≥ pooled": "holds as ties" (cohort mean +1.10 / +1.33, no material subject).
+- **S6.** R-15 is used for direction only ("coherence edges do not improve the GNN": 15/15 ties here). There is no numeric comparison with the legacy fs-250 values.
+- **S7.** The PF-30 paragraph as above. No fold has test near chance, and a high train or validation accuracy is never presented as model quality.
+- **S8.** N1 (pooled statistics include the training subjects' validation rows) and N6 (window-level SE is a lower bound) are stated once.
+
+Verdict: APPROVE
