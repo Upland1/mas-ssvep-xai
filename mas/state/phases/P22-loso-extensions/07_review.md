@@ -169,6 +169,39 @@ Noise unit: SE = 100·√(p(1−p)/n) in pp, with n the windows scored for that 
 
 Verdict: FAIL
 
+## Pre-run audit — Round 2
+
+Scope, as set in Round 1: the F1/F2 diff (101a0f7), the T1-T3 tests (daadad8, 3cf689c) and the full suite.
+
+| Item | Result | Evidence |
+|---|---|---|
+| F1 dirty-flag rules | PASS | `scripts/benchmarks/benchmark_loso.py` `fold_problem`: differing flags are refused at any head; a dirty side with differing heads is refused; both dirty at the same head is accepted; the docstrings (module and function) state this rule. Same read-only probe as Round 1 (docs-only heads `4d14bb0` / `91bf2f8`), results below. |
+| F2 `configs` in `CODE_PATHS` | PASS | `CODE_PATHS = ("src", "scripts", "configs")`; the refusal message names `configs/`. |
+| T1 six-row table | PASS | `test_round1_dirty_and_configs_table` (temporary git repo: base → docs-only → configs-only) matches the six rows. Mutants on a scratch copy: F1 revert killed by the 3 differing-head dirty rows, F2 revert killed by the configs-only row (04_tests.md "Fix round 1"). |
+| T2 masked first window | PASS | `test_masked_first_window_keeps_rank_and_first_k_set_through_load_subject`: `valid_mask = 0` on disk is read through `load_subject`; ranks are kept, the first start moves to the second window, and the first-K sets for K = 1, 2, 3, 5, 8 are unchanged. |
+| T3 suite | PASS | `1441 passed, 22 warnings in 817.69s (0:13:37)`, log `mas/state/scratch/p22/full_suite_tester_r1.log` (last line read). `git diff 3cf689c HEAD -- src scripts tests configs` is empty, so the log covers the current code. Reviewer rerun of the P21 + P22 test files: `125 passed in 24.76s`. |
+| R11, privacy | PASS | `reference_access.log` is still 42 lines (no new access). Scan with the guard's term list (built from fragments) on `git diff 581ab9a HEAD` and the commit messages: 0 / 0. |
+
+Probe output (read-only, `.venv/bin/python -c "... L.fold_problem(...)"`), as saved → now:
+
+| Heads | Dirty | Result |
+|---|---|---|
+| 4d14bb0 → 91bf2f8 | False → True | `working tree state differs (dirty False -> True, ...)` |
+| 4d14bb0 → 91bf2f8 | True → False | refused (`working tree state differs`) |
+| 4d14bb0 → 91bf2f8 | True → True | `... with uncommitted code changes` (refused) |
+| 4d14bb0 → 91bf2f8 | False → False | `None` (accepted) |
+| 91bf2f8 → 91bf2f8 | True → True | `None` (accepted, documented deviation) |
+| 91bf2f8 → 91bf2f8 | False → True | refused |
+
+Non-blocking notes:
+
+- **N8.** The docstring of `code_changed` (`benchmark_loso.py:142`) still says "`src/` or `scripts/`", but the function diffs `CODE_PATHS`, which now includes `configs`. Fix it with the next code change.
+- **N9.** P21-era fold files have no `git_dirty` key (`None`). Against a clean run (`False`) they are now refused. That is safe and consistent with the PF-37 intent; P22 runs use fresh out-dirs (V2).
+
+The predictions PR-1..PR-7 and the run-list items V1..V11 of Round 1 stand unchanged.
+
+Verdict: PASS
+
 ## Results review
 
 Verdict: APPROVE / REJECT
