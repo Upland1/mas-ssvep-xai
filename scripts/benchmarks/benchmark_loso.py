@@ -34,7 +34,7 @@ Methods (CLI names; `compact` is `compact_eegnet`, PF-31):
 
 Resumable (PF-37): every (method, test subject) fold is written atomically to `<out-dir>/folds/<method>__test-<S>.npz` with its
 `config` JSON (cohort, training subjects, channels, window, stride, fs, hyperparameters, seed, git HEAD recorded once at process
-start, dirty flag of src/scripts/configs) and skipped on rerun (`[skip] <method> test-<S>`). `check_fold` REFUSES a saved fold
+start, dirty flag of src/scripts/configs, training-subject window counts, each subject's build `git_commit`, `--config` file hash) and skipped on rerun (`[skip] <method> test-<S>`). `check_fold` REFUSES a saved fold
 whose configuration differs in any key except `data_root` ("use a new --out-dir"); a different git HEAD is refused only when
 `git diff --stat <h1> <h2> -- src scripts configs` is non-empty or a head cannot be resolved; differing dirty flags are refused at
 any head, a dirty side with differing heads is refused, and dirty is accepted only when both sides are dirty at the same head. There is
@@ -50,6 +50,7 @@ R8). ITR = Wolpaw, N = 5, T = window + 0.5 s. `Runs` = 1 (one fit per held-out s
 """
 
 import argparse
+import hashlib
 import json
 import os
 import subprocess
@@ -139,7 +140,7 @@ def capture_run_state() -> dict:
 
 
 def code_changed(h1: str, h2: str, repo: Path = ROOT) -> bool:
-  """True when `src/` or `scripts/` differ between heads `h1` and `h2` (`git diff --stat`), or when git cannot say (an
+  """True when `src/`, `scripts/` or `configs/` (`CODE_PATHS`) differ between heads `h1` and `h2` (`git diff --stat`), or when git cannot say (an
   unresolvable head counts as changed: the refusal is the safe answer)."""
   if "unknown" in (h1, h2) or not h1 or not h2:
     return True
@@ -465,14 +466,41 @@ def method_hyper(method: str, args) -> dict:
           "patience": args.patience, "augment": not args.no_augment}
 
 
+def file_sha256(path: Path) -> str:
+  return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def cohort_provenance(loaded: Sequence[dict], config_path: Path) -> dict:
+  """Provenance of a loaded cohort for the fold configuration (P22 C-1, PF-37): per subject the window count and the
+  built folder's `meta.git_commit` ("unknown" when absent), plus the SHA-256 of the `--config` file. Reusable by other
+  LOSO harnesses: merge the result into their `ctx` and call `provenance_fields`."""
+  return {"n_windows": {d["subject"]: int(len(d["y"])) for d in loaded},
+          "build_commits": {d["subject"]: str(d.get("meta", {}).get("git_commit", "unknown")) for d in loaded},
+          "config_hash": file_sha256(config_path)}
+
+
+def provenance_fields(prov: dict, train_subjects: Sequence[str], test: str) -> dict:
+  """The three C-1 fold-config keys from `cohort_provenance`: training-subject window counts, the build commit of every
+  subject that enters the fold (training and test), the config file hash. `check_fold` compares them like any other key."""
+  return {"n_windows_train": {s: prov["n_windows"][s] for s in train_subjects},
+          "build_git_commits": {s: prov["build_commits"][s] for s in [*train_subjects, test] if s in prov["build_commits"]},
+          "config_hash": prov["config_hash"]}
+
+
+def within_source(source: str) -> str:
+  """Data source of a `within_lda` row: within-subject, not LOSO (P22 W-1)."""
+  return source.replace(", LOSO,", ", within-subject (trial-grouped CV),", 1)
+
+
 def fold_config(method: str, test: str, ctx: dict, args) -> dict:
   state = RUN_STATE or capture_run_state()
+  train = [test] if method == "within_lda" else [s for s in ctx["subjects"] if s != test]
   return {"method": method, "test_subject": test,
-          "train_subjects": [test] if method == "within_lda" else [s for s in ctx["subjects"] if s != test],
+          "train_subjects": train,
           "cohort": ctx["subjects"], "channels_mode": args.channels, "channels": ctx["channels"],
           "window_sec": args.window, "stride_sec": args.stride_sec, "fs": ctx["fs"], "classes": ctx["classes"],
           "quality": "shared", "seed": args.seed, "trial_offset": TRIAL_OFFSET, "hyper": method_hyper(method, args),
-          "n_windows_test": ctx["n_windows"][test], "git_head": state["git_head"], "git_dirty": state["git_dirty"],
+          "n_windows_test": ctx["n_windows"][test], **provenance_fields(ctx, train, test), "git_head": state["git_head"], "git_dirty": state["git_dirty"],
           "data_root": str(ctx["root"])}
 
 
@@ -482,7 +510,7 @@ def run_fold(method: str, P: dict, k: int, args, dev: str) -> tuple:
   extra = {}
   if method == "within_lda":
     rows = np.flatnonzero(P["subj"] == k)
-    r = within_lda_fold(P["bands"]["fbcsp"][rows], P["fb"][rows], P["yi"][rows], P["trial"][rows], args.folds,
+    r = within_lda_fold(P["bands"]["fbcsp"][rows], P["fb"][rows], P["yi"][rows], P["groups"][rows], args.folds,
                         args.within_repeats, args.seed, len(P["classes"]))
     arrays = {"proba": r["proba"][0], "proba_rep": r["proba"], "y": P["y"][rows], "trial_id": P["trial"][rows] - TRIAL_OFFSET * k,
               "offset": P["offsets"][rows], "train_acc": r["train_acc"], "val_acc": np.nan, "best_epoch": np.nan,
@@ -552,7 +580,7 @@ def fold_rows(method: str, subject: str, arrays: dict, config: dict, classes: np
          "Train Acc (%)": pct(fin("train_acc")), "Runs": len(reps), "Val Acc (%)": pct(fin("val_acc")),
          "Best Epoch": fin("best_epoch"), "2-tap Smoothed (%)": pct(float(np.mean([np.mean(q == yi) for q in r_sm]))), "Folds": 1,
          "Channels": ", ".join(config["channels"]) + (" (all, gate channel drops ignored)" if config["channels_mode"] == "all" else ""),
-         "Data source": source}
+         "Data source": within_source(source) if method == "within_lda" else source}
   pr = pd.DataFrame({"subject": subject, "window_sec": config["window_sec"], "method": label_of(method),
                      "trial_id": arrays["trial_id"], "offset_sec": arrays["offset"] / float(config["fs"]),
                      "true": y, "pred": classes[pred], "pred_2tap": classes[sm_pred]})
@@ -750,7 +778,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
   sessions = sorted({str(d["meta"].get("session", "?")) for d in loaded})
   P = pool(loaded, [b for b in banks if b != "fbcca"], consume=True)
   ctx = {"subjects": subjects, "channels": chosen, "fs": P["fs"], "classes": [int(c) for c in P["classes"]], "root": root,
-         "n_windows": {d["subject"]: int(len(d["y"])) for d in loaded}}
+         **cohort_provenance(loaded, args.config or ROOT / "configs" / "pipeline_config.yaml")}
   del loaded
   source = (f"built continuous folders {root.parent.name}/{root.name}, session {'/'.join(sessions)}, cohort {len(subjects)} "
             f"subjects ({', '.join(subjects) if len(subjects) < 8 else subjects[0] + '-' + subjects[-1]}), LOSO, channels {args.channels}")
