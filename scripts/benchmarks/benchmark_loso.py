@@ -36,7 +36,8 @@ Resumable (PF-37): every (method, test subject) fold is written atomically to `<
 `config` JSON (cohort, training subjects, channels, window, stride, fs, hyperparameters, seed, git HEAD recorded once at process
 start, dirty flag of src/scripts/configs) and skipped on rerun (`[skip] <method> test-<S>`). `check_fold` REFUSES a saved fold
 whose configuration differs in any key except `data_root` ("use a new --out-dir"); a different git HEAD is refused only when
-`git diff --stat <h1> <h2> -- src scripts` is non-empty or a head cannot be resolved; a changed dirty flag is refused. There is
+`git diff --stat <h1> <h2> -- src scripts configs` is non-empty or a head cannot be resolved; differing dirty flags are refused at
+any head, a dirty side with differing heads is refused, and dirty is accepted only when both sides are dirty at the same head. There is
 no override flag. The summary is always rebuilt from the fold files; a method with fewer fold files than the cohort is flagged
 (`Folds` column, `[warn]`) and gets no cohort Mean unless `--partial-mean`.
 
@@ -104,7 +105,7 @@ DEGENERATE_MARGIN = 0.10
 CHUNK = 2048                 # rows per CSP transform call (memory)
 IGNORED_CONFIG_KEYS = ("git_head", "git_dirty", "data_root")   # paths never matter; the code revision has its own rule (`fold_problem`)
 WITHIN_FOLDS, WITHIN_REPEATS = 5, 5
-CODE_PATHS = ("src", "scripts")        # a head change is harmless only if nothing here differs between the two heads
+CODE_PATHS = ("src", "scripts", "configs")      # a head change is harmless only if nothing here differs between the two heads
 DIRTY_PATHS = ("src", "scripts", "configs")
 
 
@@ -398,17 +399,21 @@ def fold_problem(saved: dict, mine: dict, repo: Path = ROOT) -> Optional[str]:
   """Why a saved fold must not be reused with the current configuration, or None (PF-37, P21 C-1).
 
   Any difference of a configuration key except `data_root` is a problem. A different `git_head` is a problem only when `src/` or
-  `scripts/` differ between the heads (`code_changed`; an unresolvable head counts as a difference). With equal heads, a
-  different dirty flag (uncommitted code changes) is a problem."""
+  `scripts/` or `configs/` differ between the heads (`code_changed`; an unresolvable head counts as a difference). Dirty flags
+  (uncommitted code changes): differing flags are a problem at any head; a dirty side with differing heads is a problem; dirty
+  is accepted only when both sides are dirty at the same head."""
   diff = config_diff(saved, mine)
   if diff:
     return f"configuration differs {diff} (saved, now)"
   h1, h2 = saved.get("git_head", "unknown"), mine.get("git_head", "unknown")
+  d1, d2 = saved.get("git_dirty"), mine.get("git_dirty")
+  if d1 != d2:
+    return f"working tree state differs (dirty {d1} -> {d2}, heads {h1[:10]} -> {h2[:10]})"
   if h1 != h2:
+    if d1 or d2:
+      return f"git head {h1[:10]} -> {h2[:10]} with uncommitted code changes (dirty {d1} -> {d2})"
     if code_changed(h1, h2, repo):
-      return f"git head {h1[:10]} -> {h2[:10]} changes src/ or scripts/ (or a head cannot be resolved)"
-  elif saved.get("git_dirty") != mine.get("git_dirty"):
-    return f"working tree state differs at the same head (dirty {saved.get('git_dirty')} -> {mine.get('git_dirty')})"
+      return f"git head {h1[:10]} -> {h2[:10]} changes src/, scripts/ or configs/ (or a head cannot be resolved)"
   return None
 
 
