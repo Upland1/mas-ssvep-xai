@@ -413,3 +413,25 @@ def test_smoke_fails_when_accuracy_gate_is_not_met(tmp_path, monkeypatch, capsys
   monkeypatch.setattr(G, "SMOKE_MIN_ACC", 99.9)
   rc = G.main(["--smoke-test", "--threads", "1", "--device", "cpu", "--out-dir", str(tmp_path / "smoke2")])
   assert rc == 1 and "[smoke] FAIL" in capsys.readouterr().out
+
+
+# --- shared out-dir across invocations (notebook cells, review F1) ---------------------------------------------------
+
+def test_two_invocations_into_one_out_dir_keep_both_methods_in_every_csv(tmp_path):
+  import pandas as pd
+  P, ctx = make_world()
+  src = "built folder src, LOSO, channels common"
+  G.run_and_report(P, ctx, src, make_args(variants=["nodes+coh+F"], norm=["pooled"]), "cpu", tmp_path)
+  r = G.run_and_report(P, ctx, src, make_args(variants=["nodes+coh+F"], norm=["subject"]), "cpu", tmp_path)
+  assert r["count"] == {"run": 4, "skipped": 0}
+  both = {"gnn_nodes+coh+F", "gnn_nodes+coh+F_subjnorm"}
+  s = pd.read_csv(tmp_path / "summary.csv")
+  assert set(s["Method"]) == both and list(s["Method"].iloc[:1]) == ["gnn_nodes+coh+F"]
+  assert set(s[s["Subject"] == "Mean"]["Method"]) == both and s[s["Subject"] == "Mean"]["Acc (%)"].notna().all()
+  assert set(pd.read_csv(tmp_path / "predictions.csv")["method"]) == both
+  assert set(pd.read_csv(tmp_path / "confusion.csv")["method"]) == both
+  assert set(pd.read_csv(tmp_path / "folds.csv")["Method"]) == both
+  assert set(pd.read_csv(tmp_path / "seeds.csv")["Method"]) == both
+  assert set(pd.read_csv(tmp_path / "per_subject.csv", header=[0, 1], index_col=0).columns.get_level_values(1)) == both
+  with pytest.raises(SystemExit, match="use a new --out-dir"):               # a requested method with another config is refused
+    G.run_and_report(P, ctx, src, make_args(variants=["nodes+coh+F"], norm=["pooled"], seeds=3), "cpu", tmp_path)
