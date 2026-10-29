@@ -557,3 +557,34 @@ Open
 - The `within_lda` rows carry the "LOSO" data-source string (W-1). Carry-forwards C-1 to C-5 for P23 [14]. No human run requested.
 
 Next phase: after the orchestrator's gate.
+
+## P23 — GNN under LOSO: edge-gated connectivity GNN with a within-subject reference
+
+2026-10-29, branch `phase/P23-gnn-loso`. Verifier PASS `3f39d42`; results review APPROVE `b9201a2`. Phase report: `mas/state/reports/P23.md`.
+
+Added
+- `scripts/connectivity/graph_modeling/benchmark_gnn_loso.py` (NEW): `fit_gnn` with early stopping on 20 % of the training trials, seeds 42–44 averaged per fold; variants `nodes+F` and `nodes+coh+F`; norms `pooled` and `subject`; protocols `loso` and `within`; resumable folds with a configuration check; `summary.csv`, `per_subject.csv`, `predictions.csv`, `confusion.csv`, `folds.csv`, `seeds.csv`; `--smoke-test`.
+- `src/features/connectivity/graph_features_subject.py` (NEW): P15 node, coherence and phase features computed in memory on the continuously filtered windows of a built subject; `fs` from metadata.
+- Notebook section 10b in `notebooks/loso_colab.ipynb` (MODIFIED): smoke, within and four LOSO cells with their own out-dirs; no outputs.
+- Tests (NEW): `tests/test_p23_gnn_loso.py`, `tests/test_p23_graph_features.py`, `tests/test_p23_independent_known_answer.py`, `tests/test_p23_loso_carryforwards.py`, `tests/test_p23_notebook.py`.
+
+Changed
+- `scripts/benchmarks/benchmark_loso.py` (MODIFIED): P22 C-1 fold fields (training window counts, build commits, config hash); `P["groups"]` passed to `within_lda`; `within_lda` Data source says within-subject; `code_changed` docstring.
+- `scripts/benchmarks/benchmark_loso_warmup.py` (MODIFIED): `Normalization` column (R2 label) in the warm-up CSVs.
+- `tests/test_p21_notebook.py`, `tests/test_p22_loso_extensions.py` (MODIFIED): skip of the 10b cells; the new config keys.
+- `mas/state/decisions.md`, `mas/state/phase_status.yaml` (MODIFIED).
+
+Result and scope
+- Cohort S01–S05, 1.0 s, `common` channels, LOSO cohort means: `nodes+F` 89.22 and `nodes+coh+F` 88.96 (`pooled`); 90.32 and 90.29 with subject normalization (offline upper bound). Within-subject GNN 86.81 and 86.98 [reports/loso_gnn/summary.csv, reports/within_gnn/summary.csv].
+- Coherence edges: 15 of 15 ties with `nodes+F` (PR-4).
+- No fold near chance; the LOSO S01 and S02 gaps are generalization gaps (PF-30).
+- GNN ≥ `lda` on S02 and S05 under LOSO (S02 partly an ensemble effect). No claim that the GNN beats `lda` overall (89.22 against 87.61). PR-2 missed for `nodes+F`.
+- Not a 2.0 s result, not an online result, not a cohort-39 result.
+
+Review
+- Pre-run audit FAIL at round 1 (F1: outputs rebuilt from one invocation's methods), fixed (`fe2bf94`, `e7c4bf2`); PASS at round 2 (`1be5e3c`). Results review APPROVE with binding items S1–S8 applied in the report; D-1 to D-4 accepted [10].
+
+Open
+- Notebook section 10b not yet run on Colab. Within GNN epoch cap (D-3). The P22 `within_lda` rows still carry the "LOSO" string (W-1). Carry-forwards C-1 to C-4 for P24–P25 (decision row 176).
+
+Next phase: after the orchestrator's gate.
