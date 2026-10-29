@@ -26,3 +26,4 @@
 | 8 Final verify | verifier | 2026-10-28 | PASS (f22bafa); no partial folds; ccnn cohort 39: B10 pass (two doc-only git heads), 0 degenerate folds, mean 71.58 (common 3 ch, single repeat); eegnet 2 folds not a result | 1 | B10, P4, P20 C-3 | none | |
 | 9 Results review | scientific-reviewer | 2026-10-28 | REJECT (1cf6e06) for one privacy item only (06_verify.md lists the scanned terms); D-1..D-9 accepted, C-1..C-6, S1–S7 for the scribe | 1 | R1, R2, R9, PF-33..37 | none | fix sent to verifier (step 8 file); git_head mix = one invocation, doc commit mid-run |
 | 8 Fix round 1 | verifier | 2026-10-28 | 61131b9: scan term lists replaced by "the guard's vendor/tool term list (built from fragments)"; git_head phrase corrected; HEAD vendor-term scan 0 | 1 | gate rule | none | |
+| 9 Results review round 2 | scientific-reviewer | 2026-10-28 | APPROVE (c325754); D-1..D-9, C-1..C-6 copied to decisions.md | 2 | gate rule | none | |
