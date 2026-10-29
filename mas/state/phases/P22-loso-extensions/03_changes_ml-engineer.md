@@ -73,3 +73,12 @@ None. The reference directory was not opened.
 ## Sources opened
 
 mas/03_ROADMAP.md P22, mas/05_PITFALLS.md PF-34..37, mas/02_REQUIREMENTS.md section 6, mas/state/decisions.md P21 rows, 00_assignment.md, 02_plan.md, scripts/benchmarks/benchmark_loso.py, src/io/subject_data.py, P21 tests, tests/test_no_leakage.py. No raw recording or .ebr access; only built folders, read by project scripts.
+
+## Fix round 1 (pre-run audit F1, F2)
+
+Status: READY
+
+- F1 MODIFIED `scripts/benchmarks/benchmark_loso.py` `fold_problem`: differing dirty flags are refused at any head; a dirty side with differing heads is refused; dirty is accepted only when both sides are dirty at the same head; clean heads differing go through `code_changed`. Module and function docstrings updated.
+- F2 `CODE_PATHS` is now `("src", "scripts", "configs")`; the head refusal message says "src/, scripts/ or configs/".
+- Test: `test_fix_round_1_dirty_rules_and_configs_in_code_paths` in `tests/test_p22_loso_extensions.py` (tmp git repo). On the old lines it fails: docs-only head change with a dirty side was accepted, and a configs/-only commit was not a code change. The earlier same-head dirty test still passes unchanged.
+- Full suite alone: 1434 passed in 837 s (0:13:57), log `mas/state/scratch/p22/full_suite2.log`. Commits: fix (loso), test, docs.
