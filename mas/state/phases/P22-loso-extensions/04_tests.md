@@ -64,4 +64,23 @@ No change to `src/`, `scripts/`, `configs/`. Expected values are computed inside
 
 ## Full suite (alone)
 
-SUITE_PLACEHOLDER
+Initial run (before fix round 1): 1433 passed, 22 warnings in 945.08s (0:15:45). Superseded by the run in "Fix round 1" below.
+
+## Fix round 1 (audit T1-T3)
+
+Status: READY
+
+- T1 MODIFIED `tests/test_p22_independent_known_answer.py` (+7 tests, 37 total): `test_round1_dirty_and_configs_table` with the six rows of the review, in a temporary git repo (base -> docs-only -> configs-only):
+
+  | Heads | Dirty saved -> now | Result |
+  |---|---|---|
+  | base -> docs | clean -> dirty | refused |
+  | base -> docs | dirty -> clean | refused |
+  | base -> docs | dirty -> dirty | refused |
+  | base -> docs | clean -> clean | accepted |
+  | docs -> configs | clean -> clean | refused |
+  | docs -> docs | dirty -> dirty | accepted |
+
+- Mutants (temporary copy under the scratchpad, tree untouched): F1 reverted to the old same-head-only dirty rule: KILLED by the three dirty rows at differing heads (3 failed, 34 passed). F2 reverted (`CODE_PATHS` without configs): KILLED by the configs-only row (1 failed, 36 passed). The two accepted rows and the same-head row behave the same under both reverts, so they cannot fail on them; they guard against over-refusal.
+- T2 `test_masked_first_window_keeps_rank_and_first_k_set_through_load_subject`: built synthetic folder (10 trials, recording order differs from id order); the earliest valid window of the trial ranked 3rd is set `valid_mask = 0` on disk; through `load_subject` one window fewer, every trial keeps its rank, that trial's first start equals its second window's start (later than before), and the first-K sets for K = 1, 2, 3, 5, 8 equal the unmasked ones.
+- T3 full suite alone after F1/F2/T1/T2: `1441 passed, 22 warnings in 817.69s (0:13:37)`; log `mas/state/scratch/p22/full_suite_tester_r1.log` (wall time in `.time`).
