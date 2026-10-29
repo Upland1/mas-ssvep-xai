@@ -358,9 +358,20 @@ def assemble_within(parts: list) -> dict:
   return out
 
 
-def collect(out: Path, specs: list, subjects: list, config_of, args) -> tuple:
+def stored_specs(out: Path, protocol: str) -> list:
+  """Method specs of every fold file of `protocol` in `out`, variant-major (`VARIANTS` order first), pooled before subject."""
+  found = {}
+  for p in sorted((Path(out) / "folds").glob(f"*__{protocol}__test-*.npz")):
+    _, cfg = L.load_fold(p)
+    found[cfg["method"]] = {"variant": cfg["variant"], "norm": cfg["norm"], "method": cfg["method"]}
+  vkey = lambda v: (VARIANTS.index(v), "") if v in VARIANTS else (len(VARIANTS), v)
+  return sorted(found.values(), key=lambda sp: (vkey(sp["variant"]), NORMS.index(sp["norm"])))
+
+
+def collect(out: Path, specs: list, subjects: list, config_of, args, requested: Optional[set] = None) -> tuple:
   """Stored folds of this invocation's methods: `({(method, subject): (arrays, config of fold 0)}, [per-fold info])`.
-  Every file passes `check_fold` (PF-37). A within subject needs all its folds."""
+  Files of `requested` methods (default all) must pass `check_fold` (PF-37, SystemExit); stored files of other methods that do not
+  are left out with a warning (as benchmark_loso). A within subject needs all its folds."""
   items, info = {}, []
   folds = [None] if args.protocol == "loso" else [f for f in range(args.folds) if args.only_fold in (None, f)]
   for spec in specs:
@@ -371,7 +382,13 @@ def collect(out: Path, specs: list, subjects: list, config_of, args) -> tuple:
         if not p.is_file():
           continue
         arrays, saved = L.load_fold(p)
-        L.check_fold(p, saved, config_of(spec, s, f))
+        if requested is None or spec["method"] in requested:
+          L.check_fold(p, saved, config_of(spec, s, f))
+        else:
+          why = L.fold_problem(saved, config_of(spec, s, f))
+          if why:
+            print(f"[warn] {p.name}: {why}; left out", flush=True)
+            continue
         parts.append(arrays)
         cfgs.append(saved)
         info.append((spec, s, f, arrays, saved))
@@ -399,7 +416,11 @@ def seed_table(spec: dict, subject: str, arrays: dict, config: dict, classes: np
 
 
 def build_outputs(out: Path, specs: list, subjects: list, classes: np.ndarray, config_of, source: str, args) -> dict:
-  items, finfo = collect(out, specs, subjects, config_of, args)
+  """Rebuild every output from ALL stored methods of the protocol in `out` (several invocations may share an out-dir, e.g. one
+  variant x norm per notebook cell); the methods of `specs` must pass `check_fold`, other stored ones are left out when they do not."""
+  requested = {sp["method"] for sp in specs}
+  specs = stored_specs(out, args.protocol) or specs
+  items, finfo = collect(out, specs, subjects, config_of, args, requested)
   if not items:
     return {}
   rows, preds, cms, seed_rows = [], [], {}, []
@@ -431,7 +452,7 @@ def build_outputs(out: Path, specs: list, subjects: list, classes: np.ndarray, c
     g = summary["Method"] == m
     summary.loc[g, "Protocol"] = args.protocol
     summary.loc[g, "Normalization"] = NORM_LABEL[sp["norm"]]
-    summary.loc[g, "Seeds"] = len(seeds_of(args))
+    summary.loc[g, "Seeds"] = int(per.loc[per["Method"] == m, "Seeds"].iloc[0]) if (per["Method"] == m).any() else np.nan
     sub = summary[g & ~summary["Subject"].isin(["Mean", "SD"])]["Seed SD"].astype(float)
     full = m not in short or args.partial_mean
     summary.loc[g & (summary["Subject"] == "Mean"), "Seed SD"] = round(float(sub.mean()), 2) if full and len(sub) else np.nan
@@ -473,6 +494,7 @@ def build_outputs(out: Path, specs: list, subjects: list, classes: np.ndarray, c
 
 
 def write_outputs(out: Path, res: dict, args, ctx: dict, source: str) -> None:
+  methods = list(dict.fromkeys(res["summary"]["Method"]))
   out.mkdir(parents=True, exist_ok=True)
   res["summary"].to_csv(out / "summary.csv", index=False)
   res["per_subject"].to_csv(out / "per_subject.csv")
@@ -482,7 +504,7 @@ def write_outputs(out: Path, res: dict, args, ctx: dict, source: str) -> None:
   res["seeds"].to_csv(out / "seeds.csv", index=False)
   (out / "gnn_loso_config.json").write_text(json.dumps(
     {"protocol": args.protocol, "cohort": ctx["subjects"], "channels_mode": args.channels, "channels": ctx["channels"],
-     "variants": list(args.variants), "norms": list(args.norm), "seeds": seeds_of(args), "hyper": fit_hyper(args),
+     "methods_in_outputs": methods, "this_invocation": {"variants": list(args.variants), "norms": list(args.norm)}, "seeds": seeds_of(args), "hyper": fit_hyper(args),
      "git_head": L.RUN_STATE["git_head"], "git_dirty": L.RUN_STATE["git_dirty"], "window_sec": args.window,
      "stride_sec": args.stride_sec, "feature_source": FEATURE_SOURCE, "source": source}, indent=2) + "\n")
 
