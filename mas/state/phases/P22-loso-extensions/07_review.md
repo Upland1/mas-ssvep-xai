@@ -1,6 +1,6 @@
 # P22 · 07 · Scientific review
 
-Status: READY (pre-run audit, Round 1)
+Status: READY (pre-run audit Round 2 PASS; results review APPROVE)
 Author: scientific-reviewer
 Reads: 00, 02, 03_changes_ml-engineer.md, 04_tests.md, `git diff main -- src scripts tests configs` (branch @ 91bf2f8), decisions.md P21 C-1..C-6 and P22 rows, RULES R1/R2/R8/R9, PF-34..37, R-16, builder smoke outputs under `mas/state/scratch/p22/`
 
@@ -204,18 +204,144 @@ Verdict: PASS
 
 ## Results review
 
-Verdict: APPROVE / REJECT
+Reads:
+
+- `05_run.md` and `06_verify.md` (f5700bd, with the privacy-line fix 5f73505);
+- `reports/logs/P22/analysis.txt` and `pytest_full.log`;
+- `reports/loso_w1_p22_{common,all,names}/summary.csv` and `predictions.csv`;
+- `reports/loso_warmup/{summary,cohort,recording_order}.csv`.
+
+Run at 461ef33 from a clean worktree (V1: one head, `git_dirty` False in all 48 folds and in the 4 config files).
 
 ### Deviations from references
 
-| Ref | Expected | Obtained (log) | Δ | Within tolerance? | Explanation | Accepted? |
+R-16 sets no numeric target. The pre-registered predictions are PR-1..PR-7, read against the wording above. They were written after the builder smokes had been seen (disclosed above). V10 shows that the verifier numbers equal those smokes exactly, so these are plausibility checks, not blind tests.
+
+| Ref | Expected (pre-registered) | Obtained (`06_verify.md`, `analysis.txt`) | Δ | Within tolerance? | Explanation | Accepted? |
 |---|---|---|---|---|---|---|
-| | | | | | | |
+| PR-1 | no subject with `lda − within_lda > +2 SE_Δ` (common, all); Mean within ≥ lda; strict in common for S01, S02, S05 | common −2.74 / −2.56 / −1.26 / −0.76 / −2.68 SE_Δ; all −1.81 / −3.00 / −0.55 / 0.00 / −1.38; Means 90.79 vs 87.61 and 88.99 vs 86.34 | — | yes | LOSO stays below within on matched channels; strict where the subject is off ceiling | yes |
+| PR-2 | `lda_subjnorm − lda ≥ −2 SE_Δ` per subject (common, all); Mean subjnorm ≥ lda | minimum is all S05 at −1.89 SE_Δ (reviewer recomputation: −1.62 pp, −1.885 SE_Δ); Means 90.03 vs 87.61 and 88.75 vs 86.34 | 0.11 SE_Δ from refutation | yes, at the edge (D-3) | strict gain only for S01 (+2.30 / +2.26) and S02 (+3.06 / +3.59) | yes |
+| PR-3 | reported, no direction | common +0.44 / −0.50 / +1.67 / +0.33 / +2.68 SE_Δ; all −0.45 / −0.59 / +1.10 / 0.00 / +3.16 | — | n/a | whole-session normalization brings LOSO to within-subject level (ties) for S01–S04; S05 within is strictly above subjnorm | recorded |
+| PR-4 | cohort mean \|warmup − full\| non-increasing over K; at K = 10 none ≤ warmup ≤ full | 27.27, 19.16, 5.66, 0.91; 88.19 ≤ 89.78 ≤ 90.69 | — | yes | signed means −27.27, −19.16, −5.46, −0.91 (S03 K=5 is +0.51) | yes (D-7) |
+| PR-5 | K = 10, \|warmup − full\| ≤ 2 SE_Δ in ≥ 4/5 | 4/5; S05 −2.16 SE_Δ | — | yes | the exception was pre-registered from the smoke value; mechanism open (D-4) | yes |
+| PR-6 | K = 1 warmup < none by > 2 SE_Δ in ≥ 4/5; K = 2 in ≥ 3/5 | K = 1: 4/5 (S02 −0.59, tie); K = 2: 5/5 | — | yes | every K = 1 warm-up holds 1 class; K = 2 holds 1–2 classes | yes |
+| PR-7 | sign of `full − none` (post-K) = sign of `lda_subjnorm − lda` (all windows), wherever \|Δ\| > 2 SE_Δ | S01 +4.82 / +4.49 / +4.20 / +4.11 pp vs +5.59; S02 +7.01 / +7.05 / +8.05 / +8.20 vs +6.83 | — | yes | complete check, see D-6 | yes |
+| V1–V11 | binding run items | all MET (`06_verify.md` table) | — | yes | reviewer spot-checks below | yes |
+
+**Reviewer spot-checks.** These are independent recomputations from the CSVs (`.venv/bin/python` heredoc in this session):
+
+- **V8:** `lda_subjnorm` / `lda` accuracy over the trials ranked after K in `recording_order.csv`:
+
+  | Subject | K | Scored windows | `full` recomputed vs CSV | `none` recomputed vs CSV |
+  |---|---|---|---|---|
+  | S01 | 10 | 510 | 73.333 vs 73.33 | 69.216 vs 69.22 |
+  | S04 | 1 | 662 | 99.698 vs 99.70 | 99.547 vs 99.55 |
+  | S05 | 5 | 594 | 97.643 vs 97.64 | 97.811 vs 97.81 |
+
+- **PR-2 edge:** −1.885 SE_Δ, recomputed.
+- **Skipped tests:** the 8 skips are exactly the CUDA-only tests:
+
+  ```
+  CUDA_VISIBLE_DEVICES="" .venv/bin/python -m pytest -q -rs tests/test_p15_gnn.py::test_model_runs_on_cuda tests/test_p21_loso_networks.py::test_network_fold_runs_on_cuda tests/test_p20_networks.py::test_cnn_fold_runs_on_cuda tests/test_p08_eegnet_known_answer.py::test_cuda_forward_matches_cpu
+  ```
+
+  Output: `SKIPPED [1] test_p15_gnn.py:209`, `[3] test_p21_loso_networks.py:127`, `[3] test_p20_networks.py:94`, `[1] test_p08_eegnet_known_answer.py:174`, `8 skipped`. None of them is a P22 test. 1433 + 8 = 1441, the tester's count.
 
 ### Interpretation check
 
+- **Matched LOSO vs within (P21 C-3 closed).** `within_lda` runs on the LOSO pool. V3 shows equal channel lists in every fold, and V7 shows that `fbcca`, `lda` and `lda_subjnorm` are bitwise equal to P21's `reports/loso_w1_s01-s05` and `reports/loso_w1_s01-s05_all`. So P22 adds a matched within reference without moving any P21 number.
+  - The LOSO cost on matched channels is material (strict) only for S01, S02 and S05 in common, and only for S02 in all.
+  - S03 and S04 are at ceiling, where window-level SE cannot separate the methods.
+- **Test-time normalization.** `lda_subjnorm` is offline and uses unlabeled whole-session statistics.
+  - It brings LOSO to within-subject level (ties) for S01–S04.
+  - It never helps S03–S05.
+  - It comes within 0.11 SE_Δ of hurting S05 under `all`.
+
+  This is an upper bound and must not be read as an online result.
+- **Warm-up (online variant).**
+  - With 1–2 warm-up trials (1–2 classes, 4–20 s of signal), first-K normalization is far worse than none: cohort −25.03 and −16.95 pp vs `none` at K = 1 and 2.
+  - At K = 10 (about 140 s, all 5 classes in every subject), it sits between none and full: cohort 88.19 ≤ 89.78 ≤ 90.69.
+  - Per subject at K = 10, `warmup − none` is strict only for S02 (+3.42 SE_Δ). The cohort +1.59 pp (SD 4.33) is therefore driven by S02 and is not a general online gain.
+  - The 1–2-class loss at small K is a class-coverage effect of the warm-up mean, not a code defect: V8 shows that `full` and `none` reproduce the LOSO fits exactly, and `Std guard` = none in all 20 rows.
+- **S05 at K = 10 (−2.16 SE_Δ).** All 5 classes are seen, but the first 10 trials are unbalanced: classes 103 ×4, 102 ×2, 105 ×2, 104 ×1, 101 ×1 (`recording_order.csv`, against 8 per class in the session). A biased warm-up mean is a plausible cause, but it was not tested. The pre-run wording ("2 classes in its first 5 trials") does not explain K = 10, and that wording is corrected here.
+- **Names run (N5).** This is a 2-subject LOSO, so each fit has one training subject.
+  - S02 `lda` 46.27 % is trained on S05 alone, against within 77.36 (−12.12 SE_Δ). S05 `lda_subjnorm − lda` is −3.71 SE_Δ.
+  - The run shows that the explicit-names path works (V4, V7), and that one training subject is a poor LOSO cohort. It is not a cohort result, and it carries no R-16 direction.
+- **Noise unit.** All SE_Δ values are window-level. About 17 overlapping windows per trial makes them lower bounds (N6), so "strict" claims are necessary-condition claims.
+  - `within_lda` SD over 5 repeats is 0.08–1.00 pp, below the window-level SE.
+- **R2 labelling.** The code labels are present: the method label `lda_subjnorm (unsupervised per-subject normalization)` and the warm-up docstring. The warm-up CSV columns and `Data source` carry no test-time label. This is a scribe obligation (S1) and a P23 code item (C-3).
+- **R9.** Per-subject rows exist for every method, with `2-tap Smoothed (%)` and a data-source string that names the build, session, cohort and channel mode. 2.0 s does not apply (LOSO at w1).
+- **Traceability.** Every number in 05/06 points to `reports/logs/P22/*` or the out-dir CSVs. I re-derived the spot-checks above. The cohort |warmup − full| at K = 5 (5.66) is a mean of absolute values, and 06 explains why it differs from the CSV's signed −5.46.
+- **Privacy.**
+  - The first verification commit f5700bd wrote the path of the local hook script into `06_verify.md`. That path contains one hit of the guard's term list (scan by reference, fragment-built pattern: `git show f5700bd` 1 hit; its removal line in 5f73505 is 1 hit).
+  - f5700bd also committed a result placeholder. So the privacy scan ran after the commit, not before it, which repeats the P09 slip.
+  - The HEAD tree is clean: `git grep` over the P22 phase folder gives 0, and commit messages give 0.
+  - History is not rewritten by agents (P09, P10 and P21 precedent). The hit stays in the branch history and is recorded as D-2 for Sebastian.
+
 ### Decisions for decisions.md
+
+Accepted deviations:
+
+- **D-1.** Suite on the clean worktree: `1433 passed, 8 skipped, 22 warnings in 800.46s`. The 8 skips are the CUDA-only tests, skipped because `CUDA_VISIBLE_DEVICES=""` (reviewer `-rs` run: 1 + 3 + 3 + 1). This equals the tester's 1441 passed, and no P22 test was skipped.
+- **D-2.** Privacy: f5700bd committed the local hook-script path, 1 hit of the guard's term list, in `06_verify.md`. It was corrected in 5f73505, and the HEAD tree and commit messages are clean. History is not rewritten (P09/P10/P21 precedent); Sebastian may squash before pushing. The scan ran after the commit (a placeholder was committed too), which is a process slip against the P09 rule.
+- **D-3.** PR-2 holds at the edge: S05 under `all` is −1.89 SE_Δ, a tie by the pre-registered rule and 0.11 SE_Δ from refutation. It is reported as a tie, not as a gain.
+- **D-4.** The PR-5 exception, S05 K = 10 at −2.16 SE_Δ, was pre-registered from the smoke value. The pre-run rationale ("2 classes in its first 5 trials") does not apply at K = 10. Class imbalance of S05's first 10 trials (103 ×4, 101 ×1) is an untested hypothesis.
+- **D-5.** The names run is a 2-subject LOSO (one training subject per fit). Its numbers are a record of the explicit-names path, not a cohort result. S05 `lda_subjnorm − lda` −3.71 SE_Δ lies outside every prediction's scope.
+- **D-6.** The PR-7 check on S01 and S02 only is complete under the wording. Those are the only subjects with all-window |`lda_subjnorm − lda`| > 2 SE_Δ in common (+2.30, +3.06); S03–S05 tie, and no (subject, K) cell has |z_fn| > 2 with the opposite sign. S01's post-K `full − none` is not strict (1.45–1.97 SE_Δ), so the warm-up table must not call it strict.
+- **D-7.** PR-4 is read on the cohort mean of absolute values (27.27, 19.16, 5.66, 0.91). The CSV's signed means (−27.27, −19.16, −5.46, −0.91) are reported beside it.
+- **D-8.** The builder smokes (dirty tree at 046e45b) equal the clean verifier run to 0.0 (V10). The smokes are confirmed as previews, not results.
+
+Carry-forwards for P23:
+
+- **C-1 (ml-engineer).** Add three fields to fold configs before any long resumable P23 job:
+  - training-subject window counts;
+  - the built-folder `meta.git_commit`;
+  - the `--config` file hash (N7).
+
+  Also fix the `code_changed` docstring (N8), and pass `P["groups"]` to `within_lda` (N2).
+- **C-2 (verifier).** Run the privacy scan on the staged diff (`git diff --cached`) before every commit. Never write local tooling paths into handoffs; any non-zero hit stops the commit (P09 rule).
+- **C-3 (ml-engineer, scribe).** Make the warm-up `Data source` (or a `Normalization` column) carry the R2 test-time label, and do the same for any GNN `_subjnorm` output.
+- **C-4 (orchestrator, reviewer).** P23 GNN `_subjnorm` variants are labelled offline upper bounds unless a first-K warm-up is run. On this cohort, K ≤ 2 loses 17–25 pp against no normalization, and K = 10 (about 140 s) is the first K tied with whole-session normalization in 4/5 subjects. Pre-register any "online" GNN claim against these P22 numbers.
+- **C-5 (all).** Never resume into P21 out-dirs: their folds have no `git_dirty` and are refused (N9). Per-subject network claims keep the P21 C-4 seed-range floor in addition to window-level SE.
+
+### Binding items for the scribe
+
+- **S1.**
+  - Every table states its data source: built continuous folders `processed_continuous/w1_s0.25`, session OO, cohort and channel mode, LOSO or within-subject, 1.0 s windows, stride 0.25 s.
+  - Every table labels the normalizations:
+    - `full` = test-time normalization from unlabeled whole-session statistics (offline upper bound);
+    - `warmup` = statistics of the first K unlabeled trials in recording order (online variant, fixed after K);
+    - `none` = no test-time normalization.
+  - `lda_subjnorm` keeps its "(unsupervised per-subject normalization)" label.
+- **S2 (R9).** For the common and all runs, report per subject the Acc and the 2-tap Smoothed accuracy of `fbcca`, `lda`, `lda_subjnorm` and `within_lda` (with its SD over 5 repeats), plus the Mean/SD rows and `Folds`. Never report means only.
+- **S3.** In the warm-up table, give per subject and K:
+  - warm-up windows, classes, span (s), scored windows and `Std guard` (none in all 20 rows);
+  - `full`, `warmup` and `none`, and `warmup − full` with SE_Δ;
+  - the cohort table.
+
+  State two facts: K counts trials with at least one valid window, and S04 at K = 1 had 3 windows (1.5 s).
+- **S4.** Give PR-1..PR-7 outcomes in SE_Δ units, with the window-level caveat (N6). Also state:
+  - PR-2 at the edge (D-3);
+  - PR-5's exception with its mechanism open (D-4);
+  - that the predictions were written after the builder smokes were seen.
+- **S5.** The names run is labelled a 2-subject LOSO with one training subject per fit. It is not compared with the 5-subject runs.
+- **S6.** State the regression identity (V7): the P22 refactor leaves `fbcca`, `lda` and `lda_subjnorm` per-window identical to P21's cohort-5 out-dirs.
+- **S7.** Acceptance 2: quote the two refusal messages verbatim (`seed`, `hyper`), the unchanged hashes and the 20 `[skip]` lines of the unchanged rerun.
+- **S8.** Suite: `1433 passed, 8 skipped` with CUDA hidden; the 8 are the CUDA-only tests (D-1).
+- **S9.** Privacy note D-2, written by reference only: "a local tool path, a hit of the guard's term list". Never spell the path or the terms.
 
 ## Sources spot-check
 
+The following were opened in this review, and each says what 06 claims:
+
+- `reports/logs/P22/analysis.txt` exists;
+- `reports/logs/P22/pytest_full.log`, last line `1433 passed, 8 skipped, 22 warnings in 800.46s (0:13:20)`;
+- `reports/loso_warmup/recording_order.csv` (S05 class sequence);
+- `reports/loso_w1_p22_common/predictions.csv` (V8 recomputation);
+- `reports/loso_w1_p22_all/summary.csv` (PR-2 edge).
+
+`mas/state/scratch/reference_access.log` is still 42 lines, so there was no R11 access.
+
 ## Questions
+
+Verdict: APPROVE
