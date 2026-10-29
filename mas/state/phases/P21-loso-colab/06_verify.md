@@ -5,7 +5,7 @@ Author: verifier
 Reads: 00_assignment.md (acceptance), 02_plan.md, 05_run.md, the phase branch
 Clean checkout: `mas/state/scratch/verify/P21` @ e349656ad8cbc78c1e68dfe3212b2a3bc551dcc1 (removed after the run)
 
-Verdict: PASS (partial; network run in progress)
+Verdict: PASS
 
 Scope. Cohort 5 (S01-S05) is verified in full. The 40-subject cohort is not available (command 1 printed `Cohort: 5 subjects built (S01, S02, S03, S04, S05), 0 skipped (none)`, B2), so commands 5, 6, B5 and 7 are a human-run request (`05_run.md`, section "Human run requests"). No stop condition fired (P1, B3 pass; B8 does not apply because command 5 did not run).
 
@@ -146,3 +146,24 @@ Verdict stays `PASS (partial; network run in progress)`: no stop condition faile
 | Privacy | This commit stages only `05_run.md` and `06_verify.md`. |
 
 Reasons (if FAIL): none so far. Open: HR-4 networks (ccnn, eegnet, compact) running as PID 3604944; P2 for networks (against P20 `nn_sweep` is cohort-5 only, so the full-cohort network P2 reference must be a within network run on the same channels, not available), P4 degenerate folds, network B10 and post-run 6 will be added when `mas/state/scratch/p21_hr4/DONE` exists.
+
+---
+
+# Full cohort — part 2 (stopped) (appended 2026-10-28, verifier)
+
+Final verdict: `Verdict: PASS` (line 8). Networks are judged on cohort 5 per Sebastian's decision (decisions.md P21 row, 2026-10-28). Numbers, table and commands: `05_run.md`, section "Full cohort — part 2 (stopped)"; script `mas/state/scratch/p21_verify/full2.py`, output `reports/logs/P21/full_part2_checks.txt`. No training run was started in this step.
+
+| Item | Result |
+|---|---|
+| Stop left no `.tmp` or partial fold | PASS: empty list; folds fbcca/lda/lda_subjnorm/ccnn 39 each, eegnet 2 (not a result), compact_eegnet 0 |
+| `summary.csv` provenance | last rebuilt 21:02:41 by the ccnn run (exit 0 at 21:02:44); methods fbcca, lda, lda_subjnorm, ccnn; no eegnet rows |
+| B10 on ccnn cohort 39 | PASS: 0 test-in-train, n_train identity True, one fold config; git_head 35 x da92a47 and 4 x f0fa371, diff between them is documentation only |
+| P4 | PASS: 0 degenerate folds for ccnn cohort 39 (0 with best epoch <= 5, 0 with train acc < 30 %) and for ccnn, eegnet, compact_eegnet cohort 5 (seeds 42/43/44 included) |
+| Post-run check 6 (C-3), descriptive | ccnn 71.58 vs lda 72.54 vs lda_subjnorm 75.16 vs fbcca 64.56 (cohort 39, 3 common channels); single repeat, no ranking claim |
+| Network P2 cohort 39 | not evaluable (no within network reference on those channels) |
+| Stop conditions P1, B3, B8 | met in part 1 (P1 0 mismatches on 32 matched subjects; B3 hash equal; B8 10/10 equal); nothing in part 2 changes them |
+| Acceptance items 1-7 | met: cohort-5 items verified in the first section (tests, runs, networks on cohort 5 with D1 seeds), classical full cohort in part 1, ccnn cohort 39 here as an extra data source |
+
+Open (non-blocking, recorded): P2 `lda` direction on the full cohort was not observed by the pre-registered rule (22/32 at LOSO <= within + 1 pp; part 1), reported without changing settings; P5 not evaluable; eegnet and compact_eegnet on cohort 39 not run by decision.
+
+Reasons (if FAIL): none.

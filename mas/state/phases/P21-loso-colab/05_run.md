@@ -264,3 +264,73 @@ Fold seconds (`folds.csv`): `loso_w1` lda mean 6.7 s (first 3 folds 6.1, 6.0, 7.
 ## HR-4 started (part 2)
 
 Runner `mas/state/scratch/p21_hr4/run_hr4.sh` (ccnn, then eegnet, then compact, `--channels common`, `--out-dir reports/loso_w1`, `tee -a reports/logs/P21/loso_w1_<net>.log`, exit codes appended to `mas/state/scratch/p21_hr4/exitcodes`, `DONE` or `FAILED` written at the end). Launched at 19:37 with `nohup setsid bash run_hr4.sh`; real PID 3604944 (pid file corrected after a first wrong value). First folds (`reports/logs/P21/loso_w1_ccnn.log`): `[+] ccnn test-S01: acc 45.88% on 680 windows, train 77.64%, 86.8 s`, `[+] ccnn test-S02: acc 57.45% on 644 windows, train 75.93%, 69.5 s`. Status of the networks: running; the verdict stays partial until DONE and the network checks (P2 networks, P4, B10 networks, C-3 seeds, post-run 6) are applied.
+
+---
+
+# Full cohort — part 2 (stopped) (appended 2026-10-28, verifier)
+
+Source of every number: `reports/logs/P21/full_part2_checks.txt`, produced by `mas/state/scratch/p21_verify/full2.py` (read-only on `reports/`; no new training run). Decision: Sebastian limited networks to cohort 5; the detached HR-4 job was stopped by the orchestrator at 21:19 (`mas/state/scratch/p21_hr4/STOPPED`).
+
+## State left by the stop
+
+- No `.tmp` or partial file under `reports/loso_w1*` (empty list printed).
+- Folds in `reports/loso_w1/folds` per method: fbcca 39, lda 39, lda_subjnorm 39, ccnn 39, eegnet 2 (S01, S02), compact_eegnet 0. `folds.csv` has fbcca 39, lda 39, lda_subjnorm 39, ccnn 39 and no eegnet row.
+- `exitcodes`: `ccnn exit 0 2026-10-28T21:02:44`. `summary.csv`, `per_subject.csv`, `predictions.csv`, `folds.csv`, `confusion.csv` were last written 21:02:41, i.e. rebuilt by the ccnn run; the eegnet folds (21:07:48, 21:14:38) are later. So `summary.csv` has 41 rows per method for fbcca, lda, lda_subjnorm, ccnn (39 subjects + Mean + SD) and no eegnet rows. The 2 eegnet folds are not a result and are not reported.
+
+## Checks on the cohort-39 ccnn run (extra data source)
+
+- **B10 (ccnn, 39 folds):** `test_subject` not in `train_subjects` in 0 of 39; 38 train subjects each; `n_train` = sum of test windows - `n_windows_test` True; one distinct fold config (channels, mode, classes, cohort, fs, seed, window, stride). The `git_head` differs inside the ccnn set (35 folds `da92a47`, 4 folds `f0fa371`, resumed from the earlier launch); `git diff f0fa371 da92a47 --stat` lists only 3 files under `mas/state/phases/P21-loso-colab/` (no code). Not a B10 failure.
+- **P4 degenerate folds, ccnn cohort 39:** 0 of 39 degenerate. Train Acc (%) min 75.0, median 76.8 (pooled 38-subject training windows, 5 classes); best epoch min 6, median 26, max 69; 0 folds with best epoch <= 5 and 0 with train accuracy < 30 %.
+- **P4, networks cohort 5:** `loso_w1_s01-s05` degenerate 0 of 5 for ccnn, eegnet and compact_eegnet (min train acc 99.4 / 96.3 / 98.3 %; min best epoch 18 / 44 / 38); `_seed43` and `_seed44` 0 of 5 for ccnn and eegnet (min train acc 99.9 / 96.9 and 100.0 / 97.1 %). `loso_w1_s01-s05_all` holds no network rows.
+- **Post-run check 6 (P20 C-3), cohort 39 ccnn only, descriptive (single repeat, no new run):** ccnn mean 71.58 vs lda 72.54 (difference -0.96 pp), vs lda_subjnorm 75.16 (-3.58 pp); ccnn > lda in 19 of 39 subjects. Largest |ccnn - lda|: S015 26.5 pp (ccnn 29.66, lda 56.13), S034 12.4, S024 12.3, S039 12.0 pp. No ranking claim on the cohort-39 network from one repeat; cohort-5 seeds 42/43/44 already stand (part 1, D1).
+- **Network P2 on cohort 39:** not evaluable. P2 needs a within network reference on the same 3 common channels; P20 `nn_sweep` is cohort 5 at 7-8 channels and no within network run exists on S06-S40 or on those channels.
+
+## ccnn LOSO cohort 39 next to classical methods (Acc % at 1 s window, 0.25 s stride)
+
+Data source: built continuous folders `processed_continuous/w1_s0.25`, session OO, cohort 39 subjects (S01-S040 without S020), LOSO, channels common = POz, PO4, O1 (from `reports/loso_w1/summary.csv`). lda_subjnorm is unsupervised per-subject (test-time, whole-session, offline upper-bound) normalization (PF-35).
+
+| Subject | fbcca | lda | lda_subjnorm | ccnn |
+|---|---|---|---|---|
+| S01 | 43.24 | 47.65 | 48.38 | 45.88 |
+| S02 | 47.20 | 61.02 | 66.46 | 57.45 |
+| S03 | 80.94 | 89.11 | 89.71 | 90.02 |
+| S04 | 97.14 | 99.10 | 99.40 | 99.10 |
+| S05 | 93.23 | 98.82 | 99.26 | 99.41 |
+| S06 | 64.26 | 77.79 | 84.26 | 85.00 |
+| S07 | 58.53 | 72.06 | 71.91 | 64.56 |
+| S08 | 64.80 | 78.55 | 82.33 | 70.69 |
+| S09 | 38.20 | 53.28 | 65.21 | 55.72 |
+| S010 | 64.39 | 70.72 | 70.38 | 59.07 |
+| S011 | 67.08 | 74.81 | 80.53 | 70.63 |
+| S012 | 50.74 | 48.38 | 53.09 | 44.26 |
+| S013 | 70.40 | 80.10 | 83.44 | 86.45 |
+| S014 | 79.87 | 92.21 | 90.26 | 84.09 |
+| S015 | 54.17 | 56.13 | 59.86 | 29.66 |
+| S016 | 93.82 | 96.18 | 96.76 | 98.82 |
+| S017 | 69.13 | 61.23 | 72.38 | 66.55 |
+| S018 | 46.50 | 49.34 | 54.63 | 57.66 |
+| S019 | 58.53 | 60.59 | 61.18 | 53.97 |
+| S021 | 79.12 | 87.65 | 89.56 | 87.65 |
+| S022 | 86.24 | 95.71 | 94.08 | 97.49 |
+| S023 | 78.09 | 85.59 | 85.00 | 79.12 |
+| S024 | 55.21 | 66.05 | 66.67 | 78.32 |
+| S025 | 32.06 | 36.62 | 50.74 | 48.24 |
+| S026 | 68.38 | 82.79 | 86.47 | 78.68 |
+| S027 | 94.98 | 99.70 | 99.26 | 100.00 |
+| S028 | 49.63 | 65.97 | 67.92 | 60.27 |
+| S029 | 50.48 | 58.28 | 63.54 | 55.10 |
+| S030 | 75.26 | 88.39 | 86.58 | 91.25 |
+| S031 | 67.79 | 71.32 | 73.82 | 72.35 |
+| S032 | 68.58 | 87.76 | 89.53 | 89.68 |
+| S033 | 66.62 | 78.34 | 78.49 | 88.13 |
+| S034 | 60.99 | 73.84 | 73.53 | 61.46 |
+| S035 | 59.48 | 70.42 | 69.65 | 74.11 |
+| S036 | 54.26 | 61.18 | 70.15 | 65.74 |
+| S037 | 85.10 | 91.15 | 91.45 | 83.33 |
+| S038 | 71.47 | 83.97 | 83.68 | 75.88 |
+| S039 | 19.60 | 18.27 | 23.26 | 30.23 |
+| S040 | 52.35 | 58.97 | 58.53 | 55.74 |
+| Mean | 64.56 | 72.54 | 75.16 | 71.58 |
+| SD | 17.59 | 18.60 | 16.64 | 18.92 |
+
+Reported, not interpreted. The 1.0 s and 2.0 s smoothed numbers are in `reports/loso_w1/summary.csv` (column 2-tap Smoothed); the table is Acc at 1.0 s.
