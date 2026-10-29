@@ -7,7 +7,9 @@ same number (S10, S010) are refused. The cohort and its size are printed and wri
 
 Channels (PF-34): the montage must be identical in every subject. `--channels common` (default) = montage channels kept by
 the shared gate in EVERY subject of the cohort (`choose_channels`); `all` = the whole montage for every subject, gate drops
-ignored (window validity still from the shared `valid_mask`); both refuse an empty list. All subjects and methods use the
+ignored (window validity still from the shared `valid_mask`); both refuse an empty list. `--channels PO3 POz Oz ...`
+(P22.2) = exactly these montage names, in this order; subjects whose gate dropped any named channel are LEFT OUT (printed with
+what the gate dropped) and the cohort is the remaining subjects (fewer than 2 is an error). All subjects and methods use the
 same channels, so CSP filters and network inputs have the same shape. The `Channels` column lists them.
 
 Grouping (R1, PF-33): the outer split is the subject. Trial ids restart at 0 in every subject, so they are offset by
@@ -22,21 +24,29 @@ Methods (CLI names; `compact` is `compact_eegnet`, PF-31):
   every subject's feature matrix (training subjects and held-out subject) is z-scored with its OWN mean/std over all its clean
   windows of the session, no labels (offline upper bound; the statistics come from the whole session); then the pooled scaler
   and Shrinkage-LDA as for `lda`.
+- `within_lda` (P22.1): the within-subject reference on EXACTLY the LOSO channels: per held-out subject, `--folds 5`
+  StratifiedGroupKFold(shuffle, random_state = 42 + r) over the subject's true trial ids, r = 0..`--within-repeats`-1 (R1);
+  the same features and pipeline as `lda` (CSP m = 1 fitted on the training trials of the fold, + FBCCA, scaler, Shrinkage-LDA).
+  Acc = mean over repeats, Acc SD = SD over repeats (ddof 1), Runs = repeats; predictions/confusion use repeat 0.
 - `ccnn`, `compact_eegnet`, `eegnet`: `src.models.cnn.training.fit_network` on the pooled training subjects' filtered
   windows (P20 hyperparameters); early-stopping validation = first split of the inner grouped 5-fold over the offset training
   trial ids (PF-32), so it never contains the held-out subject; normalization statistics from the fitting windows only.
 
 Resumable (PF-37): every (method, test subject) fold is written atomically to `<out-dir>/folds/<method>__test-<S>.npz` with its
-`config` JSON (cohort, training subjects, channels, window, stride, fs, hyperparameters, seed, git HEAD) and skipped on rerun
-(`[skip] <method> test-<S>`). A saved fold whose configuration differs (git HEAD aside) is REFUSED unless
-`--allow-config-mismatch` (then it is reused with a warning). The summary is always rebuilt from the fold files.
+`config` JSON (cohort, training subjects, channels, window, stride, fs, hyperparameters, seed, git HEAD recorded once at process
+start, dirty flag of src/scripts/configs) and skipped on rerun (`[skip] <method> test-<S>`). `check_fold` REFUSES a saved fold
+whose configuration differs in any key except `data_root` ("use a new --out-dir"); a different git HEAD is refused only when
+`git diff --stat <h1> <h2> -- src scripts configs` is non-empty or a head cannot be resolved; differing dirty flags are refused at
+any head, a dirty side with differing heads is refused, and dirty is accepted only when both sides are dirty at the same head. There is
+no override flag. The summary is always rebuilt from the fold files; a method with fewer fold files than the cohort is flagged
+(`Folds` column, `[warn]`) and gets no cohort Mean unless `--partial-mean`.
 
 Outputs (`--out-dir`): `summary.csv` (Subject, Window (s), Method, Windows, Trials, Acc (%), Acc SD, BalAcc (%), ITR
 (bits/min), Train Acc (%), Runs, Val Acc (%), Best Epoch, 2-tap Smoothed (%), Channels, Data source; cohort rows Mean and SD
 per method, SD with ddof = 1), `per_subject.csv` (Subject x Method pivots of Acc and 2-tap), `predictions.csv`, `confusion.csv`
 (pooled over the held-out subjects), `folds.csv` (per fold: train/val accuracy, best epoch, seconds, `degenerate`) and
 `loso_config.json`. 2-tap smoothing averages a window with the previous window of the SAME trial (sorted by trial, offset;
-R8). ITR = Wolpaw, N = 5, T = window + 0.5 s. `Runs` = 1 (one fit per held-out subject, seed 42).
+R8). ITR = Wolpaw, N = 5, T = window + 0.5 s. `Runs` = 1 (one fit per held-out subject, seed 42; `within_lda`: repeats).
 """
 
 import argparse
@@ -78,22 +88,25 @@ from src.preprocessing.dataset.smoothing import smooth_probabilities_by_trial  #
 from src.preprocessing.window_quality import quality_params_from_config  # noqa: E402
 
 TRIAL_OFFSET = 10_000        # subject k's trial ids become id + TRIAL_OFFSET * k (PF-33)
-CLASSICAL = ("fbcca", "lda", "lda_subjnorm")
+CLASSICAL = ("fbcca", "lda", "lda_subjnorm", "within_lda")
 NETWORK_METHODS = {"ccnn": "ccnn", "compact": "compact_eegnet", "compact_eegnet": "compact_eegnet", "eegnet": "eegnet"}
-METHOD_ORDER = ["fbcca", "lda", "lda_subjnorm", "ccnn", "compact_eegnet", "eegnet"]
-CLI_METHODS = ["fbcca", "lda", "lda_subjnorm", "ccnn", "compact", "eegnet"]
+METHOD_ORDER = ["fbcca", "lda", "lda_subjnorm", "within_lda", "ccnn", "compact_eegnet", "eegnet"]
+CLI_METHODS = ["fbcca", "lda", "lda_subjnorm", "within_lda", "ccnn", "compact", "eegnet"]
 METHOD_LABELS = {"lda_subjnorm": "lda_subjnorm (unsupervised per-subject normalization)"}
 SUBJNORM_NOTE = ("unsupervised per-subject normalization: each subject's features z-scored with its own unlabeled "
                  "whole-session mean/std (test-time, offline upper bound; R2 exception, PF-35)")
 SUMMARY_COLUMNS = ["Subject", "Window (s)", "Method", "Windows", "Trials", "Acc (%)", "Acc SD", "BalAcc (%)",
                    "ITR (bits/min)", "Train Acc (%)", "Runs", "Val Acc (%)", "Best Epoch", "2-tap Smoothed (%)",
-                   "Channels", "Data source"]
+                   "Folds", "Channels", "Data source"]
 NUMERIC = ["Windows", "Trials", "Acc (%)", "Acc SD", "BalAcc (%)", "ITR (bits/min)", "Train Acc (%)", "Runs",
            "Val Acc (%)", "Best Epoch", "2-tap Smoothed (%)"]
 DEGENERATE_BEST_EPOCH = 5    # P20 C-2: restored best epoch <= 5 or train acc < chance + 10 pp
 DEGENERATE_MARGIN = 0.10
 CHUNK = 2048                 # rows per CSP transform call (memory)
-IGNORED_CONFIG_KEYS = ("git_head", "data_root")   # code revision and machine paths do not change what a fold computed
+IGNORED_CONFIG_KEYS = ("git_head", "git_dirty", "data_root")   # paths never matter; the code revision has its own rule (`fold_problem`)
+WITHIN_FOLDS, WITHIN_REPEATS = 5, 5
+CODE_PATHS = ("src", "scripts", "configs")      # a head change is harmless only if nothing here differs between the two heads
+DIRTY_PATHS = ("src", "scripts", "configs")
 
 
 def label_of(method: str) -> str:
@@ -105,6 +118,36 @@ def git_head() -> str:
     return subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True, timeout=20).stdout.strip() or "unknown"
   except Exception:
     return "unknown"
+
+
+def git_dirty() -> bool:
+  """True when tracked or untracked (non-ignored) files under src/scripts/configs differ from HEAD; True when git fails."""
+  try:
+    r = subprocess.run(["git", "status", "--porcelain", "--", *DIRTY_PATHS], cwd=ROOT, capture_output=True, text=True, timeout=30)
+    return r.returncode != 0 or bool(r.stdout.strip())
+  except Exception:
+    return True
+
+
+RUN_STATE: dict = {}      # {"git_head", "git_dirty"}: captured ONCE per process by `capture_run_state` (P21 C-1), not per fold
+
+
+def capture_run_state() -> dict:
+  RUN_STATE.clear()
+  RUN_STATE.update({"git_head": git_head(), "git_dirty": git_dirty()})
+  return RUN_STATE
+
+
+def code_changed(h1: str, h2: str, repo: Path = ROOT) -> bool:
+  """True when `src/` or `scripts/` differ between heads `h1` and `h2` (`git diff --stat`), or when git cannot say (an
+  unresolvable head counts as changed: the refusal is the safe answer)."""
+  if "unknown" in (h1, h2) or not h1 or not h2:
+    return True
+  try:
+    r = subprocess.run(["git", "diff", "--stat", h1, h2, "--", *CODE_PATHS], cwd=repo, capture_output=True, text=True, timeout=60)
+  except Exception:
+    return True
+  return r.returncode != 0 or bool(r.stdout.strip())
 
 
 # --- subjects and channels -----------------------------------------------------------------------------------------
@@ -120,17 +163,50 @@ def check_subject_names(names: Sequence[str]) -> list:
   return [n for _, n in sorted(zip(nums, names))]
 
 
-def choose_channels(montages: dict, kept: dict, mode: str = "common") -> list:
-  """The one channel list of the cohort (PF-34). `montages[s]` = montage of subject s, `kept[s]` = channels the shared gate
-  kept. `common`: montage channels kept in every subject (montage order); `all`: the whole montage. ValueError if the
-  montages differ between subjects, the mode is unknown or the result is empty."""
-  if mode not in ("common", "all"):
-    raise ValueError(f"channels must be 'common' or 'all', got {mode!r}")
+def parse_channels(values: Sequence[str]) -> tuple:
+  """`--channels` values -> `(mode, names)`: `common` / `all` (alone) or `names` with the explicit list (order kept)."""
+  vals = [str(v) for v in values]
+  if not vals:
+    raise ValueError("--channels needs 'common', 'all' or a list of montage channel names")
+  if len(vals) == 1 and vals[0] in ("common", "all"):
+    return vals[0], []
+  if any(v in ("common", "all") for v in vals):
+    raise ValueError(f"'common'/'all' cannot be mixed with channel names: {vals}")
+  if len(set(vals)) != len(vals):
+    raise ValueError(f"duplicate channel names in {vals}")
+  return "names", vals
+
+
+def leave_out_for_names(montages: dict, kept: dict, names: Sequence[str]) -> tuple:
+  """PF-34 / P22.2: `(remaining subjects, {left-out subject: [named channels its gate dropped]})`. ValueError if a name is not in
+  the (common) montage or the montages differ. A subject stays only if its gate kept EVERY named channel."""
   subs = list(montages)
   ref = list(montages[subs[0]])
   for s in subs:
     if list(montages[s]) != ref:
       raise ValueError(f"montage of {s} {list(montages[s])} differs from {subs[0]} {ref}")
+  unknown = [c for c in names if c not in ref]
+  if unknown:
+    raise ValueError(f"channels {unknown} are not in the montage {ref}")
+  out = {s: [c for c in names if c not in kept[s]] for s in subs}
+  return [s for s in subs if not out[s]], {s: d for s, d in out.items() if d}
+
+
+def choose_channels(montages: dict, kept: dict, mode: str = "common", names: Sequence[str] = ()) -> list:
+  """The one channel list of the cohort (PF-34). `montages[s]` = montage of subject s, `kept[s]` = channels the shared gate
+  kept. `common`: montage channels kept in every subject (montage order); `all`: the whole montage; `names`: `names` as given
+  (validated against the montage; the caller leaves out subjects whose gate dropped one, `leave_out_for_names`). ValueError if
+  the montages differ between subjects, the mode is unknown or the result is empty."""
+  if mode not in ("common", "all", "names"):
+    raise ValueError(f"channels must be 'common', 'all' or 'names', got {mode!r}")
+  subs = list(montages)
+  ref = list(montages[subs[0]])
+  for s in subs:
+    if list(montages[s]) != ref:
+      raise ValueError(f"montage of {s} {list(montages[s])} differs from {subs[0]} {ref}")
+  if mode == "names":
+    leave_out_for_names(montages, kept, names)
+    return [str(c) for c in names]
   chosen = ref if mode == "all" else [c for c in ref if all(c in kept[s] for s in subs)]
   if not chosen:
     raise ValueError("no channel is kept by the gate in every subject; use --channels all")
@@ -162,6 +238,8 @@ def pool(subs: list, banks: Sequence[str] = (), consume: bool = False) -> dict:
          "trial": cat(lambda d: np.asarray(d["trial_ids"]) + TRIAL_OFFSET * subs.index(d)),
          "groups": cat(lambda d: np.asarray(d["cv_groups"]) + TRIAL_OFFSET * subs.index(d)),
          "offsets": cat(lambda d: np.asarray(d["offsets"])), "fs": float(subs[0]["fs"]),
+         "starts": (cat(lambda d: np.asarray(d["window_starts"])) if all(d.get("window_starts") is not None for d in subs)
+                    else None),
          "channels": list(subs[0]["channel_names"]), "subjects": [d["subject"] for d in subs]}
   if all("fb" in d for d in subs):
     out["fb"] = np.concatenate([d["fb"] for d in subs])
@@ -207,22 +285,63 @@ def subject_zscore(F: np.ndarray, subj: np.ndarray) -> np.ndarray:
   return out
 
 
+def lda_features(csp_bands: np.ndarray, fb: np.ndarray, yi: np.ndarray, tr: np.ndarray) -> tuple:
+  """`(csp, F)`: CSP (m = 1 per band) fitted on the rows `tr` only (R2), `F` = [CSP log-variances, FBCCA scores] of EVERY row."""
+  csp = FBCSPTransformer(1).fit(csp_bands[tr], yi[tr])
+  csp_feats = np.vstack([csp.transform(csp_bands[i:i + CHUNK]) for i in range(0, len(csp_bands), CHUNK)])   # no copy of the bands
+  return csp, np.hstack([csp_feats, fb])
+
+
+def lda_pipeline(seed: int = SEED) -> Pipeline:
+  """StandardScaler + Shrinkage-LDA (lsqr, auto): the classifier of `lda`, `lda_subjnorm`, `within_lda` and the warm-up study."""
+  return Pipeline([("scaler", StandardScaler()), ("lda", get_sklearn_model_suite(seed)["Shrinkage-LDA lsqr"])])
+
+
 def lda_loso_fold(csp_bands: np.ndarray, fb: np.ndarray, yi: np.ndarray, subj: np.ndarray, tr: np.ndarray,
                   te: np.ndarray, subjnorm: bool = False, seed: int = SEED) -> dict:
   """`lda` / `lda_subjnorm` fold on pooled arrays. CSP (m = 1) is fitted on `csp_bands[tr]` only, features = CSP + FBCCA,
   optionally z-scored per subject without labels (`subjnorm`), then StandardScaler + Shrinkage-LDA (lsqr, auto) on the
   training rows. Returns `proba` (n_te, K), `train_acc` and the fitted `csp`, `pipeline`."""
-  csp = FBCSPTransformer(1).fit(csp_bands[tr], yi[tr])
+  csp, Fall = lda_features(csp_bands, fb, yi, tr)
   rows = np.concatenate([tr, te])
-  csp_feats = np.vstack([csp.transform(csp_bands[i:i + CHUNK]) for i in range(0, len(csp_bands), CHUNK)])   # no copy of the bands
-  F = np.hstack([csp_feats, fb])[rows]
+  F = Fall[rows]
   if subjnorm:
     F = subject_zscore(F, subj[rows])
   ftr, fte = F[:len(tr)], F[len(tr):]
-  pipe = Pipeline([("scaler", StandardScaler()), ("lda", get_sklearn_model_suite(seed)["Shrinkage-LDA lsqr"])])
+  pipe = lda_pipeline(seed)
   pipe.fit(ftr, yi[tr])
   return {"proba": pipe.predict_proba(fte), "train_acc": float(np.mean(pipe.predict(ftr) == yi[tr])),
           "csp": csp, "pipeline": pipe}
+
+
+def within_splits(yi: np.ndarray, groups: np.ndarray, folds: int, seed: int) -> list:
+  """R1 splitter of `within_lda`: `StratifiedGroupKFold(folds, shuffle, random_state = seed)` over the subject's true trial ids;
+  asserts that no trial id is on both sides of any fold."""
+  from sklearn.model_selection import StratifiedGroupKFold
+  splits = list(StratifiedGroupKFold(n_splits=folds, shuffle=True, random_state=seed).split(np.zeros(len(yi)), yi, groups))
+  assert_no_shared_trials(splits, groups)
+  return splits
+
+
+def within_lda_fold(csp_bands: np.ndarray, fb: np.ndarray, yi: np.ndarray, groups: np.ndarray, folds: int = WITHIN_FOLDS,
+                    repeats: int = WITHIN_REPEATS, seed: int = SEED, n_classes: int = 0) -> dict:
+  """P22.1 `within_lda` for ONE subject: arrays hold only that subject's rows, `groups` = its true trial ids (R1).
+  Repeat r = StratifiedGroupKFold(folds, shuffle, random_state = seed + r), every fold fits the `lda` pipeline on its training
+  trials only (`lda_loso_fold`, same features). Returns `proba` (repeats, n, K) out of fold (each row predicted by the fold
+  that did not train on its trial), `acc` per repeat, `train_acc` (mean over folds and repeats) and `n_train`."""
+  K = n_classes or int(yi.max()) + 1
+  proba = np.zeros((repeats, len(yi), K))
+  tra, ntr = [], []
+  subj0 = np.zeros(len(yi), dtype=int)
+  for r in range(repeats):
+    splits = within_splits(yi, groups, folds, seed + r)
+    for tr, te in splits:
+      f = lda_loso_fold(csp_bands, fb, yi, subj0, tr, te, False, seed)
+      proba[r, te] = f["proba"]
+      tra.append(f["train_acc"])
+      ntr.append(len(tr))
+  return {"proba": proba, "acc": [float(np.mean(p.argmax(1) == yi)) for p in proba], "train_acc": float(np.mean(tra)),
+          "n_train": float(np.mean(ntr))}
 
 
 def fbcca_fold(fb: np.ndarray, te: np.ndarray) -> dict:
@@ -276,6 +395,35 @@ def comparable(config: dict) -> dict:
   return {k: v for k, v in config.items() if k not in IGNORED_CONFIG_KEYS}
 
 
+def fold_problem(saved: dict, mine: dict, repo: Path = ROOT) -> Optional[str]:
+  """Why a saved fold must not be reused with the current configuration, or None (PF-37, P21 C-1).
+
+  Any difference of a configuration key except `data_root` is a problem. A different `git_head` is a problem only when `src/` or
+  `scripts/` or `configs/` differ between the heads (`code_changed`; an unresolvable head counts as a difference). Dirty flags
+  (uncommitted code changes): differing flags are a problem at any head; a dirty side with differing heads is a problem; dirty
+  is accepted only when both sides are dirty at the same head."""
+  diff = config_diff(saved, mine)
+  if diff:
+    return f"configuration differs {diff} (saved, now)"
+  h1, h2 = saved.get("git_head", "unknown"), mine.get("git_head", "unknown")
+  d1, d2 = saved.get("git_dirty"), mine.get("git_dirty")
+  if d1 != d2:
+    return f"working tree state differs (dirty {d1} -> {d2}, heads {h1[:10]} -> {h2[:10]})"
+  if h1 != h2:
+    if d1 or d2:
+      return f"git head {h1[:10]} -> {h2[:10]} with uncommitted code changes (dirty {d1} -> {d2})"
+    if code_changed(h1, h2, repo):
+      return f"git head {h1[:10]} -> {h2[:10]} changes src/, scripts/ or configs/ (or a head cannot be resolved)"
+  return None
+
+
+def check_fold(path: Path, saved: dict, mine: dict, repo: Path = ROOT) -> None:
+  """Refuse (SystemExit) to reuse a fold made with another configuration or code; there is no override (P22.3)."""
+  why = fold_problem(saved, mine, repo)
+  if why:
+    raise SystemExit(f"[x] {path} was made with a different configuration: {why}; use a new --out-dir")
+
+
 def config_diff(saved: dict, mine: dict) -> dict:
   a, b = comparable(saved), comparable(mine)
   return {k: (a.get(k), b.get(k)) for k in sorted(set(a) | set(b)) if a.get(k) != b.get(k)}
@@ -302,11 +450,14 @@ def load_fold(path: Path) -> tuple:
 def method_hyper(method: str, args) -> dict:
   if method == "fbcca":
     return {"decision": "argmax of FBCCA scores (continuous bank), 3 harmonics"}
-  if method in ("lda", "lda_subjnorm"):
+  if method in ("lda", "lda_subjnorm", "within_lda"):
     h = {"features": "FBCSP (m=1, in-fold on training subjects) + FBCCA", "scaler": "StandardScaler",
          "classifier": "Shrinkage-LDA lsqr auto"}
     if method == "lda_subjnorm":
       h["subject_norm"] = SUBJNORM_NOTE
+    if method == "within_lda":
+      h.update({"protocol": "within-subject StratifiedGroupKFold over true trial ids, random_state = seed + repeat",
+                "folds": args.folds, "within_repeats": args.within_repeats})
     return h
   from src.models.cnn import training as T
   return {"model": method, "lr": T.LR, "batch_size": T.BATCH_SIZE, "weight_decay": T.WEIGHT_DECAY,
@@ -315,18 +466,29 @@ def method_hyper(method: str, args) -> dict:
 
 
 def fold_config(method: str, test: str, ctx: dict, args) -> dict:
-  return {"method": method, "test_subject": test, "train_subjects": [s for s in ctx["subjects"] if s != test],
+  state = RUN_STATE or capture_run_state()
+  return {"method": method, "test_subject": test,
+          "train_subjects": [test] if method == "within_lda" else [s for s in ctx["subjects"] if s != test],
           "cohort": ctx["subjects"], "channels_mode": args.channels, "channels": ctx["channels"],
           "window_sec": args.window, "stride_sec": args.stride_sec, "fs": ctx["fs"], "classes": ctx["classes"],
           "quality": "shared", "seed": args.seed, "trial_offset": TRIAL_OFFSET, "hyper": method_hyper(method, args),
-          "n_windows_test": ctx["n_windows"][test], "git_head": git_head(), "data_root": str(ctx["root"])}
+          "n_windows_test": ctx["n_windows"][test], "git_head": state["git_head"], "git_dirty": state["git_dirty"],
+          "data_root": str(ctx["root"])}
 
 
 def run_fold(method: str, P: dict, k: int, args, dev: str) -> tuple:
   """Compute one fold. Returns `(arrays to store, fitted objects for --save-models)`."""
-  tr, te = loso_split(P["subj"], k)
   t0 = time.time()
   extra = {}
+  if method == "within_lda":
+    rows = np.flatnonzero(P["subj"] == k)
+    r = within_lda_fold(P["bands"]["fbcsp"][rows], P["fb"][rows], P["yi"][rows], P["trial"][rows], args.folds,
+                        args.within_repeats, args.seed, len(P["classes"]))
+    arrays = {"proba": r["proba"][0], "proba_rep": r["proba"], "y": P["y"][rows], "trial_id": P["trial"][rows] - TRIAL_OFFSET * k,
+              "offset": P["offsets"][rows], "train_acc": r["train_acc"], "val_acc": np.nan, "best_epoch": np.nan,
+              "epochs_run": np.nan, "n_train": r["n_train"], "seconds": time.time() - t0}
+    return {k_: np.asarray(v) for k_, v in arrays.items()}, {}
+  tr, te = loso_split(P["subj"], k)
   if method == "fbcca":
     r = fbcca_fold(P["fb"], te)
   elif method in ("lda", "lda_subjnorm"):
@@ -374,16 +536,21 @@ def fold_rows(method: str, subject: str, arrays: dict, config: dict, classes: np
   yi = np.searchsorted(classes, y)
   pred = proba.argmax(1)
   sm_pred = smooth_two_tap(proba, arrays["trial_id"], arrays["offset"]).argmax(1)
-  acc = float(np.mean(pred == yi))
+  reps = arrays["proba_rep"] if "proba_rep" in arrays else proba[None]        # within_lda: every repeat is a run (P22.1)
+  r_pred = [p_.argmax(1) for p_ in reps]
+  r_sm = [smooth_two_tap(p_, arrays["trial_id"], arrays["offset"]).argmax(1) for p_ in reps]
+  accs = [float(np.mean(p_ == yi)) for p_ in r_pred]
+  acc = float(np.mean(accs))
   K = len(classes)
   fin = lambda key: float(arrays[key]) if key in arrays and not np.isnan(arrays[key]) else np.nan
   pct = lambda v: round(100 * v, 2) if not np.isnan(v) else np.nan
   row = {"Subject": subject, "Window (s)": config["window_sec"], "Method": label_of(method), "Windows": len(y),
-         "Trials": int(len(np.unique(arrays["trial_id"]))), "Acc (%)": pct(acc), "Acc SD": 0.0,
-         "BalAcc (%)": pct(balanced_accuracy(yi, pred)),
+         "Trials": int(len(np.unique(arrays["trial_id"]))), "Acc (%)": pct(acc),
+         "Acc SD": round(100 * float(np.std(accs, ddof=1)), 2) if len(accs) > 1 else 0.0,
+         "BalAcc (%)": pct(float(np.mean([balanced_accuracy(yi, p_) for p_ in r_pred]))),
          "ITR (bits/min)": round(itr_bits_per_min(acc, K, config["window_sec"] + GAZE_SEC), 2),
-         "Train Acc (%)": pct(fin("train_acc")), "Runs": 1, "Val Acc (%)": pct(fin("val_acc")),
-         "Best Epoch": fin("best_epoch"), "2-tap Smoothed (%)": pct(float(np.mean(sm_pred == yi))),
+         "Train Acc (%)": pct(fin("train_acc")), "Runs": len(reps), "Val Acc (%)": pct(fin("val_acc")),
+         "Best Epoch": fin("best_epoch"), "2-tap Smoothed (%)": pct(float(np.mean([np.mean(q == yi) for q in r_sm]))), "Folds": 1,
          "Channels": ", ".join(config["channels"]) + (" (all, gate channel drops ignored)" if config["channels_mode"] == "all" else ""),
          "Data source": source}
   pr = pd.DataFrame({"subject": subject, "window_sec": config["window_sec"], "method": label_of(method),
@@ -396,14 +563,19 @@ def fold_rows(method: str, subject: str, arrays: dict, config: dict, classes: np
   return row, pr, cm
 
 
-def cohort_rows(summary: pd.DataFrame) -> pd.DataFrame:
-  """Mean and SD (ddof = 1) over the held-out subjects, per method."""
+def cohort_rows(summary: pd.DataFrame, cohort_size: Optional[int] = None, partial_mean: bool = False) -> pd.DataFrame:
+  """Mean and SD (ddof = 1) over the held-out subjects, per method. A method with fewer folds than `cohort_size` (P21 C-2) gets
+  EMPTY Mean/SD (numbers NaN, `Data source` says INCOMPLETE) unless `partial_mean`; `Folds` = folds present."""
   rows = []
   for m, g in summary.groupby("Method", sort=False):
+    incomplete = cohort_size is not None and len(g) < cohort_size
     for name, f in (("Mean", lambda a: a.mean()), ("SD", lambda a: a.std(ddof=1) if len(a) > 1 else 0.0)):
-      r = {c: f(g[c].astype(float)) if g[c].notna().any() else np.nan for c in NUMERIC}
+      r = {c: f(g[c].astype(float)) if g[c].notna().any() and not (incomplete and not partial_mean) else np.nan for c in NUMERIC}
+      src = f"{g['Data source'].iloc[0].split(' | ')[0]} | {len(g)} held-out subjects"
+      if incomplete:
+        src += f" | INCOMPLETE: {len(g)} of {cohort_size} folds" + (" (cohort mean refused)" if not partial_mean else " (--partial-mean)")
       r.update({"Subject": name, "Window (s)": g["Window (s)"].iloc[0], "Method": m, "Channels": g["Channels"].iloc[0],
-                "Data source": f"{g['Data source'].iloc[0].split(' | ')[0]} | {len(g)} held-out subjects"})
+                "Folds": len(g), "Data source": src})
       for c in NUMERIC[2:]:
         r[c] = round(r[c], 2) if not pd.isna(r[c]) else np.nan
       rows.append(r)
@@ -411,11 +583,11 @@ def cohort_rows(summary: pd.DataFrame) -> pd.DataFrame:
 
 
 def build_summary(out: Path, subjects: list, classes: np.ndarray, methods: Sequence[str], config_of: dict, source: str,
-                  allow_mismatch: bool = False) -> dict:
+                  partial_mean: bool = False) -> dict:
   """Rebuild every output from the fold files of `out/folds` that belong to this cohort and these channels.
 
-  Folds of requested methods must match their configuration (else SystemExit, PF-37); stored folds of other methods
-  from another configuration are left out with a warning."""
+  Folds of requested methods must pass `check_fold` (else SystemExit, PF-37); stored folds of other methods that do not are
+  left out with a warning. A method with fewer folds than subjects is flagged and gets no cohort Mean (P21 C-2)."""
   rows, preds, cms, fold_info = [], [], {}, []
   for m in METHOD_ORDER:
     for s in subjects:
@@ -423,13 +595,12 @@ def build_summary(out: Path, subjects: list, classes: np.ndarray, methods: Seque
       if not p.is_file():
         continue
       arrays, saved = load_fold(p)
-      diff = config_diff(saved, config_of(m, s))
-      if diff:
-        if m in methods and not allow_mismatch:
-          raise SystemExit(f"[x] {p} was made with a different configuration {diff} (saved, now); use another --out-dir "
-                           "or delete the fold (--allow-config-mismatch reuses it)")
-        print(f"[warn] {p.name}: configuration differs {diff}; " + ("reused (--allow-config-mismatch)" if m in methods else "left out"))
-        if m not in methods:
+      if m in methods:
+        check_fold(p, saved, config_of(m, s))
+      else:
+        why = fold_problem(saved, config_of(m, s))
+        if why:
+          print(f"[warn] {p.name}: {why}; left out")
           continue
       row, pr, cm = fold_rows(m, s, arrays, saved, classes, source)
       rows.append(row)
@@ -444,7 +615,11 @@ def build_summary(out: Path, subjects: list, classes: np.ndarray, methods: Seque
   if not rows:
     return {}
   per = pd.DataFrame(rows)
-  summary = pd.concat([per, cohort_rows(per)], ignore_index=True)[SUMMARY_COLUMNS]
+  short = {m_: int((per["Method"] == m_).sum()) for m_ in per["Method"].unique() if int((per["Method"] == m_).sum()) < len(subjects)}
+  for m_, n_ in short.items():
+    print(f"[warn] {m_}: {n_} fold files for a cohort of {len(subjects)}; " +
+          ("cohort Mean/SD kept (--partial-mean)" if partial_mean else "no cohort Mean/SD written"), flush=True)
+  summary = pd.concat([per, cohort_rows(per, len(subjects), partial_mean)], ignore_index=True)[SUMMARY_COLUMNS]
   order = {label_of(m): i for i, m in enumerate(METHOD_ORDER)}
   summary["_m"] = summary["Method"].map(order)
   summary["_s"] = summary["Subject"].map(lambda s: (1, 0) if s == "Mean" else (2, 0) if s == "SD" else (0, int(s[1:])))
@@ -457,6 +632,9 @@ def build_summary(out: Path, subjects: list, classes: np.ndarray, methods: Seque
   per_subject = per_subject.loc[sorted(per_subject.index, key=lambda s: int(s[1:]))]
   per_subject.loc["Mean"] = per_subject.mean()
   per_subject.loc["SD"] = per_subject.iloc[:-1].std(ddof=1) if len(per_subject) > 2 else 0.0
+  if not partial_mean:
+    for m_ in short:
+      per_subject.loc[["Mean", "SD"], [(c, m_) for c in ("Acc (%)", "2-tap Smoothed (%)")]] = np.nan
   predictions = pd.concat(preds, ignore_index=True)
   conf = pd.DataFrame([{"method": m, "true": int(classes[i]), "pred": int(classes[j]), "count": int(cm[i, j])}
                        for m, cm in cms.items() for i in range(len(classes)) for j in range(len(classes))])
@@ -474,13 +652,17 @@ def build_parser() -> argparse.ArgumentParser:
   p.add_argument("--subjects", nargs="*", default=None, help="default: every built S<k> found, numeric order")
   p.add_argument("--methods", nargs="+", default=["fbcca", "lda", "lda_subjnorm"], choices=CLI_METHODS,
                  help="`compact` = compact_eegnet (PF-31)")
-  p.add_argument("--channels", choices=["common", "all"], default="common",
-                 help="common: kept by the gate in every subject (default); all: whole montage (PF-34)")
+  p.add_argument("--channels", nargs="+", default=["common"], metavar="common|all|NAME",
+                 help="common: kept by the gate in every subject (default); all: whole montage; or explicit montage names "
+                      "(subjects whose gate dropped any of them are left out) (PF-34)")
+  p.add_argument("--folds", type=int, default=WITHIN_FOLDS, help="within_lda: StratifiedGroupKFold splits (default 5)")
+  p.add_argument("--within-repeats", type=int, default=WITHIN_REPEATS,
+                 help="within_lda: repeats with random_state = seed + r (default 5)")
+  p.add_argument("--partial-mean", action="store_true",
+                 help="write the cohort Mean/SD of a method that has fewer folds than the cohort (default: leave it empty, P21 C-2)")
   p.add_argument("--out-dir", type=Path, default=Path("reports/loso_w1"))
   p.add_argument("--save-models", action="store_true", help="save every fitted fold model under --models-dir")
   p.add_argument("--models-dir", type=Path, default=Path("outputs/models/loso_w1"))
-  p.add_argument("--allow-config-mismatch", action="store_true",
-                 help="reuse saved folds made with a different configuration (warns); default: refuse (PF-37)")
   p.add_argument("--no-augment", action="store_true", help="networks: P10 augmentation off (default on)")
   p.add_argument("--max-epochs", type=int, default=150)
   p.add_argument("--patience", type=int, default=25)
@@ -491,11 +673,25 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def load_cohort(root: Path, subjects: list, channels_mode: str, banks: Sequence[str], thresholds: dict, fail_fraction: float,
-                need_x: bool) -> tuple:
-  """Probe every subject (montage, gate decision), choose the channels, load the windows with them (`load_subject`)."""
+                need_x: bool, names: Sequence[str] = ()) -> tuple:
+  """Probe every subject (montage, gate decision), choose the channels, load the windows with them (`load_subject`).
+  `channels_mode == "names"` (P22.2): subjects whose gate dropped a named channel are left out (printed with the dropped
+  channels); the cohort is the rest, `ValueError` below 2 subjects. Returns `(channels, loaded subjects)`."""
   probe = {s: load_subject(root / s, (), "shared", thresholds=thresholds, channel_fail_fraction=fail_fraction) for s in subjects}
-  chosen = choose_channels({s: d["channels_all"] for s, d in probe.items()},
-                           {s: d["channel_names"] for s, d in probe.items()}, channels_mode)
+  montages = {s: d["channels_all"] for s, d in probe.items()}
+  kept_of = {s: d["channel_names"] for s, d in probe.items()}
+  if channels_mode == "names":
+    remaining, left = leave_out_for_names(montages, kept_of, names)
+    for s, dropped in left.items():
+      print(f"[-] Leaving out {s}: gate dropped {', '.join(dropped)}", flush=True)
+    for s in remaining:
+      gd = probe[s]["channels_dropped"]
+      print(f"[=] Keeping {s}: gate accepted every named channel; gate dropped {', '.join(gd) if gd else 'nothing'}", flush=True)
+    if len(remaining) < 2:
+      raise ValueError(f"LOSO needs >= 2 subjects whose gate accepted all of {list(names)}; left: {remaining}")
+    subjects = remaining
+    montages, kept_of = {s: montages[s] for s in subjects}, {s: kept_of[s] for s in subjects}
+  chosen = choose_channels(montages, kept_of, channels_mode, names)
   loaded = []
   for s in subjects:
     t0 = time.time()
@@ -514,6 +710,11 @@ def load_cohort(root: Path, subjects: list, channels_mode: str, banks: Sequence[
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
   args = build_parser().parse_args(argv)
+  capture_run_state()                                  # git head + dirty flag ONCE per process (P21 C-1)
+  try:
+    args.channels, args.channel_names = parse_channels(args.channels)
+  except ValueError as e:
+    raise SystemExit(f"[x] {e}")
   methods = [NETWORK_METHODS.get(m, m) for m in dict.fromkeys(args.methods)]
   methods = [m for m in METHOD_ORDER if m in methods]
   root = args.data_root / folder_name(args.window, args.stride_sec)
@@ -534,22 +735,28 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
       torch.backends.cudnn.benchmark = False
   out = args.out_dir
   print(f"LOSO: methods {methods}, window {args.window:g} s stride {args.stride_sec:g} s, cohort {len(subjects)} subjects "
-        f"[{', '.join(subjects)}], channels {args.channels}; outer split = subject, trial ids offset by {TRIAL_OFFSET} per subject "
+        f"[{', '.join(subjects)}], channels {args.channels if args.channels != 'names' else args.channel_names}; outer split = subject, trial ids offset by {TRIAL_OFFSET} per subject "
         f"(R1, PF-33), every fit on the training subjects only (R2); 2-tap smoothing within trial (R8); {SUBJNORM_NOTE if 'lda_subjnorm' in methods else ''}; "
         f"device {dev}", flush=True)
   banks = tuple(b for b, need in (("fbcca", any(m in CLASSICAL for m in methods)),
-                                  ("fbcsp", any(m.startswith("lda") for m in methods))) if need)
+                                  ("fbcsp", any("lda" in m for m in methods))) if need)
   t_all = time.time()
-  chosen, loaded = load_cohort(root, subjects, args.channels, banks, thresholds, q["channel_fail_fraction"], bool(nets))
+  try:
+    chosen, loaded = load_cohort(root, subjects, args.channels, banks, thresholds, q["channel_fail_fraction"], bool(nets),
+                                 args.channel_names)
+  except ValueError as e:
+    raise SystemExit(f"[x] {e}")
+  subjects = [d["subject"] for d in loaded]            # explicit names may have left subjects out
   sessions = sorted({str(d["meta"].get("session", "?")) for d in loaded})
   P = pool(loaded, [b for b in banks if b != "fbcca"], consume=True)
   ctx = {"subjects": subjects, "channels": chosen, "fs": P["fs"], "classes": [int(c) for c in P["classes"]], "root": root,
          "n_windows": {d["subject"]: int(len(d["y"])) for d in loaded}}
   del loaded
   source = (f"built continuous folders {root.parent.name}/{root.name}, session {'/'.join(sessions)}, cohort {len(subjects)} "
-            f"subjects ({subjects[0]}-{subjects[-1]}), LOSO, channels {args.channels}")
+            f"subjects ({', '.join(subjects) if len(subjects) < 8 else subjects[0] + '-' + subjects[-1]}), LOSO, channels {args.channels}")
   config_of = lambda m, s: fold_config(m, s, ctx, args)
-  print(f"Channels ({args.channels}): {', '.join(chosen)}" + ("" if args.channels == "common" else " (gate channel drops ignored)"),
+  print(f"Channels ({args.channels}): {', '.join(chosen)}" + {"common": "", "all": " (gate channel drops ignored)",
+                                                           "names": " (explicit; gate accepted all in the kept subjects)"}[args.channels],
         flush=True)
   for m in methods:
     for k, s in enumerate(subjects):
@@ -557,12 +764,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
       cfg_now = config_of(m, s)
       if path.is_file():
         _, saved = load_fold(path)
-        diff = config_diff(saved, cfg_now)
-        if diff and not args.allow_config_mismatch:
-          raise SystemExit(f"[x] {path} was made with a different configuration {diff} (saved, now); use another --out-dir "
-                           "or delete the fold (--allow-config-mismatch reuses it)")
-        if diff:
-          print(f"[warn] {path.name}: configuration differs {diff}; reused")
+        check_fold(path, saved, cfg_now)
         print(f"[skip] {m} test-{s}", flush=True)
         continue
       arrays, extra = run_fold(m, P, k, args, dev)
@@ -572,7 +774,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
       acc = float(np.mean(np.asarray(arrays["proba"]).argmax(1) == np.searchsorted(P["classes"], arrays["y"])))
       print(f"[+] {m} test-{s}: acc {100 * acc:.2f}% on {len(arrays['y'])} windows, train {100 * float(arrays['train_acc']):.2f}%, "
             f"{float(arrays['seconds']):.1f} s", flush=True)
-  res = build_summary(out, subjects, P["classes"], methods, config_of, source, args.allow_config_mismatch)
+  res = build_summary(out, subjects, P["classes"], methods, config_of, source, args.partial_mean)
   if not res:
     print("[-] nothing evaluated")
     return 1
@@ -583,7 +785,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
   res["confusion"].to_csv(out / "confusion.csv", index=False)
   res["folds"].to_csv(out / "folds.csv", index=False)
   (out / "loso_config.json").write_text(json.dumps(
-    {"cohort": subjects, "channels_mode": args.channels, "channels": chosen, "window_sec": args.window,
+    {"cohort": subjects, "channels_mode": args.channels, "channels": chosen, "git_head": RUN_STATE["git_head"],
+     "git_dirty": RUN_STATE["git_dirty"], "folds": args.folds, "within_repeats": args.within_repeats, "window_sec": args.window,
      "stride_sec": args.stride_sec, "seed": args.seed, "trial_offset": TRIAL_OFFSET, "source": source}, indent=2) + "\n")
   print("\n" + res["summary"].drop(columns=["Channels", "Data source"]).to_string(index=False))
   print(f"\nPer subject:\n{res['per_subject'].to_string()}")

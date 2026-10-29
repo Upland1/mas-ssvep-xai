@@ -530,3 +530,30 @@ Open
 - The Colab notebook has not run on a T4 (human run). Cohort-39 networks limited to ccnn. Carry-forwards C-1 to C-6 for P22–P23. B003 amended for P22–P23: S01–S05 only.
 
 Next phase: after the orchestrator's gate.
+
+## P22 — LOSO extensions: within reference, explicit channels, resume guard, warm-up
+
+2026-10-28. Branch `phase/P22-loso-extensions`. Verifier PASS `f5700bd`; results review APPROVE `a34183c`. Phase report: `mas/state/reports/P22.md`.
+
+Added
+- `scripts/benchmarks/benchmark_loso_warmup.py` (NEW): warm-up study for K = 1, 2, 5, 10 in recording order; `full`, `warmup` and `none` scored on the same post-K windows; `summary.csv`, `cohort.csv`, `recording_order.csv`, `warmup_config.json`.
+- Tests (NEW): `tests/test_p22_loso_extensions.py`, `tests/test_p22_warmup.py`, `tests/test_p22_independent_known_answer.py` (37 tests after fix round 1).
+
+Changed
+- `scripts/benchmarks/benchmark_loso.py` (MODIFIED): `within_lda` (per subject, `StratifiedGroupKFold(5)` over true trial ids, 5 repeats, the LOSO channel list); `--channels common|all|<names>` with printed exclusions for explicit names; saved folds record channels, train subjects, `git_head` and a dirty flag; `check_fold` refuses any configuration difference except `data_root` ("use a new --out-dir"); fold-count guard; `--allow-config-mismatch` removed.
+- `tests/test_no_leakage.py`, `tests/test_p21_loso.py`, `tests/test_p21_independent_known_answer.py` (MODIFIED): registry and P21 tests updated for the removed flag and the head rules.
+- `mas/state/decisions.md`, `mas/state/phase_status.yaml` (MODIFIED).
+- No change to `src/` or `configs/`.
+
+Result
+- Cohort 5 (S01–S05), 1 s, `common`: within_lda 90.79 against lda 87.61 and lda_subjnorm 90.03 [9]. `all`: 88.99, 86.34 and 88.75 [10].
+- Warm-up, cohort 5: at K = 10, `none` 88.19, `warmup` 89.78, `full` 90.69; at K = 1 and 2, `warmup` is 25.03 and 16.95 pp below `none` [12].
+- Names run (2 subjects, one training subject per fit): a check of the explicit-names path, not a cohort result [11].
+
+Review
+- Pre-run audit FAIL at round 1 (F1 dirty-flag rule, F2 `configs/` as a code path, tests), fixed; PASS at round 2 [7]. Results review APPROVE; D-1 to D-8 and C-1 to C-5 in the report [7].
+
+Open
+- The `within_lda` rows carry the "LOSO" data-source string (W-1). Carry-forwards C-1 to C-5 for P23 [14]. No human run requested.
+
+Next phase: after the orchestrator's gate.

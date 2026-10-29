@@ -71,6 +71,9 @@ LEAK_FREE = {
   # P21: the LOSO outer split is the subject; the 40 trials of this layout are grouped 10 per subject, so a trial belongs to one subject
   "scripts.benchmarks.benchmark_loso.loso_split (outer split = subject, P21)":
     lambda y, g: [L.loso_split(np.asarray(g) // 10, k) for k in range(len(np.unique(g)) // 10)],
+  # P22: the within_lda splitter (per-subject StratifiedGroupKFold over true trial ids, random_state = seed + repeat)
+  "scripts.benchmarks.benchmark_loso.within_splits (within_lda, P22)":
+    lambda y, g: L.within_splits(np.searchsorted(np.unique(y), y), g, 5, 42 + 3),
 }
 # Files that import an sklearn splitter, with their era status (update when a phase changes it).
 KNOWN_SPLITTER_FILES = {
@@ -80,6 +83,7 @@ KNOWN_SPLITTER_FILES = {
   "src/models/cnn/spatial_spectral_cnn.py": "legacy",
   "src/models/cnn/training.py": "leak-free",   # P20 inner grouped validation split of fit_network (PF-32); test in test_p20_networks.py
   "src/models/classical/legacy_eval.py": "legacy",
+  "scripts/benchmarks/benchmark_loso.py": "leak-free",   # P22 within_lda: `within_splits`, grouped by true trial ids
 }
 SPLITTER_NAMES = r"(StratifiedKFold|KFold|ShuffleSplit|StratifiedShuffleSplit|GroupKFold|StratifiedGroupKFold|" \
                  r"LeaveOneGroupOut|LeaveOneOut|train_test_split|GroupShuffleSplit)"

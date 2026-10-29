@@ -477,3 +477,29 @@ Sources: `reports/compact_cnn_benchmark_cpu.csv`, `reports/shallow_convnet_bench
 **Budget.** Local wall time 45.6 min (cohort 5) and 33.6 min (cohort-39 classical), own sums. The cohort-39 network job ran beyond the budget under Sebastian's authorisation (row 162). GPU sum 2.15 h against 2 h [7, 19, own].
 
 **Open.** Cohort-39 networks limited to ccnn (eegnet 2 of 39 folds, not a result; compact_eegnet not run; Sebastian's instruction, row 163). The Colab notebook has not run on a T4 (human run). S029: 0 prediction mismatches on an unmatched subject, not explained [9, 10]. Carry-forwards C-1 to C-6 for P22–P23 (decisions row 165) [9, 19]. Merge pending, by the orchestrator.
+
+## P22 — LOSO extensions: within reference, explicit channels, resume guard, warm-up
+
+2026-10-28. Branch `phase/P22-loso-extensions`; verifier PASS `f5700bd` (privacy line `5f73505`); results review APPROVE `a34183c`. Phase report: `mas/state/reports/P22.md`.
+
+**Aim.** Roadmap P22 [1]: a within-subject LDA on exactly the LOSO channels (`within_lda`); explicit channel names, with the subjects whose gate dropped a named channel printed and left out; a fold configuration check that refuses a mixed configuration; and a warm-up study that normalizes a held-out subject from its first K unlabeled trials. Cohort S01–S05 (B003 amended for P22–P23) [14]. Labels: `full` = test-time normalization from unlabeled whole-session statistics (offline upper bound); `warmup` = statistics of the first K unlabeled trials in recording order (online variant); `none` = no test-time normalization [7].
+
+**Data source.** Built continuous folders `processed_continuous/w1_s0.25`, session OO, 1 s windows, stride 0.25 s, S01–S05 [9–12]. Channels `common` (7), `all` (8) and the explicit names run (8 names, 2 subjects) [9–11].
+
+**Result (cohort 5, 1 s, `reports/loso_w1_p22_common/summary.csv`, `reports/loso_w1_p22_all/summary.csv`).** Cohort means, `common`: fbcca 82.40, lda 87.61, lda_subjnorm 90.03, within_lda 90.79. `all`: fbcca 81.16, lda 86.34, lda_subjnorm 88.75, within_lda 88.99 [9, 10]. LOSO `lda` is strictly below the matched within reference for S01, S02 and S05 in `common` (z −2.74, −2.56, −2.68 SE_Δ) and for S02 in `all` (z −3.00 SE_Δ) [8].
+
+**Result (warm-up, `reports/loso_warmup/cohort.csv`, `common`, 1 s).** Cohort mean `warmup − none` at K = 1 and K = 2: −25.03 and −16.95 pp. At K = 10: `none` 88.19 ≤ `warmup` 89.78 ≤ `full` 90.69 [12]. At K = 10, `warmup − full` is within 2 SE_Δ for four of five subjects; S05 is −2.16 SE_Δ (mechanism open) [8, 12].
+
+**Result (names, `reports/loso_w1_p22_names/summary.csv`).** Two subjects (S02, S05), one training subject per fit. A record of the explicit-names path, not a cohort result [11].
+
+**Directions (R-16, PR-1 to PR-7; `analysis.txt`).** PR-1 holds. PR-2 holds, with S05 under `all` at −1.89 SE_Δ (a tie, 0.11 from refutation; D-3). PR-4 holds (absolute cohort means 27.27, 19.16, 5.66, 0.91 pp). PR-5 holds in four of five subjects (D-4). PR-6 and PR-7 hold [7, 8].
+
+**Checks.** Acceptance 1–6 met. Refusals: changed seed and changed repeats are refused, with the out-dir unchanged; the unchanged rerun prints 20 `[skip]` [8]. S01–S05 built folders unchanged, 65 files, `e7f55081…bebab4` [8]. Suite run alone: `1433 passed, 8 skipped, 22 warnings in 800.46s` with CUDA hidden [8]. V1–V11 met [6].
+
+**Review.** Pre-run audit FAIL at round 1 (`581ab9a`: dirty-flag hole at differing heads; `configs/` not a code path; tests), fixed and PASS at round 2 (`a120f0b`) [7]. Results review APPROVE with D-1 to D-8 and binding items S1–S9 [7].
+
+**Budget.** Local wall time 14.6 min of 120 (own, `reports/logs/P22/`) [5]. No GPU [5].
+
+**R11.** None; the access log has no P22 entry [17].
+
+**Open.** Every `within_lda` row carries the "LOSO" data-source string in the three LOSO out-dirs (W-1; not edited here). The warm-up CSV has no R2 test-time label (C-3). Carry-forwards C-1 to C-5 for P23 (decision row 171) [7, 14]. Privacy note D-2: a local tool path, a hit of the guard's term list, appeared in `06_verify.md` at `f5700bd` and was corrected at `5f73505`; history is not rewritten [7, 14]. Merge pending, by the orchestrator.
