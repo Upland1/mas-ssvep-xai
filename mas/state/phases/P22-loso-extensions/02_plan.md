@@ -138,6 +138,66 @@ $P scripts.benchmarks.benchmark_loso_warmup --data-root data/processed_continuou
 
 **Budget.** Everything is classical on S01–S05, so minutes on CPU, well within `LOCAL_RUN_BUDGET_MIN` 120. There is no GPU use.
 
+### Pre-run audit additions (07_review.md 581ab9a, round 2 PASS a120f0b; copied verbatim)
+
+#### Pre-registered predictions for the results review (copy verbatim into 02_plan.md)
+
+Disclosure: these were written after the reviewer read the builder's smoke outputs (`mas/state/scratch/p22/`, same code and data), so they are plausibility and reproduction checks, not blind predictions.
+
+Noise unit: SE = 100·√(p(1−p)/n) in pp, with n the windows scored for that accuracy; SE_Δ = √(SE_a² + SE_b²) (P21 C-3). A > B means Δ > +2 SE_Δ. A tie means |Δ| ≤ 2 SE_Δ. "A ≥ B" is refuted by Δ < −2 SE_Δ. The reviewer computes these from `summary.csv` with a shown command.
+
+- **PR-1 (R-16, LOSO below within, matched channels).** In `reports/loso_w1_p22_common` and `reports/loso_w1_p22_all`:
+  - For every subject, `lda − within_lda ≤ +2 SE_Δ`.
+  - Cohort Mean `within_lda ≥ lda`.
+  - Expected strict (> +2 SE_Δ) in common for S01, S02 and S05. S03 and S04 sit near the ceiling and are expected to tie.
+  - Smoke: common +2.7 / +2.6 / +1.3 / +0.8 / +2.7 SE_Δ for S01-S05; all +1.8 / +3.0 / +0.6 / 0.0 / +1.4.
+- **PR-2 (R-16, `lda_subjnorm ≥ lda`).** In common and all:
+  - For every subject, `lda_subjnorm − lda ≥ −2 SE_Δ`.
+  - Cohort Mean `lda_subjnorm ≥ lda`.
+  - Expected strict gain for S01 and S02 (the subjects far from ceiling). Ties are expected for S03-S05.
+  - Smoke all S05 = −1.9 SE_Δ: a tie, but within 0.1 SE_Δ of refutation. If it falls below −2, it is reported as a refutation, not explained away.
+  - `names` run: no prediction (N5).
+- **PR-3 (test-time normalization vs within).** No direction is predicted. The scribe reports `within_lda − lda_subjnorm` per subject in SE_Δ, and states as a finding whether whole-session normalization closes the LOSO gap (smoke common S01 +0.4, S02 −0.5 SE_Δ).
+- **PR-4 (warm-up, cohort).** The cohort Mean `|warmup − full|` is non-increasing over K = 1, 2, 5, 10. At K = 10, cohort Means satisfy `none ≤ warmup ≤ full` (R-16 "warmup between none and full as K grows").
+- **PR-5 (warm-up, per subject, K = 10).**
+  - `|warmup − full| ≤ 2 SE_Δ` in at least 4 of 5 subjects. Smoke S05 = −2.2: the expected exception, 2 classes in its first 5 trials.
+  - Per-subject monotonicity in K is NOT predicted, since class coverage of the warm-up drives it (smoke S02 K1 −3.7 vs K2 −7.0 SE_Δ).
+- **PR-6 (warm-up, small K).**
+  - At K = 1, `warmup < none` by more than 2 SE_Δ in at least 4 of 5 subjects. Smoke S02 −0.6 is the expected tie.
+  - At K = 2, `warmup < none` by more than 2 SE_Δ in at least 3 of 5.
+  - Mechanism to state: a 1-2 class warm-up mean shifts every feature toward those classes.
+- **PR-7 (identity, not direction).** `full − none` on the post-K windows has the sign of `lda_subjnorm − lda` on all windows for each subject wherever |Δ| > 2 SE_Δ (S01, S02).
+
+#### Binding run-list items for the verifier (copy verbatim into 02_plan.md)
+
+- **V1.** Run from the clean verifier worktree. Every fold config and `loso_config.json` / `warmup_config.json` carries ONE `git_head` (= the worktree HEAD) and `git_dirty: false`. Count the distinct heads with a shown command.
+- **V2.** Before command 1, the out-dirs `reports/loso_w1_p22_common`, `_all`, `_names` and `reports/loso_warmup` are absent (`ls` shown). The warm-up script overwrites in place.
+- **V3.** In every out-dir, the `channels` of each `within_lda__test-<S>.npz` config equals that of `lda__test-<S>.npz`, and equals the expected list:
+  - common = `PO3, POz, PO4, PO8, O1, Oz, O2`;
+  - all = the 8-channel montage;
+  - names = the 8 names in the given order.
+
+  Also check `train_subjects == [S]` for `within_lda` and `Runs = 5` in the summary.
+- **V4.** The `names` log contains `[-] Leaving out` lines for exactly S01, S03 and S04 (gate dropped PO7) and `[=] Keeping` lines for S02 and S05. The cohort in `loso_config.json` is `[S02, S05]`.
+- **V5.** Refusal check (command 4). It is preceded and followed by sha256 of every file in `reports/loso_w1_p22_common`, the "before" hash taken after command 1 has finished (no later command writes there).
+  - It exits ≠ 0, and the message names `seed` and contains "use a new --out-dir". The hashes are equal.
+  - Add `--within-repeats 3` (same out-dir, otherwise identical): refused, naming `hyper`.
+  - Then rerun command 1 unchanged: 20 `[skip]` lines, exit 0, and `summary.csv` byte-identical.
+- **V6.** Every method shows `Folds = 5` (common, all) or `Folds = 2` (names). No `[warn]` or `INCOMPLETE` appears in any log or summary.
+- **V7.** Identities across runs (per window, `np.array_equal` on the fold files, or `predictions.csv` joined on subject, trial_id, offset_sec):
+  - `within_lda` `proba_rep` of S02 and S05 is identical between `_all` and `_names`;
+  - `fbcca` predictions of S02 and S05 are identical between `_all` and `_names`;
+  - `fbcca`, `lda` and `lda_subjnorm` predictions are identical between `_common` and P21's `reports/loso_w1_s01-s05`, and between `_all` and `reports/loso_w1_s01-s05_all` (code refactor only). Any mismatch is a finding.
+- **V8.** Warm-up identity. For each subject and K, recompute the accuracy of the common run's `lda_subjnorm` and `lda` predictions on the windows of trials ranked > K in `reports/loso_warmup/recording_order.csv`. The results must equal `full (%)` and `none (%)` within 0.005 pp, with a shown command.
+- **V9.** For each subject in `recording_order.csv`:
+  - the trial count equals the `Trials` column of the common summary;
+  - the ranks are not the id order;
+  - the minimum gap between consecutive `First window start (s)` is ≥ 5 s.
+
+  Report the minimum gap.
+- **V10.** The numeric columns of the four verifier outputs equal the builder smokes in `mas/state/scratch/p22/{common,all2,names,warmup}/summary.csv`. Report any difference with the smoke's head and dirty flag (N1).
+- **V11.** The S01-S05 built-folder hash before and after equals `e7f55081…bebab4`. Run the full suite alone. Check the R11 log. Run the privacy scan of 05/06 themselves with the guard's term list, named by reference only.
+
 ## Acceptance checks (for the verifier)
 
 1. Both scripts run (commands 1–3, 5 exit 0).
