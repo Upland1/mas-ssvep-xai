@@ -406,3 +406,83 @@ def test_k_row_scores_only_post_k_windows_with_counts():
   assert row["none (%)"] == round(100 * float(np.mean(res["none"][sc].argmax(1) == yi)), 2)
   assert row["warmup - full (pp)"] == round(row["warmup (%)"] - row["full (%)"], 2)
   assert row["Warm-up classes"] == len(set(y[np.isin(trial, order[:3])]))
+
+
+# --- fix round 1 (audit F1, F2, T1) ------------------------------------------------------------------------------------
+
+@pytest.fixture()
+def repo2(tmp_path):
+  """base -> docs-only head -> configs-only head."""
+  r = tmp_path / "rp2"
+  for d in ("src", "scripts", "configs", "docs"):
+    (r / d).mkdir(parents=True)
+    (r / d / "f.txt").write_text("0\n")
+  git(r, "init", "-q")
+  git(r, "add", "-A")
+  git(r, "commit", "-qm", "base")
+  h = {"base": git(r, "rev-parse", "HEAD")}
+  (r / "docs" / "f.txt").write_text("1\n")
+  git(r, "commit", "-qam", "docs")
+  h["docs"] = git(r, "rev-parse", "HEAD")
+  (r / "configs" / "f.txt").write_text("1\n")
+  git(r, "commit", "-qam", "configs")
+  h["configs"] = git(r, "rev-parse", "HEAD")
+  return r, h
+
+
+# (head before, head now, dirty before, dirty now, accepted)
+ROUND1_TABLE = [
+  ("base", "docs", False, True, False),
+  ("base", "docs", True, False, False),
+  ("base", "docs", True, True, False),
+  ("base", "docs", False, False, True),
+  ("docs", "configs", False, False, False),
+  ("docs", "docs", True, True, True),
+]
+
+
+@pytest.mark.parametrize("a,b,da,db,ok", ROUND1_TABLE)
+def test_round1_dirty_and_configs_table(repo2, tmp_path, a, b, da, db, ok):
+  r, h = repo2
+  saved, mine = {**CFG, "git_head": h[a], "git_dirty": da}, {**CFG, "git_head": h[b], "git_dirty": db}
+  if ok:
+    L.check_fold(tmp_path / "f.npz", saved, mine, r)
+  else:
+    with pytest.raises(SystemExit, match="use a new --out-dir"):
+      L.check_fold(tmp_path / "f.npz", saved, mine, r)
+
+
+# --- T2: a rejected first window keeps the trial's recording rank (PF-36), through load_subject ---------------------------
+
+def test_masked_first_window_keeps_rank_and_first_k_set_through_load_subject(tmp_path):
+  from tests import p16_synth as S
+  from src.io.subject_data import load_subject
+  from src.models.classical.benchmark_runner import load_config
+  from src.preprocessing.window_quality import quality_params_from_config
+  root = tmp_path / "w1_s0.25"
+  S.write_built_subject(root, "S01", n_trials=10, seed=4)
+  q = quality_params_from_config(load_config(L.ROOT / "configs" / "pipeline_config.yaml"))
+  thr = {k: q[k] for k in ("vpp_min", "vpp_max", "std_min", "std_max")}
+  load = lambda: load_subject(root / "S01", [101, 102, 103, 104, 105], "shared", thresholds=thr,
+                              channel_fail_fraction=q["channel_fail_fraction"])
+  before = load()
+  tb, sb = np.asarray(before["trial_ids"]), np.asarray(before["window_starts"])
+  ids0, first0 = WU.recording_order(tb, sb)
+  assert list(ids0) != sorted(ids0)                                   # the built layout is not in id order
+  victim = int(ids0[2])                                               # a trial that is warm-up for K >= 3
+  d = root / "S01"
+  ok = np.load(d / "valid_mask.npy")
+  y, tid, st = (np.load(d / f"{n}.npy") for n in ("y_labels", "trial_ids", "window_starts"))
+  rows = np.flatnonzero((tid == victim) & np.isin(y, [101, 102, 103, 104, 105]) & (ok == 1))
+  first_row = rows[np.argmin(st[rows])]
+  second_start = np.sort(st[rows])[1]
+  ok[first_row] = 0                                                   # earliest window of the trial rejected
+  np.save(d / "valid_mask.npy", ok)
+  after = load()
+  ta, sa = np.asarray(after["trial_ids"]), np.asarray(after["window_starts"])
+  assert len(ta) == len(tb) - 1
+  ids1, first1 = WU.recording_order(ta, sa)
+  assert list(ids1) == list(ids0)                                     # same rank for every trial
+  assert first1[list(ids1).index(victim)] == second_start > first0[2]  # starts from its second window
+  for k in (1, 2, 3, 5, 8):
+    assert set(ta[WU.warmup_rows(ta, sa, k)]) == set(ids0[:k]) == set(tb[WU.warmup_rows(tb, sb, k)])
