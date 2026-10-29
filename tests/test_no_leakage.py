@@ -25,6 +25,7 @@ from sklearn.model_selection import StratifiedGroupKFold
 
 from scripts.training import train_models as tm
 from scripts.benchmarks.feature_based import benchmark_feature_selection as bfs
+from scripts.benchmarks import benchmark_loso as L
 from src.models.classical import legacy_eval as le
 from src.preprocessing.dataset import cv_utils
 
@@ -67,6 +68,9 @@ LEAK_FREE = {
   "src.preprocessing.dataset.cv_utils.make_splits('grouped')": lambda y, g: cv_utils.make_splits("grouped", y, g),
   "src.models.classical.legacy_eval.splits_for('grouped')": lambda y, g: le.splits_for("grouped", y, g),
   "benchmark_feature_selection.inner_sfs_splits (SFS inner CV, PF-01)": lambda y, g: bfs.inner_sfs_splits(y, g),
+  # P21: the LOSO outer split is the subject; the 40 trials of this layout are grouped 10 per subject, so a trial belongs to one subject
+  "scripts.benchmarks.benchmark_loso.loso_split (outer split = subject, P21)":
+    lambda y, g: [L.loso_split(np.asarray(g) // 10, k) for k in range(len(np.unique(g)) // 10)],
 }
 # Files that import an sklearn splitter, with their era status (update when a phase changes it).
 KNOWN_SPLITTER_FILES = {

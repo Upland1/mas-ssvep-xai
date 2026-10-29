@@ -169,12 +169,12 @@ phases:
     passed: '2026-10-28'
   P21:
     slug: loso-colab
-    status: pending
+    status: passed
     owner: orchestrator
-    branch: null
-    commit: null
-    opened: null
-    passed: null
+    branch: phase/P21-loso-colab
+    commit: 95d32bd
+    opened: '2026-10-28'
+    passed: '2026-10-28'
   P22:
     slug: loso-extensions
     status: pending

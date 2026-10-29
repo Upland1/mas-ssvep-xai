@@ -3,7 +3,7 @@
 - Opened: 2026-10-24 by orchestrator (setup)
 - Phase: P20
 - blocking: none (decide before P20)
-- Status: open
+- Status: RESOLVED 2026-10-28 (option B, Sebastian)
 
 ## Question
 
@@ -31,3 +31,10 @@ A for the gates, and B as an extra human run if the recordings are
 available, reported as a separate data source (R9).
 
 ## Resolution (Sebastian)
+
+2026-10-28, Sebastian: "i choose the B option for B003 and continue". Option B:
+S01–S05 for P00–P20; all 40 subjects for P21–P23 (LOSO). Sebastian places the
+extra subjects' recordings in the raw-data folder (agents never copy raw data);
+results on the 40-subject cohort are a separate data source (R9), next to the
+S01–S05 results; builds and LOSO runs beyond the local budget become human runs
+through the P21 Colab notebook.

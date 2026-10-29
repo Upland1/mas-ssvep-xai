@@ -2,6 +2,7 @@
 shapes and gradients, the shared mirror protocol, EEGNet regression after the refactor, benchmark scripts and the
 count_parameters script on a synthetic legacy tree. Synthetic data only, fixed seeds, CPU."""
 
+import contextlib
 import hashlib
 
 import numpy as np
@@ -19,8 +20,36 @@ from src.models.cnn.eegnet_cv import train_and_eval_cv, train_and_eval_eegnet_cv
 from src.models.cnn.shallow_conv_net import LOG_EPS, ShallowConvNet
 from tests.p05_synth import make_windows, write_subject
 
-EEGNET_SMOKE_CSV_SHA256 = "6dbbe4aae453dbe3f313df927728863cfd852d5333550de75b960759bb9bd478"  # pre-refactor (P08 code)
-EEGNET_SMOKE_PROBA_SHA256 = "adf2cc7d6252d06f2bcd70ce15d14d118a5816061c64e1ec5145f3836e75322c"
+EEGNET_SMOKE_CSV_SHA256 = "fb7392d8cd04fefa0e7582d7219965cca3fd960cd81d5d19b69b996fda95a13f"  # 1 thread; 12 threads: 6dbbe4aa... (P08 code)
+# P20 C-1: float32 CPU kernels sum in a thread-count-dependent order, so a byte hash is only valid at a fixed thread
+# count. The tests below pin torch.set_num_threads(1) and compare this hash (derived on the unchanged model code of main,
+# at 1 thread) plus a thread-independent tolerance check against the values first pinned at 12 threads
+# (adf2cc7d... was the byte hash at 12 threads; the largest probability difference 1 vs 12 threads is 6.1e-05).
+EEGNET_SMOKE_PROBA_SHA256 = "017ccd7b538abe0932f77a8dd4f84f72ec914f703af738efba93ffe9d0bdd19a"
+EEGNET_SMOKE_PROBA_SHA256_12_THREADS = "adf2cc7d6252d06f2bcd70ce15d14d118a5816061c64e1ec5145f3836e75322c"
+EEGNET_SMOKE_PROBA_HEAD_12_THREADS = [[0.208551, 0.189522, 0.196067, 0.186872, 0.218988],
+                                      [0.189311, 0.185401, 0.211583, 0.209468, 0.204237],
+                                      [0.217756, 0.185473, 0.182269, 0.202823, 0.21168]]
+EEGNET_SMOKE_PROBA_ATOL = 1e-3
+
+
+@contextlib.contextmanager
+def single_thread():
+  """Pin torch to one intra-op thread inside a hash-pinned test and restore the previous count afterwards."""
+  n = torch.get_num_threads()
+  torch.set_num_threads(1)
+  try:
+    yield
+  finally:
+    torch.set_num_threads(n)
+
+
+def assert_eegnet_smoke_proba(proba):
+  """Byte hash at 1 thread, plus the thread-independent check: rows are distributions and the first rows agree with
+  the originally pinned 12-thread values within EEGNET_SMOKE_PROBA_ATOL."""
+  assert hashlib.sha256(proba.tobytes()).hexdigest() == EEGNET_SMOKE_PROBA_SHA256
+  assert np.allclose(proba.sum(1), 1.0, atol=1e-6)
+  assert np.allclose(proba[:3], EEGNET_SMOKE_PROBA_HEAD_12_THREADS, atol=EEGNET_SMOKE_PROBA_ATOL)
 
 
 def test_param_counts_r8_and_no_conv_bias():
@@ -93,13 +122,14 @@ def test_wrong_layout_rejected_and_channel_order_matters(cls):
 
 def test_eegnet_regression_after_refactor(tmp_path):
   X, y = make_windows(n_trials=4, seed=0)
-  r = train_and_eval_eegnet_cv(X, y, epochs=3, device="cpu", cv="legacy")
-  assert hashlib.sha256(r["proba"].tobytes()).hexdigest() == EEGNET_SMOKE_PROBA_SHA256
-  write_subject(tmp_path / "proc", "S03", n_trials=3)
-  cfg = tmp_path / "cfg.yaml"
-  cfg.write_text("paths:\n  data_processed_dir: data/processed\n")
-  assert be.main(["--subject", "S03", "--epochs", "2", "--device", "cpu", "--data-root", str(tmp_path / "proc"),
-                  "--reports-dir", str(tmp_path / "rep"), "--config", str(cfg), "--cv", "legacy", "--smoothing", "mod5"]) == 0
+  with single_thread():
+    r = train_and_eval_eegnet_cv(X, y, epochs=3, device="cpu", cv="legacy")
+    assert_eegnet_smoke_proba(r["proba"])
+    write_subject(tmp_path / "proc", "S03", n_trials=3)
+    cfg = tmp_path / "cfg.yaml"
+    cfg.write_text("paths:\n  data_processed_dir: data/processed\n")
+    assert be.main(["--subject", "S03", "--epochs", "2", "--device", "cpu", "--data-root", str(tmp_path / "proc"),
+                    "--reports-dir", str(tmp_path / "rep"), "--config", str(cfg), "--cv", "legacy", "--smoothing", "mod5"]) == 0
   csv = (tmp_path / "rep" / "legacy_leaky" / "eegnet_benchmark_cpu.csv").read_bytes()
   assert hashlib.sha256(csv).hexdigest() == EEGNET_SMOKE_CSV_SHA256
 

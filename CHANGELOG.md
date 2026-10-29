@@ -503,3 +503,30 @@ Open
 - B003 must be resolved before P21 opens. Carry-forwards C-1 to C-3 and C-5 (report §9).
 
 Next phase: after the orchestrator's gate.
+
+## P21 — Leave-one-subject-out (LOSO) generalization and the Colab notebook
+
+2026-10-28. Branch `phase/P21-loso-colab`. Verifier PASS `f22bafa`; results review APPROVE `c325754` (round 2). Phase report: `mas/state/reports/P21.md`.
+
+Added
+- `scripts/benchmarks/benchmark_loso.py` (NEW): LOSO harness for `fbcca`, `lda`, `lda_subjnorm`, `ccnn`, `compact_eegnet`, `eegnet`; `--channels common|all`; atomic, resumable folds with a configuration check; `summary.csv`, `per_subject.csv`, `predictions.csv`, `confusion.csv`, `folds.csv`.
+- `notebooks/loso_colab.ipynb` (NEW): Colab notebook committed without outputs; twelve steps; `pip install pyyaml joblib` only; Drive symlinks; resumable cells.
+- Tests (NEW): `tests/test_p21_loso.py` (22), `tests/test_p21_independent_known_answer.py` (23), `tests/test_p21_loso_networks.py` (9), `tests/test_p21_notebook.py` (8).
+
+Changed
+- `src/io/subject_data.py` (MODIFIED): `load_subject(..., channels=None)` for `--channels all`; default behaviour unchanged.
+- `tests/test_no_leakage.py` (MODIFIED): `loso_split` registered in `LEAK_FREE`.
+- `tests/test_p09_compact_shallow.py`, `tests/test_p10_augmentation.py` (MODIFIED): hash-pinned tests pin torch threads to 1 and check probabilities within tolerance (P20 C-1).
+- No change to `configs/` or to model code.
+
+Result
+- Cohort 5 (S01–S05), 1 s: lda LOSO 87.61 (`common`), lda_subjnorm 90.03; ccnn 86.04 and eegnet 79.04 as means over three seeds [11–13].
+- Cohort 39 (39 subjects, S01–S040 without S020), 1 s: classical LOSO on 32 matched subjects gives lda direction not observed (22 of 32 at or below within + 1 pp); the `common` run is a 3-channel result [14, 15].
+
+Review
+- Pre-run audit PASS (round 2). Results review APPROVE (round 2): D-1 to D-9 and C-1 to C-6 in the report.
+
+Open
+- The Colab notebook has not run on a T4 (human run). Cohort-39 networks limited to ccnn. Carry-forwards C-1 to C-6 for P22–P23. B003 amended for P22–P23: S01–S05 only.
+
+Next phase: after the orchestrator's gate.
