@@ -14,3 +14,4 @@
 | 7 Review | scientific-reviewer | 2026-10-29 | FAIL (1a99104): Makefile F1 p10 --freeze-legacy without --cv legacy (exit 2), F2 p05–p09 run grouped by default (P11), F3 tests only parse, F4 '-' hides a P16 regression; documents D1–D14 (context, labelling, citations; all 1,532 numbers present in some CSV) | 1 | R9, R10, PF-30/31 | none | |
 | 8 make all stopped | orchestrator | 2026-10-29 | run stopped during p06 (stamps p00–p05); p05 stamp from a grouped run must be removed before the rerun | 1 | 07_review F1/F2 | none | rerun from a fresh clone at the fixed head |
 | 6 Test | synthetic-tester | 2026-10-29 | 04_tests.md READY (9daac09); tests/test_p24_docs.py 34 cases pass; suite `1560 passed` | 1 | R10 | none | checks path existence and privacy, not values (values: reviewer) |
+| 5 Fix round 1 (scribe) | scribe | 2026-10-29 | D1–D14 + minor list fixed (ff7b556, 89cc1a0); 114 cited reports/ paths exist; SVG parses | 1 | R9, R10 | none | |
