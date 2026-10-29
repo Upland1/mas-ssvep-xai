@@ -308,3 +308,23 @@ def test_summary_flags_a_method_with_missing_fold_files(built, tmp_path, capsys)
   fb = s[s["Method"] == "fbcca"].set_index("Subject")
   assert fb.loc["Mean", "Acc (%)"] == round(fb.loc[["S01", "S02", "S03"], "Acc (%)"].mean(), 2)
   assert np.isnan(pd.read_csv(tmp_path / "per_subject.csv", header=[0, 1], index_col=0).loc["Mean", ("Acc (%)", "lda")])
+
+
+def test_fix_round_1_dirty_rules_and_configs_in_code_paths(repo, tmp_path):
+  """F1: differing dirty flags are refused at ANY head; a dirty side with differing heads is refused; both dirty at the same
+  head is accepted. F2: a change under configs/ between heads is a code change."""
+  r, h0, h1, h2 = repo
+  mk = lambda h, dirty: {**BASE, "git_head": h, "git_dirty": dirty}
+  for a, b in ((mk(h0, False), mk(h1, True)), (mk(h0, True), mk(h1, False)), (mk(h0, True), mk(h1, True))):
+    with pytest.raises(SystemExit, match="use a new --out-dir"):      # old code accepted these (heads differ by docs only)
+      L.check_fold(tmp_path / "f", a, b, r)
+  L.check_fold(tmp_path / "f", mk(h1, True), mk(h1, True), r)
+  L.check_fold(tmp_path / "f", mk(h0, False), mk(h1, False), r)
+  (r / "configs").mkdir()
+  (r / "configs" / "c.yaml").write_text("a: 1\n")
+  git(r, "add", "-A")
+  git(r, "commit", "-qm", "cfg")
+  h3 = git(r, "rev-parse", "HEAD")
+  assert L.code_changed(h2, h3, r) is True                              # old CODE_PATHS (src, scripts) said False
+  with pytest.raises(SystemExit, match="src/, scripts/ or configs/"):
+    L.check_fold(tmp_path / "f", mk(h2, False), mk(h3, False), r)
