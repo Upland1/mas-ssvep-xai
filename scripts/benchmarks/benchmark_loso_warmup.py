@@ -18,7 +18,7 @@ Online, only the first trials are available. For every held-out subject and ever
 Data: `<data-root>/w<len>_s<stride>/<S>/` (continuous builds), classes 101-105, channels `common | all | names` as in
 `benchmark_loso.py`. Outputs (`--out-dir`): `summary.csv` (Subject, Warm-up trials, Warm-up windows, Warm-up classes, Warm-up span
 (s), Scored windows, full (%), warmup (%), none (%) + 2-tap columns, binomial SE of each accuracy, `warmup - full`, `Std guard`,
-`Warm-up class codes`, Channels, Data source; per K a Mean and SD row over the held-out subjects), `cohort.csv` (per K),
+`Warm-up class codes`, Channels, Data source, Normalization; per K a Mean and SD row over the held-out subjects), `cohort.csv` (per K; also `Normalization`),
 `recording_order.csv` (trial id, class, first window start, recording rank) and `warmup_config.json`. Accuracies are unsmoothed
 (per window); the 2-tap columns smooth within trial (R8). The warm-up statistics are test-time normalization from unlabeled data
 (first K trials = the online variant; `full` = offline upper bound).
@@ -46,11 +46,14 @@ from src.models.classical.benchmark_runner import load_config  # noqa: E402
 from src.preprocessing.window_quality import quality_params_from_config  # noqa: E402
 
 STD_FLOOR = 1e-12
+NORMALIZATION = ("full = whole-session unlabeled statistics of the held-out subject (test-time normalization, offline upper bound); "
+                 "warmup = statistics of the first K unlabeled trials (test-time normalization, online); none = no normalization "
+                 "(R2 exception, PF-35)")
 KS = (1, 2, 5, 10)
 SUMMARY_COLUMNS = ["Subject", "Warm-up trials", "Warm-up windows", "Warm-up classes", "Warm-up span (s)", "Scored windows",
                    "full (%)", "warmup (%)", "none (%)", "full 2-tap (%)", "warmup 2-tap (%)", "none 2-tap (%)",
                    "full SE (pp)", "warmup SE (pp)", "none SE (pp)", "warmup - full (pp)", "warmup - none (pp)", "Std guard",
-                   "Warm-up class codes", "Channels", "Data source"]
+                   "Warm-up class codes", "Channels", "Data source", "Normalization"]
 
 
 # --- recording order (PF-36) ---------------------------------------------------------------------------------------
@@ -127,7 +130,7 @@ def k_row(subject: str, k: int, res: dict, y: np.ndarray, trial: np.ndarray, off
          "Warm-up classes": int(len(np.unique(y[warm]))),
          "Warm-up span (s)": round(float((starts[warm].max() + win_samples - starts[warm].min()) / fs), 2) if warm.any() else np.nan,
          "Scored windows": n, "Std guard": res["guard"][k], "Warm-up class codes": " ".join(str(c) for c in np.unique(y[warm])),
-         "Channels": channels, "Data source": source}
+         "Channels": channels, "Data source": source, "Normalization": NORMALIZATION}
   for name, proba in (("full", res["full"]), ("warmup", res["warmup"][k]), ("none", res["none"])):
     if n == 0:
       row.update({f"{name} (%)": np.nan, f"{name} 2-tap (%)": np.nan, f"{name} SE (pp)": np.nan})
@@ -230,11 +233,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
           f"{time.time() - t0:.1f} s", flush=True)
   per = pd.DataFrame(rows)
   cohort = cohort_table(per)
+  cohort["Normalization"] = NORMALIZATION
   agg = []
   for k in ks:
     g = per[(per["Warm-up trials"] == k) & (per["Scored windows"] > 0)]
     for name, f in (("Mean", lambda a: a.mean()), ("SD", lambda a: a.std(ddof=1) if len(a) > 1 else 0.0)):
-      r = {"Subject": name, "Warm-up trials": k, "Channels": chan_txt, "Data source": f"{source} | {len(g)} held-out subjects"}
+      r = {"Subject": name, "Warm-up trials": k, "Channels": chan_txt, "Data source": f"{source} | {len(g)} held-out subjects",
+           "Normalization": NORMALIZATION}
       for c in SUMMARY_COLUMNS:
         if c.endswith(("(%)", "(pp)", "windows", "classes", "(s)")) and c not in r:
           r[c] = round(float(f(g[c].astype(float))), 2) if len(g) else np.nan
@@ -247,7 +252,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
   pd.DataFrame(order_rows).to_csv(out / "recording_order.csv", index=False)
   (out / "warmup_config.json").write_text(json.dumps(
     {"cohort": subjects, "warmup_trials": ks, "channels_mode": mode, "channels": chosen, "window_sec": args.window,
-     "stride_sec": args.stride_sec, "fs": fs, "seed": args.seed, "std_floor": STD_FLOOR, "git_head": L.RUN_STATE["git_head"],
+     "stride_sec": args.stride_sec, "fs": fs, "seed": args.seed, "std_floor": STD_FLOOR, "normalization": NORMALIZATION, "git_head": L.RUN_STATE["git_head"],
      "git_dirty": L.RUN_STATE["git_dirty"], "recording_order": "sort trials by first window start (window_starts, samples)",
      "source": source}, indent=2) + "\n")
   show = ["Subject", "Warm-up trials", "Warm-up windows", "Warm-up classes", "Warm-up span (s)", "Scored windows", "full (%)",

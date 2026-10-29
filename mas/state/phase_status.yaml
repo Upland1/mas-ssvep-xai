@@ -185,12 +185,12 @@ phases:
     passed: '2026-10-28'
   P23:
     slug: gnn-loso
-    status: pending
+    status: passed
     owner: orchestrator
-    branch: null
-    commit: null
-    opened: null
-    passed: null
+    branch: phase/P23-gnn-loso
+    commit: 7437d83
+    opened: '2026-10-28'
+    passed: '2026-10-29'
   P24:
     slug: documentation
     status: pending

@@ -210,10 +210,13 @@ def repo(tmp_path):
 BASE = {"method": "lda", "test_subject": "S01", "train_subjects": ["S02", "S03"], "cohort": ["S01", "S02", "S03"],
         "channels_mode": "common", "channels": ["O1", "Oz"], "window_sec": 1.0, "stride_sec": 0.25, "fs": 256.0, "classes": [101, 102],
         "quality": "shared", "seed": 42, "trial_offset": 10000, "hyper": {"a": 1}, "n_windows_test": 100,
-        "git_head": "h", "git_dirty": False, "data_root": "/x"}
+        "n_windows_train": {"S02": 90, "S03": 95}, "build_git_commits": {"S01": "a", "S02": "b", "S03": "c"},
+        "config_hash": "0" * 64, "git_head": "h", "git_dirty": False, "data_root": "/x"}
 CHANGES = {"method": "fbcca", "test_subject": "S02", "train_subjects": ["S02"], "cohort": ["S01", "S02"], "channels_mode": "all",
            "channels": ["O1"], "window_sec": 2.0, "stride_sec": 0.5, "fs": 250.0, "classes": [101], "quality": "per-script",
-           "seed": 43, "trial_offset": 1, "hyper": {"a": 2}, "n_windows_test": 99}
+           "seed": 43, "trial_offset": 1, "hyper": {"a": 2}, "n_windows_test": 99,
+           "n_windows_train": {"S02": 91, "S03": 95}, "build_git_commits": {"S01": "a", "S02": "x", "S03": "c"},
+           "config_hash": "1" * 64}
 
 
 @pytest.mark.parametrize("key", sorted(CHANGES))

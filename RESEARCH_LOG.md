@@ -503,3 +503,25 @@ Sources: `reports/compact_cnn_benchmark_cpu.csv`, `reports/shallow_convnet_bench
 **R11.** None; the access log has no P22 entry [17].
 
 **Open.** Every `within_lda` row carries the "LOSO" data-source string in the three LOSO out-dirs (W-1; not edited here). The warm-up CSV has no R2 test-time label (C-3). Carry-forwards C-1 to C-5 for P23 (decision row 171) [7, 14]. Privacy note D-2: a local tool path, a hit of the guard's term list, appeared in `06_verify.md` at `f5700bd` and was corrected at `5f73505`; history is not rewritten [7, 14]. Merge pending, by the orchestrator.
+
+## P23 — GNN under LOSO: edge-gated connectivity GNN with a within-subject reference
+
+2026-10-29. Branch `phase/P23-gnn-loso`; verifier PASS `3f39d42` (run log `45df903`); results review APPROVE `b9201a2`. Phase report: `mas/state/reports/P23.md`.
+
+**Aim.** Roadmap P23 [1]: the P15 edge-gated connectivity GNN trained under leave-one-subject-out on the Era C built folders, with a within-subject reference on the same windows and channels, placed next to the `benchmark_loso.py` rows. Cohort S01–S05 (B003 amended for P22–P23) [16]. Labels: `pooled` = z-scored with the training windows only (R2); `_subjnorm` = test-time normalization, offline upper bound (the held-out session's unlabeled statistics; R2 exception, PF-35) [12]. R-15 and R-16 give direction only [18].
+
+**Data source.** Built continuous folders `processed_continuous/w1_s0.25`, session OO, 1.0 s windows, stride 0.25 s, S01–S05, channels `common` (7). Protocols LOSO and within (`StratifiedGroupKFold(5)` over true trial ids), 3 seeds per fold [12, 13].
+
+**Result (cohort 5, 1.0 s, 3-seed ensemble, `reports/loso_gnn/summary.csv`, `reports/within_gnn/summary.csv`).** LOSO cohort means: `nodes+F` 89.22 (`pooled`) and 90.32 (`subject`); `nodes+coh+F` 88.96 and 90.29. Within: `nodes+F` 86.81, `nodes+coh+F` 86.98 [12, 13]. Classical references on the same channels: `lda` 87.61, `lda_subjnorm` 90.03, `within_lda` 90.79 [14].
+
+**Directions (PR-1 to PR-9, `analysis.txt`).** Held: PR-1, PR-4 (15 of 15 coherence-edge ties), PR-5 as worded, PR-6, PR-8, PR-9. Missed: PR-2 for `nodes+F` (material above `lda` on S02, +4.66 pp, SE_Δ 2.28, and on S05, +2.06 pp, SE_Δ 0.77). Partly missed: PR-3 (no material gain on S01 or S02) and PR-7 (the two S02 `_subjnorm` gaps, 13.93 and 13.83 pp, are below 15 pp) [11]. R-16: "LOSO below within" for the GNN is "direction not observed" (LOSO cohort mean 89.22 against within 86.81); "subjnorm ≥ pooled" holds as ties (+1.10 and +1.33 pp) [11, 12, 13].
+
+**PF-30.** No fold near chance: the lowest test accuracies are 70.15 % (LOSO) and 68.38 % (within), chance 20 %; the lowest train accuracy is 93.20 % (LOSO). LOSO S01 and S02 show gaps of 13.8–27.8 pp (a generalization problem); LOSO S03–S05 test is above train by 1.4–5.6 pp [12, 13].
+
+**Checks.** Acceptance 1–6 and V1–V12 met [9]. Suite run alone: `1513 passed, 22 warnings in 870.26s` [11]. A changed seed count is refused with the out-dir unchanged; the unchanged rerun prints 20 `[skip]` [11]. S01–S05 built folders unchanged (65 files, `e7f55081…bebab4`) [11]. Pre-run audit round 1 found that outputs were rebuilt only from one invocation's methods; fixed before the run and tested [10].
+
+**Budget.** Local wall time 35.5 min of 120 (own, `reports/logs/P23/`) [8, 11]. No GPU [8].
+
+**R11.** None; the access log has no P23 entry [22].
+
+**Open.** The within GNN is data-limited and reached the 150-epoch cap in 19 of 50 folds (D-3); no change of epochs was tuned here (C-3). No online or first-K GNN claim (RR-3). Notebook section 10b has not been run on Colab. The P22 `within_lda` rows still carry the "LOSO" string (W-1, N4). Carry-forwards C-1 to C-4 for P24–P25 (decision row 176) [10, 16]. Merge pending, by the orchestrator.
