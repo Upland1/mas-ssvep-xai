@@ -5,7 +5,7 @@ Author: verifier
 Reads: 00_assignment.md (acceptance), 02_plan.md, 05_run.md, the phase branch
 Clean checkout: `mas/state/scratch/verify/P21` @ e349656ad8cbc78c1e68dfe3212b2a3bc551dcc1 (removed after the run)
 
-Verdict: PASS (partial; human run pending)
+Verdict: PASS (partial; network run in progress)
 
 Scope. Cohort 5 (S01-S05) is verified in full. The 40-subject cohort is not available (command 1 printed `Cohort: 5 subjects built (S01, S02, S03, S04, S05), 0 skipped (none)`, B2), so commands 5, 6, B5 and 7 are a human-run request (`05_run.md`, section "Human run requests"). No stop condition fired (P1, B3 pass; B8 does not apply because command 5 did not run).
 
@@ -124,3 +124,25 @@ Pending (see `05_run.md`, "Human run requests" HR-0 to HR-4, with exact commands
 ## Reasons (if FAIL)
 
 None. The partial status is only the unavailable cohort (B2).
+
+---
+
+# Full cohort — part 1 (appended 2026-10-28)
+
+Verdict stays `PASS (partial; network run in progress)`: no stop condition failed. Details, commands, exit codes, times and the per-subject table (cohort 39 subjects, S01-S040 without S020) are in `05_run.md`, section "Full cohort — part 1". Analysis script `mas/state/scratch/p21_verify/full1.py`, output `reports/logs/P21/full_part1_checks.txt`.
+
+| Item | Result |
+|---|---|
+| HR-0 / B2 | `Cohort: 39 subjects built (...), 1 skipped (S020)`; S020 "all channels dropped (source=both)". N = 39 > 5, gate opened. The S06-S040 folders pre-existed (mtime 18:47-18:48, built outside this run); `--resume` confirmed identical build parameters. |
+| B1 hash | `e7f55081...bebab4` before and after part 1. PASS |
+| B8 | 10/10 S01-S05 fbcca and lda rows (Acc and Acc SD) equal to P20. PASS |
+| P1 (stop condition) | 32 matched subjects (gate-kept = full montage), `loso_w1_fbcca_all` and `loso_w1_all`: 0 prediction and 0 label mismatches; negative control 238 mismatches in 6 of 7 unmatched subjects. HOLDS |
+| B6 / B5 | `common` = POz, PO4, O1; 0 of 39 equal `common`, 32 of 39 equal the full montage; < 50 % so the full classical `--channels all` run was required and done (`reports/loso_w1_all`). |
+| B9 | First 3 `lda` folds 6.1, 6.0, 7.0 s (limit 60 s): no stop. `CUDA_VISIBLE_DEVICES=""` on all classical commands. Budget beyond `LOCAL_RUN_BUDGET_MIN` used under Sebastian's authorisation. PASS |
+| B10 (classical) | No test subject in train_subjects; n_train identity True; one git_head f0fa371 per out-dir; one fold config per out-dir. PASS. Networks pending. |
+| P2 `lda` (32 matched, all channels) | Mean LOSO 85.67 < within 86.51 but only 22/32 (68.8 %) at LOSO <= within + 1 pp (rule: >= 80 %): **direction not observed**. No subject > within + 5 pp, no B10 audit trigger. Reported per subject in `05_run.md` item 5, not a FAIL (consequence rule), no setting changed. |
+| P3 | `common` mean delta +2.62, 0 % below -2 pp; `all` +2.72, 2.6 % (S039 -2.99). HOLDS |
+| P5 | Not evaluable: `common` is 3 channels, not the cohort-5 7. |
+| Privacy | This commit stages only `05_run.md` and `06_verify.md`. |
+
+Reasons (if FAIL): none so far. Open: HR-4 networks (ccnn, eegnet, compact) running as PID 3604944; P2 for networks (against P20 `nn_sweep` is cohort-5 only, so the full-cohort network P2 reference must be a within network run on the same channels, not available), P4 degenerate folds, network B10 and post-run 6 will be added when `mas/state/scratch/p21_hr4/DONE` exists.
