@@ -13,3 +13,4 @@
 | 5 Fix round 1 | ml-engineer | 2026-10-28 | F1 dirty-flag rules, F2 configs in CODE_PATHS (101a0f7, daadad8, cbced17); suite `1434 passed` (14 min) | 1 | PF-37 | none | |
 | 6 Fix round 1 | synthetic-tester | 2026-10-28 | T1 six-row table (F1, F2 reverts killed), T2 masked-first-window rank, T3 suite `1441 passed` (13.6 min) (3cf689c, 6cc1674) | 1 | PF-36, PF-37 | none | |
 | 7 Pre-run audit round 2 | scientific-reviewer | 2026-10-28 | PASS (a120f0b); PR-1..PR-7, V1..V11 copied verbatim into 02_plan.md | 2 | PF-36, PF-37 | none | N8 code_changed docstring, N9 P21 folds now refused (fresh out-dirs used) |
+| 8 Run + verify | verifier | 2026-10-28 | PASS (f5700bd, 5f73505); clean worktree 461ef33; suite `1433 passed, 8 skipped` (CUDA hidden); commands < 30 s each; V1..V11 met; PR-1..PR-7 hold (PR-5 4/5, S05 −2.16 SE_Δ) | 1 | V1–V11, PR-1–PR-7 | none | warm-up mean warmup−full −27.27/−19.16/−5.46/−0.91 at K 1/2/5/10 |
