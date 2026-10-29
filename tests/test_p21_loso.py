@@ -361,8 +361,8 @@ def test_fold_stores_its_configuration_and_a_mismatched_rerun_is_refused(loso_ro
     L.main(args_for(loso_root, tmp_path, "--seed", "7"))
   with pytest.raises(SystemExit, match="different configuration"):
     L.main(args_for(loso_root, tmp_path, "--channels", "all"))
-  assert L.main(args_for(loso_root, tmp_path, "--seed", "7", "--allow-config-mismatch")) == 0
-  assert "[warn]" in capsys.readouterr().out
+  with pytest.raises(SystemExit):                      # P22.3: the override flag no longer exists
+    L.main(args_for(loso_root, tmp_path, "--seed", "7", "--allow-config-mismatch"))
 
 
 def test_channels_all_keeps_the_gate_dropped_channel_and_common_drops_it(tmp_path_factory):

@@ -381,7 +381,11 @@ def test_tampered_training_subjects_in_a_fold_config_is_refused_but_a_moved_data
   arrays, cfg = L.load_fold(p)
   cfg["git_head"] = "deadbeef"
   L.save_fold(p, arrays, cfg)
-  assert L.main(cli(moved, out, methods=("fbcca",))) == 0     # code revision alone does not invalidate
+  with pytest.raises(SystemExit, match="use a new --out-dir"):   # P22.3: a head git cannot resolve is refused
+    L.main(cli(moved, out, methods=("fbcca",)))
+  cfg["git_head"] = L.git_head()                               # the current head: nothing differs
+  L.save_fold(p, arrays, cfg)
+  assert L.main(cli(moved, out, methods=("fbcca",))) == 0
   cfg["train_subjects"] = ["S01", "S02"]                       # a training set that includes the test subject
   L.save_fold(p, arrays, cfg)
   with pytest.raises(SystemExit, match="different configuration"):
