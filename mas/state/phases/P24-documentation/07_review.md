@@ -1,63 +1,88 @@
 # P24 · 07 · Scientific review
 
-Status: DRAFT
+Status: READY
 Author: scientific-reviewer
-Reads: 00, 02, 03_changes_*, 04 and every changed file (pre-run); 05, 06 and the CSVs (results)
+Reads: 00_assignment.md, 02_plan.md (settled 1–8), 03_changes_data-signal.md, 03_changes_scribe.md (incl. "Untraced or weakly traced numbers"), 04–06 (templates, not yet filled), log.md, `Makefile`, `tests/test_p24_make_all.py`, the five documents, `mas/state/reports/P11.md`, `P14.md`, `P15.md`, `P16.md`, `P18.md`, `P20.md`–`P23.md` (sections cited below), `mas/state/decisions.md` (P04–P24 rows), `mas/state/blockers/B003`, `mas/04_REFERENCE_RESULTS.md`, `mas/01_DATA_SPEC.md` §3, P10/P15/P16/P20–P23 `05_run.md` / `06_verify.md` (command tables), the CSVs under `reports/` (read-only), the running job's log `mas/state/scratch/p24_make/make_all.log` and the clone's `reports/flagship_S03.csv` (read-only; the job was not touched).
+Branch: phase/P24-documentation @ b78b009
 
-## Pre-run audit — Round 1
+## Pre-run audit
 
-Verdict: PASS / FAIL
+Verdict: **FAIL** (data-signal). The audit comes after the verifier's detached `make all` was launched; two findings affect that run directly.
 
-| Rule | Result (PASS / FAIL / CONCERN / LEGACY (by design) / N/A) | Evidence (`path:line`) |
+| Rule / item | Result | Evidence |
 |---|---|---|
-| R1 Trial-grouped CV | | |
-| R2 Fit only in-fold | | |
-| R3 Filter continuous, then window | | |
-| R4 Estimator small-sample bias | | |
-| R5 Shared quality decision, explicit thresholds | | |
-| R6 Index layouts verified | | |
-| R7 Honest statistics | | |
-| R8 Smoothing respects trials | | |
-| R9 Per-subject reporting with data source | | |
-| R10 Every change and test cites a source that exists and says what is claimed | | |
-| R10 Copied lines marked `# adapted from [n]`, license compatible | | |
-| R11 Reference consulted only after an attempt, every consultation listed | | |
-| Golden rule 3: legacy behaviour labelled and still reachable after fixes | | |
-| Tests cover every change; at least one fails on the historical bug | | |
-| Changes match 02_plan.md and the roadmap tasks | | |
-| No data, `.ebr`, local tooling files or tool/vendor names in the diff | | |
+| R1–R8 (no pipeline code changed) | N/A | diff `main..HEAD` touches no `src/` or `scripts/` file |
+| R9 data source per target | PASS | target table of `03_changes_data-signal.md`; explicit `--subjects S01 … S05` checked by `test_subjects_are_explicit_wherever_a_script_discovers_them` |
+| R11 | PASS | no consultation listed by either builder |
+| Golden rule 3: legacy behaviour reachable and reproduced | **FAIL** | Era-A targets run with the post-P11 defaults (F1, F2) |
+| Tests cover the change, one fails on the historical bug | **FAIL** | the suite passes on a target that cannot run (F3) |
+| Changes match 02_plan.md settled 7 ("reproduce each phase's run commands as recorded") | **FAIL** | F1, F2, F4 |
+| No data, recording files, local tooling or tool/vendor names in the diff | PASS | guard term list of `mas/state/scratch/p24_scan.py` (by reference) applied to `git diff main..HEAD` added lines: 0 hits. Per commit: only d6d4899 (scribe handoff) adds one hit; e61848d removes it (net 0). Recorded here as a history item, term not repeated |
 
-### Required fixes
+**F1. `make p10` cannot run (blocking; the running `make all` will stop there).** `Makefile:167` passes `--freeze-legacy` without `--cv legacy`. Since P11 (d810553) `benchmark_nn_augmentation.main` calls `parser.error("--freeze-legacy is only meaningful with --cv legacy")` after `parse_args`, so the recipe exits 2 and `all` aborts (`.SHELLFLAGS -eu`). Shown check (no data read; exits at argparse): `.venv/bin/python -c "import scripts.benchmarks.neural_networks.benchmark_nn_augmentation as m; m.main(['--subjects','S01','S02','S03','S04','S05','--model','eegnet','--epochs','150','--device','cpu','--freeze-legacy'])"` → `error: --freeze-legacy is only meaningful with --cv legacy`, `SystemExit 2`. The P10 recorded command (P10 `05_run.md:20–22`) predates the P11 `--cv` option.
 
-<!-- Only if FAIL. Each names its rule and exact location. -->
+**F2. Era-A targets regenerate leak-free numbers instead of the recorded leaky ones.** P11 made `--cv grouped` the default of every script that uses `add_protocol_args` (`src/models/classical/benchmark_runner.py:43`) and of the network drivers; the leaky protocol is `--cv legacy`, written under `reports/legacy_leaky/`. The Makefile copies the P05–P09 commands verbatim (`Makefile:134–140, 144–146, 153, 157, 162–163`), so in a clean clone they write grouped-CV results to the paths whose main-tree content is the Era-A leaky output. Evidence: the running clone's p05 log says `cv=StratifiedGroupKFold(5, shuffle, 42) over reconstructed trial ids (R1, leak-free)` (`mas/state/scratch/p24_make/make_all.log:555`), and the clone's `reports/flagship_S03.csv` holds 86.8 / 90.36 against 90.36 / 95.43 in the main tree (R-3). Files that P11 did not rerun and will therefore differ in the comparison (main-tree mtimes before P11): `flagship_S01..S05.csv`, `sklearn_suite_S03.csv`, `five_subjects_benchmark.csv`, `feature_selection_sfs_{audit,diagnostics}_S03.csv`, `eegnet_benchmark_{cpu,cuda}.csv`, `compact_cnn_benchmark_cpu.csv`, `shallow_convnet_benchmark_cpu.csv`, the `classification_report_*` texts. No target regenerates these leaky numbers anywhere, although the documents quote them as "regenerated by `make all`". `03_changes_data-signal.md` states "Phases whose commands could not be reproduced exactly: none"; that is not correct.
 
-1.
+**F3. Test gap.** `tests/test_p24_make_all.py` checks `parse_args` only, so post-parse validation in `main()` is never exercised: the file passes (`13 passed in 3.49s`, run here with `-o addopts="" -p no:cacheprovider`) on a Makefile whose p10 cannot start. `test_dry_run_of_all_writes_no_stamp_and_a_finished_phase_is_skipped` tests a bash `[ -f ]`, not the Makefile (vacuous second half; the last test covers the logic).
 
-### Non-blocking notes
+**F4. `Makefile:237` silences the blocking P16 regression check.** Deviation 7 says `compare_v1_v2 --check-regression` "exits 1 as recorded". The final recorded run exits 0 (P16 `05_run.md:78`, `17_…_r2.log`, after the NaN-checker fix 9b297c0); exit 1 was round 1. The `-` prefix hides a real regression in the clone.
 
-## Results review
+Non-blocking: the GPU total 110.5 min includes p08's CUDA row (0.4 min), which is outside `all` with the default `NN_DEVICES=cpu` (110.1 without; `.venv/bin/python -c "print((944+33+63+3645+1074+412+438)/60)"` → 110.15); the summed minute column gives 325.8 / 110.1 against 325.6 / 110.5 from seconds (rounding). With `NN_DEVICES="cpu cuda"` (the verifier's `run_all.sh`) the CUDA row is in.
 
-Verdict: APPROVE / REJECT
+### Required fixes (data-signal)
 
-### Deviations from references
+1. F1/F2: add `--cv legacy` to every Era-A command (P05–P10) of a script that has `--cv` (`benchmark_cross_validation`, `benchmark_harmonic_fbcca`, `test_sklearn_models`, `evaluate_confusion_matrix` ×6, `benchmark_feature_selection` ×2, `benchmark_5_subjects`, `benchmark_n_subjects` in p07, `benchmark_eegnet`, `benchmark_compact_cnn`, `benchmark_shallow_convnet`, the three p10 A/B commands; also `--smoothing mod5` where the recorded run used `i % 5`). List the resulting path mapping (main tree `reports/<f>` from Era A ↔ clone `reports/legacy_leaky/<f>`) as a deviation so the verifier's comparison maps them, and correct the "none" sentence.
+2. F3: add a test that fails on the current p10 line, e.g. every p04–p10 command of a script with a `--cv` option passes `--cv legacy`, and `--freeze-legacy` implies `--cv legacy` (or call each script's own post-parse validation). Show it failing on the current Makefile.
+3. F4: drop the `-` before `compare_v1_v2 --check-regression` and correct deviation 7.
+4. For the verifier (orchestrator to route): the running job will stop at p10; after the fix, p05, p06, p08 and p09 carry stamps from grouped runs and must be rerun (`FORCE=1` or remove those stamps); p07's output is overwritten by p11 but should be rerun for exactness.
 
-| Ref | Expected | Obtained (log) | Δ | Within tolerance? | Explanation | Accepted? |
-|---|---|---|---|---|---|---|
-| | | | | | | |
+## Document number check
 
-### Interpretation check
+Method. (a) Existence: every decimal token of the five documents (README 317, report 309, progress report 199, infographic 45, RESEARCH_LOG 662) was looked up in all `reports/**/*.csv` values (rounded to 0–4 dp, also ×100) and in the P00–P23 phase records, decisions, blockers and R-x tables (stdin `.venv/bin/python` heredoc, read-only). Not found: only the two runtime totals 325.6 and 110.5 (P24 handoff; recomputed above). (b) Context: every table and every headline number was recomputed from its CSV with shown commands below, and its data source, protocol, seeds and smoothing rule were compared with the cited file and the phase ruling. RESEARCH_LOG prose numbers quoted from phase records (P00–P04 counts, P12–P14 details) were existence-checked and spot-checked, not each re-derived.
 
-<!-- Per-subject reading; inconclusive results stated as such; leakage in
-fitted objects, normalization, validation sets; statistics unit and
-multiple comparisons. -->
+Recomputations that match (commands, all `.venv/bin/python -c` / heredoc over the named CSV): flagship and leak tables (`n_subjects_benchmark.csv`, `cv_leakage_demo.csv`, `five_subjects_benchmark.csv`); continuous build and decomposition (`v1_vs_v2/flagship.csv`: c 87.38 / 89.07, d_fs 8.04 / 6.91, build −1.83, filter +0.37, guard −1.00); A/B and counts; gate cohort means (groupby set, subject, `k_select == 0` → 73.75, 77.57, 48.59, 65.31, 68.55); P17 means, 15/15 StimCorrect < Smoothed, confusion "Sum" rows (2.0 s confirmed: S05 StimCorrect 1930/1990 = 96.98 = the 2.0 s column); P13 FDR totals (groupby method, subject sum of `n_edges_sig_fdr`); P13 S05 wPLI bases 1–5 = 7/14/12/7/12; P18 48/43/32 and 9 FDR-only / 4 NBS-only; graph-size means by subject (38.81/32.14/12.14/2.62/1.61) and by frequency (26.43/19.11/13.04/13.93/14.82; scribe's open item 1 closed); P14 Fisher means (0.629/0.163/0.51/0.48) and R² 0.675/0.540; LOSO, P22, GNN and cohort-39 summary `Mean` rows; P21 seed ranges (ccnn 85.36–86.58, eegnet 78.58–79.76; eegnet S02 seed range 8.23); window sweep and NN sweep means; pseudo-online, dynamic stopping, edge effects, P19 counts; warm-up `cohort.csv`; LOSO GNN gaps 13.8–27.8 and S03–S05 +1.4–5.6 (all four variants); min fold test 70.15 / 68.38 (`folds.csv`). R-x values in the documents equal `mas/04_REFERENCE_RESULTS.md` and are labelled as the original's in every table.
 
-### Decisions for decisions.md
+Wording rulings that hold everywhere: `within_lda` labelled within-subject (W-1 noted); "direction not observed" (GNN LOSO vs within; cohort-39 lda); "GNN ≥ lda on S02/S05", no "beats"; `compact_cnn` vs `compact_eegnet` distinct (no bare "compact" in any document); cohort-39 `common` = three channels POz, PO4, O1; `_subjnorm` / `lda_subjnorm` labelled test-time, offline upper bound in the LOSO tables; PF-30 "no fold near chance".
 
-<!-- Accepted deviations, one line each; the orchestrator copies them. -->
+### Mismatches and conflations (required)
 
-## Sources spot-check
+| # | Where | Finding | Evidence |
+|---|---|---|---|
+| D1 | report `docs/report/v2/report.md:136` (§3.5) | **Two phases conflated.** "The within-subject GNN (… three repeats) gives cohort means of 86.81 % and 86.98 % (`reports/within_gnn/summary.csv`). The reference values (R-15) … reproduced … 11 of 12 … `nodes+F` on S02 at 2.0 s gives 37.07 %". 86.81/86.98 are P23 Era-C within GNN (continuous build, 1 s stride 0.25, 3-seed ensemble over 5 grouped folds); 37.07 and the R-15 comparison are the P15 legacy-folder GNN, 3 repeats (`reports/gnn_benchmark.csv`, nodes+F S02 `acc_2s` mean 37.07; P15 cohort 1.0 s nodes+F = 64.33 over S01–S05, `.venv/bin/python -c "print(round((34.00+34.18+76.82+87.14+89.50)/5,2))"`). R-15 is not a target for `within_gnn`. | groupby variant, subject over `gnn_benchmark.csv`; `within_gnn/summary.csv` Mean rows |
+| D2 | README.md:176, report:156, progress_report.md:136, RESEARCH_LOG.md:522 | "`all` … fbcca 75.80, lda 83.42, lda_subjnorm 86.13 (32 matched subjects)": these are **39-subject means** (39 subject rows per method in `loso_w1_all/summary.csv`). 32 matched subjects apply only to the within comparison (85.67 vs 86.51, P21 D-2, D-4). Also label `lda_subjnorm` 86.13 (and 75.16) "offline upper bound" there. | `loso_w1_all/summary.csv` nunique Subject = 39 |
+| D3 | report:70 (Table 2 header) | "2.0 s (`i % 5`)" is wrong for the continuous build: `n_subjects_benchmark_v2cont.meta.txt` says `smoothing=trial` (trial-reset over true ids, the R8 rule from P16). The progress report §2 table (progress_report.md:37–42) mixes `i % 5` rows (v1, a, a′) and trial-rule rows (b, c, c′) in one 2.0 s column without saying so; label the rule per row. | meta line `cv=grouped, smoothing=trial` |
+| D4 | infographic `methodology_infographic.svg:124` | Pseudo-online box "single repeat; ccnn at 1 s": the run is **0.5 s windows** (`Window (s)` 0.5 in `pseudo_online/summary_ccnn_5class.csv`; `--window-sec 0.5`, P20 `05_run.md`). | CSV column |
+| D5 | report:7 (Abstract) | "a leave-one-subject-out differential at 2 s" is not traceable to any CSV, phase report or decision (no LOSO 2 s result exists, P21 "No 2.0 s-window LOSO result"). The documented non-replications are the SFS row, Compact-CNN S03 2.0 s ON, GNN S02 2.0 s (and the S05 wPLI FDR total). Remove or trace. | grep over `mas/state/reports/`, decisions: no hit |
+| D6 | report:150, :152; README.md:166, :168; infographic GNN box | GNN `Acc (%)` 89.22 / 90.32 / 86.81 is the **3-seed softmax ensemble** (P23 report §4, N2), shown beside single-seed (seed 42) network rows. P23 C-1: per-seed means for single-fit comparisons, ensemble labelled. Label the rows "3-seed ensemble" and give the per-seed cohort mean (LOSO nodes+F 88.47, `P23.md:178`; within nodes+F 85.54 = mean of the per-subject seed means in `within_gnn/seeds.csv`). | `loso_gnn/seeds.csv` groupby |
+| D7 | report:172, progress_report.md:153, RESEARCH_LOG.md:550, README.md:172 | "GNN ≥ lda on S02 (+4.66, SE_Δ 2.28)" omits the binding qualifier of P23 (decisions 2026-10-29, `P23.md:294`, :298): S02 is an ensemble effect; per-seed +3.27 pp against 2·SE_Δ 4.62 is a tie; only S05 survives per-seed (+2.01 vs 1.55). Add it. | `P23.md:226, 294` |
+| D8 | RESEARCH_LOG.md:189 (P06), :217 (P07), :277 (P10), P05 paragraph :173–178, Sources #7/#8 | Leaky Era-A numbers cited to the paths that now hold the P11 grouped reruns. `reports/feature_selection_ablation_S03.csv` holds 86.8 / 90.36 … 84.26 / 91.88 (SFS), not 90.36 / 95.43 … 89.85 / 95.94; `reports/n_subjects_benchmark.csv` holds 61.0 …, not 64.50 …; `reports/augmentation_ab_eegnet.csv` holds 58.36 → 63.21, not 63.93 → 67.04; the P05 feature-space values (84.77, 74.11, 48.73) are in `reports/legacy_leaky/feature_space_benchmark_S03.csv` (current file: FBCSP 80.71, hybrid 76.14). The quoted values are in `reports/legacy_leaky/<same name>` (P11 snapshot). Repoint each. | both files printed |
+| D9 | report:189 (§4 Generalization), :191 (Limitations); progress_report.md:181; infographic:139 | PF-30 numbers "28.00 and 27.04 % test against 83.25 and 81.38 % train for EEGNet, OFF" and the SFS row "89.85 / 95.94" are **leaky** values (`reports/legacy_leaky/augmentation_ab_eegnet.csv`, `reports/legacy_leaky/feature_selection_ablation_S03.csv`), unlabelled and not in the cited source lists. Label "legacy leaky (P10 / P06)" with the path. The grouped EEGNet OFF values are 30.5 / 26.02 vs 82.99 / 79.6. | both CSVs |
+| D10 | report:179, :181 | (a) "The EEGNet drop of −5.57 pp at seed 42 falls within a training-seed range of 16.75 pp on S03" compares a cohort Δ with one subject's range; P11 gives the like-for-like numbers (three-base cohort drop −2.71 / −2.82; S03 seed-42 drop −20.81 vs S03 range 16.75; `P11.md:313`). (b) "seed ranges of up to 8.23 pp per subject for EEGNet in the LOSO study" uses the P21 sweep `eegnet` (kernel 128) inside a paragraph on the legacy EEGNet A/B: name it `eegnet` (sweep network) or drop it (PF-31 spirit). | `loso_w1_s01-s05{,_seed43,_seed44}` S02 eegnet 70.50/62.27/65.37 |
+| D11 | README.md:310 | "the guard (negative on S02 only)": `d_guard` is also negative on S04 (−0.10) and S05 (−0.41 / −0.31); the P16 reading is "material only on S02 at 1.0 s (−4.50), cause not established" (`P16.md:299`), as the report and progress report write it. | `v1_vs_v2/flagship.csv` |
+| D12 | **R9**, report Tables 3, 6, 7; progress §4, §6, §8, §9; README §3.2, §3.4, §3.6, §3.7 | Only cohort means for the P17 banks, LOSO/within, GNN, window sweep and the A/B. R9 (always enforced; `00_assignment.md` "Enforced: R9"): "Report 1.0 s and 2.0 s smoothed accuracy for every subject, never only the mean". Add per-subject S01–S05 columns (1.0 s and 2.0 s, or the 2-tap column for 1 s LOSO) at least in the report v2 and the progress report; the README may point to them. | — |
+| D13 | report:199, :216; progress_report.md:201 | R10: the paradigm paper is given in the spec as "Chailloux Peguero et al. (2023)" with title and journal; the entry adds initials "J. D." that the opened source does not contain. Use the spec's form. README.md:224 "(… and their frequencies) is described in" goes beyond the spec ("reference paper for the paradigms"). | `mas/01_DATA_SPEC.md:119–122` |
+| D14 | RESEARCH_LOG.md Sources #1; README Sources #15 | R10 "only cite what was opened": the scribe states P00–P22 reports were not read (`03_changes_scribe.md` "Not opened"), yet RESEARCH_LOG lists them as a DATA source without that note, and README #15 lists the original repository as OWN-CODE. State "not opened in this run; quoted through the previous RESEARCH_LOG and decisions.md", as the report's Source 13 does. | handoff lines 196–197 |
 
-<!-- Fix rounds: append "## Pre-run audit — Round N". After two failed rounds,
-set Status: BLOCKED. -->
+### Minor (fix with the round; not blocking alone)
+
+- report:7 and Conclusion: "Correcting the sampling rate … and filtering continuously gives 87.38 %" attributes the continuous-build headline to two factors; 87.38 is row c (8-channel tier-1 montage, true ids, shared gate with guard, five seeds 42–46), and filtering contributes +0.37 (none). Say "the corrected continuous build".
+- infographic:74–75 and report:64 write the inflation as "−4.06 pp"; the change is −4.06, the inflation +4.06 (the abstract and §4 are correct). Infographic leak box cites only `n_subjects_benchmark.csv`; 83.33 is in `cv_leakage_demo.csv`.
+- README.md §3.1 "Five-class results with the six-class and harmonic bank (§3.4) are higher (harm bank: 94.29 / 95.80)": 94.29 / 95.80 is the five-class harm bank only.
+- progress_report.md:197 "S06–S40": the folders are S06 … S040 (S020 skipped); write "S01–S040 without S020" as P21 binds. B003 was amended on 2026-10-28 (P22–P23 cohort S01–S05 only, decisions row 163); items 6 and the blocker line should say so consistently (one says P20–P23, the other P21–P23).
+- README §14.1: the runtime table's GPU total includes the p08 CUDA row (see the pre-run note); state it.
+
+### Scribe's "untraced" list (closed or carried)
+
+1 closed (by-frequency means recomputed above). 2 correct wording (W-1). 3 traced (`P11.md`, B006; 65.48 % = 129/197 in `augmentation_ab_compact_cnn.csv` S03 2.0 s ON). 4 `reports/diagnostics/p11_seed_spread_eegnet.csv` exists (12 rows; S03 OFF 71.57 at both extra bases against 54.82 at seed 42, range 16.75, `P11.md`), `reports/logs/P11/`, `P16/` exist. 5 recomputed in the pre-run section. Phase reports not opened by the scribe: the numbers I checked against P11, P14–P16, P18, P20–P23 agree except D1–D11.
+
+## Verdict
+
+Verdict: FAIL
+
+Required fixes per agent:
+
+- **data-signal (Makefile, test, handoff):** pre-run fixes 1–3 (F1 `--freeze-legacy` without `--cv legacy`; F2 `--cv legacy` on every Era-A command and the path mapping as a deviation; F3 a test that fails on the current p10 line; F4 remove the `-` before `--check-regression`, correct deviation 7 and the "none" sentence). Item 4 goes to the verifier through the orchestrator.
+- **scribe (documents):** D1–D14, then the minor items. D1, D2, D3, D4, D5, D8 are number/source mismatches; D6, D7, D9, D10, D11 are conflations or ruling omissions; D12 is R9; D13, D14 are R10. After the data-signal fix, every "regenerated by `make all`" sentence must hold for the Era-A paths (D8 repointing to `reports/legacy_leaky/` is consistent with the fixed targets).
 
 ## Questions
+<!-- receivers append: ACK <agent> <YYYY-MM-DD>, then questions; answers appended, never deleted -->
