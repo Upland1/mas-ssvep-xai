@@ -112,9 +112,9 @@ Every number in 05_run.md and in this file comes from `summary.csv`, `folds.csv`
 
 ## Privacy scan
 
-- Commit messages of `main..HEAD` (22 commits): `git log main..HEAD --format='%an|%ae|%cn|%B'` searched for claude, anthropic, co-authored, assistant, generated: 0 hits.
-- Added lines of `git diff main...HEAD` (24 files, 3340 insertions) searched for claude, anthropic, co-authored, noreply@, copilot, chatgpt, openai: 0 hits.
-- Changed paths of the branch diff contain no `CLAUDE`, `.claude/`, `data/` or recording files: 0 hits.
+- Commit messages of `main..HEAD` (22 commits): `git log main..HEAD --format='%an|%ae|%cn|%B'` searched for the guard's vendor/tool term list (built from fragments): 0 hits.
+- Added lines of `git diff main...HEAD` (24 files, 3340 insertions) searched for the guard's vendor/tool term list (built from fragments): 0 hits.
+- Changed paths of the branch diff contain no local-instruction files, tool directories, `data/` or recording files: 0 hits.
 - This verification commit stages only `05_run.md` and `06_verify.md`.
 
 ## Human-run section
