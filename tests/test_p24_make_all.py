@@ -256,16 +256,11 @@ def test_every_output_dir_quoted_in_the_phase_records_is_produced_by_a_target(li
   assert not missing, f"quoted in the phase records but in no target: {missing}"
 
 
-def test_dry_run_of_all_writes_no_stamp_and_a_finished_phase_is_skipped(tmp_path):
+def test_dry_run_of_all_writes_no_stamp(tmp_path):
   stamps = tmp_path / "st"
   out = subprocess.run(["make", "-n", "--no-print-directory", "all", f"STAMPS={stamps}", f"PYTHON={FAKE_PY}"],
                        cwd=ROOT, capture_output=True, text=True, check=True).stdout
   assert "=== p23" in out and not stamps.exists()
-  # a real (non-dry) `make all` over a fake interpreter would run commands; check the skip logic on the stamp only
-  stamps.mkdir()
-  (stamps / "p00.done").write_text("1 s\n")
-  line = subprocess.run(["bash", "-c", f'[ -f {stamps}/p00.done ] && echo skip'], capture_output=True, text=True).stdout
-  assert line.strip() == "skip"
 
 
 def test_help_and_phase_aliases_exist():
@@ -303,3 +298,70 @@ def test_all_writes_a_stamp_per_finished_phase_and_skips_it_next_time(tmp_path):
   assert "[skip] p09" in second and "=== p09" not in second
   forced = subprocess.run(base + ["FORCE=1"], cwd=ROOT, capture_output=True, text=True, check=True).stdout
   assert "=== p09" in forced
+
+
+# --- Era-A defaults (review F1-F3) -------------------------------------------------------------
+
+ERA_A = ["p04", "p05", "p06", "p07", "p08", "p09", "p10"]
+
+
+def test_era_a_commands_of_scripts_with_a_cv_option_pass_cv_legacy_and_mod5(listings):
+  """Since P11 the default is --cv grouped; P05-P10 recorded the leaky protocol, so each command must say so."""
+  n = 0
+  for t in ERA_A:
+    for module, args in script_commands(listings[t]):
+      parser, ns = parse(module, args)
+      if action(parser, "--cv") is None:
+        continue
+      n += 1
+      assert ns.cv == "legacy" and "--cv" in args, f"{t}: {module} runs with cv={ns.cv}"
+      assert ns.smoothing == "mod5" and "--smoothing" in args, f"{t}: {module} smoothing {ns.smoothing}"
+  assert n == 17   # p05 8, p06 2, p07 1, p08 1, p09 2, p10 3
+
+
+def test_freeze_legacy_implies_cv_legacy_in_every_command(listings):
+  seen = 0
+  for t in PHASES:
+    for module, args in script_commands(listings[t]):
+      parser, ns = parse(module, args)
+      if action(parser, "--freeze-legacy") is not None and ns.freeze_legacy:
+        seen += 1
+        assert ns.cv == "legacy", f"{t}: --freeze-legacy without --cv legacy ({module})"
+  assert seen == 3
+
+
+def test_p10_commands_pass_the_scripts_own_post_parse_validation(listings, tmp_path):
+  """main() up to the data-loading step: `parser.error` (SystemExit 2) must not fire; the empty folders then end it."""
+  seen = 0
+  for module, args in script_commands(listings["p10"]):
+    mod = importlib.import_module(module)
+    args = [a for a in args]
+    args += ["--processed-dir", str(tmp_path / "none"), "--reports-dir", str(tmp_path / "rep")]
+    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+      try:
+        mod.main(args)
+      except SystemExit as exc:
+        assert exc.code != 2, f"{module}: rejected by its own validation"
+      except Exception:   # noqa: BLE001 - missing data after validation is the expected end here
+        pass
+    seen += 1
+  assert seen == 3
+
+
+def test_builds_of_p16_and_p17_pin_quality_source_and_banks(listings):
+  """The config default became `both` in P19; P16/P17 were built on the filtered gate."""
+  for t in ("p16", "p17"):
+    for module, args in script_commands(listings[t]):
+      if module == "scripts.build_windows":
+        _, ns = parse(module, args)
+        assert ns.quality_source == "filtered" and "--quality-source" in args, t
+        assert ns.banks is not None, t
+
+
+def test_final_regression_check_is_not_silenced(listings):
+  for t in PHASES:
+    for ln in listings[t]:
+      if "compare_v1_v2 --check-regression" in ln:
+        assert not ln.startswith("-")
+  text = (ROOT / "Makefile").read_text()
+  assert not re.search(r"^\t-.*check-regression", text, re.M)
