@@ -174,7 +174,7 @@ Mean largest component as a share of possible edges: S03 38.8 %, S04 32.1 %, S05
 (`reports/connectivity_graph_size_p18_nbs.csv`). The S05 wPLI total is an accepted deviation from R-12 (D-1, P13).
 
 Frequency comparison (P14, `reports/connectivity_comparison/`): coherence similarity across frequencies, Fisher mean r
-0.629 (R-13: 0.54); coherence largely explained by SNR (R² 0.675). No consistent in-alpha difference for coherence, PLV or wPLI (3 of 5 subjects).
+0.629 (R-13: 0.54); the coherence delta (stimulus minus baseline) is largely explained by target SNR (R² 0.675 with SNR and alpha change, 0.668 with SNR alone, over 25 cells; `reports/connectivity_comparison/power_confound_ols.csv`). No consistent in-alpha difference for coherence, PLV or wPLI (3 of 5 subjects).
 
 ### 3.6 Within-subject and leave-one-subject-out (P21–P23)
 
