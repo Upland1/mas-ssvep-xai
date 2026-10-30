@@ -189,6 +189,167 @@ Verdict: PASS
 No finding needs a fix round. N1–N3 are non-blocking and go to the P25.md open-items list (owners: N1
 synthetic-tester, N2 synthetic-tester, N3 orchestrator for the decisions row).
 
+## R-13 ruling
+
+Scope: `06_verify.md` reason 2 (split-half reliability cells outside ±0.05: 5 of 25 coherence and 14 of 25 wPLI;
+coherence pairwise magnitude count 10 against 6). I read `mas/04_REFERENCE_RESULTS.md` (tolerance rules and R-13),
+`mas/03_ROADMAP.md` P14 (lines 525–550), `mas/state/reports/P14.md` §1, §4.2–§4.4, §4.6, §4.12, §5 and §9,
+`mas/state/decisions.md` rows 123–126, `src/features/connectivity/comparison.py:206–237` and
+`scripts/connectivity/comparison/test_connectivity_frequency_differences.py:113–160, 267–271`. I changed no code and
+ran nothing on recordings. All numbers below come from the commands shown, which read the CSVs only.
+
+### 1. Kind of target
+
+R-13 is a **mixed** target. Two documents govern it:
+
+- The roadmap P14 acceptance line says "no fixed numeric target; compare qualitatively with R-13". This is
+  the phase acceptance, and P14 was judged on it (decisions row 125, D-1).
+- The tolerance table at the top of `mas/04_REFERENCE_RESULTS.md` still applies per kind of number.
+  "Descriptive statistics (r, SNR dB, reliability) ±0.05, ±0.5 dB" names reliability explicitly. "Permutation
+  statistics (Monte Carlo)" asks for the same qualitative pattern.
+
+The roadmap does not override that table for P25 acceptance 4 ("every R-x row within tolerance or explained").
+P14.md §1 and §9 call R-13 "qualitative only, with no numeric tolerance" and report "Deviations from numeric
+references: none". That wording is too broad. It held for P14's gate, but it leaves the cell-level reliability
+differences outside a band that the reference file sets, with no signed explanation. This is the gap the verifier
+found. My ruling for each part:
+
+| R-13 part | Kind | Rule applied | Status |
+|---|---|---|---|
+| Global mean delta (coherence, wPLI) | deterministic | ±0.05 | W: max abs difference 0.0005 (`06_verify.md` A) |
+| Target SNR, alpha change | deterministic | ±0.5 dB | W: 0.004 / 0.005 dB (`06_verify.md` A) |
+| Frequency similarity (QAP r, share p < .05) | descriptive r, QAP Monte Carlo share | r ±0.05; share qualitative | coherence: arithmetic mean 0.5354 vs 0.54 (W), Fisher mean 0.629 (aggregation-convention ambiguity, P14 D-4, open question for Sebastian); wPLI: 0.1429 vs 0.14 (W); shares 0.66 / 0.32 vs 64 % / 32 % |
+| Split-half reliability cells | descriptive, but **a random-split Monte Carlo estimate** | ±0.05, numeric; deviations need a signed explanation | out of band in 19 of 50 cells. **Explained** below (E, signed here) |
+| Pairwise magnitude / pattern counts | permutation Monte Carlo | same qualitative pattern; by analogy to the FDR-total rule, ±25 % or ±5 | coherence 10 / 1 vs 6 / 1 (difference 4 ≤ 5); wPLI 6 / 2 vs 6 / 2. W by analogy; pattern holds |
+
+### 2. Qualitative checks (all hold)
+
+These were recomputed in this review from `reports/connectivity_comparison/{coherence,wpli}_split_half_reliability.csv`
+and `{coherence,wpli}_frequency_similarity.csv`:
+
+```
+.venv/bin/python -I -c "<median, count >=0.75, count <=0 of split_half_reliability; tanh(mean(arctanh r)), mean r,
+                         share p_qap<.05 of frequency_similarity; per method>"
+coherence median 0.9239 >=.75 20 <=0 2 sim fisher 0.629 arith 0.5354 share p_qap<.05 0.66
+wpli median 0.5165 >=.75 4 <=0 3 sim fisher 0.1629 arith 0.1429 share p_qap<.05 0.32
+```
+
+- E1, coherence similarity > wPLI similarity on both the mean r and the share: 0.629 / 0.66 against
+  0.163 / 0.32. Holds (R-13: 0.54 / 64 % against 0.14 / 32 %).
+- E2a, coherence median reliability > wPLI median: 0.9239 against 0.5165. Holds (R-13 medians 0.92 / 0.54,
+  P14.md §4.3).
+- E2b, more coherence cells ≥ 0.75: 20 against 4. Holds (R-13 22 / 3).
+- E2c, wPLI has non-positive cells and coherence has fewer: 3 against 2. Holds with a margin of 1 (R-13 3 / 0).
+- E2d, the lowest coherence cells are the in-alpha cells of S01 and S02 (S01 10.91, S02 10.91, S02 8.57 Hz).
+  Holds (the same three cells are R-13's lowest: 0.02, 0.34, 0.42).
+- E3, p_mag count ≥ p_pat count (`{coherence,wpli}_pairwise_tests.csv`, final): coherence 10 ≥ 1 and wPLI 6 ≥ 2.
+  Holds.
+- E4 and E5 (SNR, alpha; `power_confound_table.csv`): equal to R-13 within 0.005 dB. Hold.
+- Rank agreement of the reliability cells with R-13 (Spearman over 25 cells): coherence 0.894, wPLI 0.928
+  (command in §3).
+
+### 3. Cause of the split-half cell differences
+
+**Not Era, fs or data source.** P14 and the original used the same source: legacy 7-channel OO windows, fs-250
+axis, per-script P07 gate (P14.md, Data source). The quantities computed by deterministic estimates on the same
+windows and baselines match R-13: global delta within 0.0005 over 50 cells, SNR and alpha within 0.005 dB over 50
+cells. A difference in windows, fs, gate, band or baseline would show up in these. It does not. So no recorded
+Era/fs/data-source cause applies, and none is claimed.
+
+**The cause is the random split sample.** Each reliability cell is the Fisher mean over 10 random halvings of the
+stimulus trials and the baseline trials (`comparison.py:218–234`). In this rebuild every cell takes its seed from
+`derive_seed(random_state, subject, method, condition, "splithalf")`, which hashes the keys with crc32 (`src/features/connectivity/permutation.py:50–53`,
+`test_connectivity_frequency_differences.py:159–160`). The P14 plan chose this seed scheme (decisions row 123), and
+P14 consulted no reference code (P14.md §8). The splits therefore cannot equal the original's, and each cell is an
+independent draw of a 10-split estimate. The pattern of the differences is the one sampling variability predicts, not
+the one an implementation bias predicts:
+
+```
+.venv/bin/python -I -c "<per cell: ours from <m>_split_half_reliability.csv minus the R-13 value (copied from
+                         mas/04_REFERENCE_RESULTS.md R-13); count |d|>0.05 split by R-13 value >= 0.75; signs; Spearman>"
+coherence n>0.05 5 mean signed -0.015 n pos 14 n neg 11 spearman 0.894
+coherence ref>=0.75: cells 22 n>0.05 2 max 0.1 | ref<0.75: cells 3 n>0.05 3 max 0.343
+wpli n>0.05 14 mean signed 0.018 n pos 13 n neg 12 spearman 0.928
+wpli ref>=0.75: cells 3 n>0.05 0 max 0.017 | ref<0.75: cells 22 n>0.05 14 max 0.498
+```
+
+1. **The deviations sit in the low-reliability cells.** Of the 19 out-of-band cells, 17 have an R-13 value below
+   0.75. Among the 25 cells with an R-13 value ≥ 0.75, only 2 are out of band: coherence S03 10.91 Hz (0.68 vs 0.78)
+   and S05 24 Hz (0.891 vs 0.84, 0.001 beyond the edge). Their maximum difference is 0.10. Low split-half r has the
+   largest split-to-split spread. Spearman-Brown `2r/(1+r)` then amplifies it, with slope 2 at r = 0 against
+   about 0.55 at r = 0.9. At r ≤ 0 the formula is switched off, which adds a discontinuity: S02 wPLI 10.91 Hz is
+   −0.252 against −0.75, and S05 wPLI 15 Hz is −0.198 against 0.10.
+2. **The differences have no direction.** Signs split 14 / 11 (coherence) and 13 / 12 (wPLI), with mean signed
+   differences of −0.015 and +0.018. The plausible implementation differences would each push every cell the same
+   way. Splitting windows instead of trials, leaving the baseline unsplit, or applying Spearman-Brown per split would
+   all inflate the estimate. Using arithmetic instead of Fisher averaging would lower it.
+3. **The ordering is kept.** The rank correlation with R-13 is 0.894 (coherence) and 0.928 (wPLI). Every E2
+   criterion holds.
+4. **The worst cells are the weakest signals.** wPLI S02 contributes 5 of the 14 wPLI out-of-band cells. That
+   subject's wPLI row has the smallest largest-magnitude global delta of the five subjects (−0.024 to 0.122), and its in-alpha SNRs are below
+   0.5 dB (R-13 SNR table). The S02 trial ids are also approximate (P11 D-2). The rebuild and the original therefore
+   use different trial groupings in that subject, which is a second, recorded source of split differences there.
+
+**Signed explanation (`mas/04_REFERENCE_RESULTS.md`, tolerance rules).** I accept the 19 split-half cells
+outside ±0.05 as a **Monte Carlo deviation**. The split draws cannot match the original's (rebuild-specific
+seed stream, decisions row 123). Every deterministic input matches. The differences are confined to low-reliability
+cells, show no direction, and keep the ordering. The cell values support no conclusion that the reference values
+would change. P14.md §4.3 qualified each finding with the 10-split caveat, and every E2 check holds. P14 D-4's
+"two non-positive coherence cells" item falls under the same explanation: S01 −0.163 against 0.02, and S02 −0.003
+against 0.34, both cells with R-13 values below 0.35.
+
+**Status of the explanation: probable, from the pattern. It is not demonstrated by seed bases.** If the orchestrator
+wants it demonstrated, the confirmatory diagnostic needs no code change. The verifier runs it in about 15 min, and it
+writes only suffixed outputs (`test_connectivity_frequency_differences.py:267–271`):
+
+```bash
+for B in 1 2 3 4 5; do
+  .venv/bin/python -m scripts.connectivity.comparison.test_connectivity_frequency_differences \
+    --methods coherence wpli --random-state $B --permutations 50 --n-jobs -1 --out-suffix diag_r13_rs$B
+done
+```
+
+Pre-committed reading. Take the 19 cells, with base 42 (the final CSVs) plus bases 1–5, for 6 draws per cell. If
+the explanation holds, an R-13 value falls inside the per-cell [min, max] of the 6 draws with probability 5/7 per
+cell, so about 13.57 of 19 cells are expected inside. The confirmation rule is **≥ 10 of 19** (P(≤ 9) = 0.0233 under
+the explanation). The explanation is **refuted** if **≤ 6 of 19** cells fall inside and the outside cells share one
+sign (P(≤ 6) = 0.00036). A refutation is then an implementation difference in the split-half estimator, owned by
+connectivity-stats, and P14 D-4 reopens. A count of 7–9 is inconclusive: the deviation stays accepted as probable,
+with that wording. Only the split-half CSVs of these runs are read. Their p-values at 50 permutations are not used.
+Command for the thresholds: `.venv/bin/python -I -c "from scipy.stats import binom; p=5/7;n=19;
+print(round(n*p,2), round(binom.cdf(9,n,p),4), round(binom.cdf(6,n,p),5), round(1343*50/500/60,1))"` →
+`13.57 0.0233 0.00036 2.2`. The last value is the minutes per base for the pairwise part, scaled from P14's
+1343 s at 500 permutations.
+
+### 4. Pairwise magnitude count (coherence 10 against 6)
+
+Permutation p-values fall under the Monte Carlo row, and that row grades the qualitative pattern. The pattern (E3,
+p_mag count ≥ p_pat count, and pattern counts 1 and 2 equal to R-13) holds. The count difference of 4 is inside the
+"±5" absolute band, applied here by analogy to the FDR-total rule. Six coherence cells have p < 0.015, which equals
+R-13's 6. The surplus is four cells at p = 0.029–0.042 (`coherence_pairwise_tests.csv`, sorted `p_mag`: 0.001,
+0.001, 0.002, 0.007, 0.008, 0.014, 0.029, 0.035, 0.039, 0.042, 0.051, …). A second cause is likely and partly
+recorded. The exchangeability null was designed in this rebuild (decisions rows 123–124) and was found to be
+off-centre (P14 D-2). The original's null construction is unknown. Permutation noise alone (SE about 0.009 at
+p = 0.04 and 500 permutations) is unlikely to move all four cells above 0.05. I therefore rule the count **within
+the analogous band and pattern-consistent**, with the null design named as a documented ambiguity, not as a fault.
+
+### 5. Verdict on reason 2
+
+Reason 2 **does not stand** as an unexplained deviation. R-13's deterministic parts are within tolerance. Its
+qualitative criteria all hold (§2). The split-half cells are a reviewer-signed Monte Carlo deviation (§3). The
+pairwise count is within the analogous band (§4). For acceptance 4 this becomes "E", given two conditions:
+
+- **Orchestrator:** add a `decisions.md` row recording the accepted deviation. The tolerance rules require
+  it, and the text above is its content. Also decide whether to run the optional diagnostic in §3; if it runs, its
+  reading binds.
+- **Scribe:** P25.md must not repeat P14.md's "no numeric tolerance" or "Deviations from numeric references: none".
+  It states "R-13 split-half: 19 of 50 cells outside ±0.05, accepted Monte Carlo deviation (P25 R-13 ruling),
+  probable, not seed-base demonstrated" (or the diagnostic's result), and keeps the Fisher-vs-arithmetic similarity
+  question open for Sebastian.
+
+No owner or code fix is required for R-13. Reason 1 (R-8 CCNN count) is unaffected by this ruling and stays
+with deep-learning.
+
 ## Results review
 
 Verdict: pending (after 06_verify.md)

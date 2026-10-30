@@ -2,12 +2,14 @@
 
 Input `(B, C, T)` or `(B, 1, C, T)` (R6: axis 1 of the 3-D form is channels, last axis is time). The window is
 zero-padded to `nfft = max(T, round(fs / resolution_hz))` samples, transformed with `rfft`, the bins with
-`f_min <= f <= f_max` are kept and the real and imaginary parts are stacked as two input maps divided by `T`:
-`(B, 2, C, n_bins)`. Then spatial Conv2d (C, 1) -> BN -> ReLU -> Dropout, spectral Conv2d (1, `spectral_kernel`) ->
-BN -> ReLU -> Dropout, Flatten, Linear. Both convolutions have `bias=False` (each is followed by BatchNorm; B004).
+`f_min <= f <= f_max` are kept and `[real | imag] / T` is concatenated along the frequency axis into ONE input map
+`(B, 1, C, 2 * n_bins)`: real part at positions `k`, imaginary part at `n_bins + k`. Then spatial Conv2d (1 -> F, (C, 1))
+-> BN -> ReLU -> Dropout, spectral Conv2d (F -> F, (1, `spectral_kernel`)) -> BN -> ReLU -> Dropout, Flatten, Linear.
+Both convolutions keep their bias: the R-8 count (27,977 / 32,309, original classes) includes it. This is the Era-C
+CCNN count and differs from the bias-free rule of B004, which covers the first R-8 table.
 
-Parameters (bias-free convs): 2*F*C + 2F (BN1) + F*F*K + 2F (BN2) + F*(n_bins-K+1)*n_classes + n_classes,
-with F = n_filters.
+Parameters: (F*C + F) + 2F (BN1) + (F*F*K + F) + 2F (BN2) + F*(2*n_bins-K+1)*n_classes + n_classes, with F = n_filters
+(default 2C). At 256 samples, 256 Hz, 3-50 Hz, 0.25 Hz (n_bins 189), 5 classes: 27,977 (C=7), 32,309 (C=8).
 """
 
 import numpy as np
@@ -32,16 +34,16 @@ class CCNN(nn.Module):
     self.bins_hz = freqs[idx]
     self.n_bins = len(idx)
     F = int(n_filters) if n_filters else 2 * self.n_channels
-    self.spatial = nn.Sequential(nn.Conv2d(2, F, (self.n_channels, 1), bias=False), nn.BatchNorm2d(F), nn.ReLU(),
+    self.spatial = nn.Sequential(nn.Conv2d(1, F, (self.n_channels, 1)), nn.BatchNorm2d(F), nn.ReLU(),
                                  nn.Dropout(dropout))
-    self.spectral = nn.Sequential(nn.Conv2d(F, F, (1, spectral_kernel), bias=False), nn.BatchNorm2d(F), nn.ReLU(),
+    self.spectral = nn.Sequential(nn.Conv2d(F, F, (1, spectral_kernel)), nn.BatchNorm2d(F), nn.ReLU(),
                                   nn.Dropout(dropout))
-    self.head = nn.Linear(F * (self.n_bins - spectral_kernel + 1), n_classes)
+    self.head = nn.Linear(F * (2 * self.n_bins - spectral_kernel + 1), n_classes)
 
   def spectrum(self, x: torch.Tensor) -> torch.Tensor:
-    """`(B, 2, C, n_bins)`: [real, imag] of the zero-padded rFFT in the kept band, divided by T."""
+    """`(B, 1, C, 2 * n_bins)`: [real | imag] of the zero-padded rFFT in the kept band, divided by T."""
     z = torch.fft.rfft(x, n=self.nfft, dim=-1)[..., self.bin_idx] / self.n_samples
-    return torch.stack([z.real, z.imag], dim=1)
+    return torch.cat([z.real, z.imag], dim=-1).unsqueeze(1)
 
   def forward(self, x: torch.Tensor) -> torch.Tensor:
     if x.dim() == 4 and x.shape[1] == 1:

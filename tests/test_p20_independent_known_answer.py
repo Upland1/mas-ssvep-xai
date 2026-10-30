@@ -441,7 +441,9 @@ def test_ccnn_spectrum_bin_scaling_and_nfft(fs, T):
   x[0, 0] = 3.0 * np.cos(2 * np.pi * f * t)
   x[0, 1] = 2.0 * np.sin(2 * np.pi * f * t)
   z = m.spectrum(torch.from_numpy(x)).numpy()
-  assert z.shape == (1, 2, 3, m.n_bins)
+  nb = m.n_bins
+  assert z.shape == (1, 1, 3, 2 * nb)
+  z = np.stack([z[:, 0, :, :nb], z[:, 0, :, nb:]], axis=1)  # split [real | imag] back into (1, 2, 3, n_bins)
   j = int(np.argmin(np.abs(m.bins_hz - f)))
   assert m.bins_hz[j] == pytest.approx(f)
   assert z[0, 0, 0, j] == pytest.approx(1.5, abs=1e-6) and abs(z[0, 1, 0, j]) < 1e-6        # cos amp 3: real = A/2
