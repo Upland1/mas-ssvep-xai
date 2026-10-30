@@ -128,7 +128,7 @@ The ITR is highest at 0.5 s for every method. The 4 s network value is driven by
 
 **What was done.** The detector (`ccnn`, 0.5 s windows) was trained on OO and replayed as a causal stream on mOO, with a label-free channel check and a 1 s fallback (`scripts/benchmarks/pseudo_online.py`).
 
-**Result** (`reports/pseudo_online/summary_ccnn_5class.csv`, `reports/pseudo_online/summary_ccnn_6class.csv`): five classes, accuracy 88.50 % and 28.5 % false activations; six classes (rest class), 75.50 %, 21.00 % missed and 5.5 % false activations. These values come from the P24 rerun with deterministic cuDNN (2026-10-29, code at afcd417), seed 42 only; the P20 run (2026-10-28) had no determinism flags and gave one non-reproducible draw. The two runs have different class sets, so they are not a before/after pair. The drop from five to six classes is mostly missed stimulus periods (30 of the 32 periods correct with five classes and not with six; 27 of them in S01 and S02; `reports/pseudo_online/decisions_ccnn_{5class,6class}.csv`). The six-class ITR uses N = 5 (45.3336 bits/min, `reports/pseudo_online/summary_ccnn_6class.csv`); the five-class ITR is 55.0978 bits/min (`reports/pseudo_online/summary_ccnn_5class.csv`). Of the 57 five-class false activations on rest periods, 46 do not occur with six classes and none is new.
+**Result** (`reports/pseudo_online/summary_ccnn_5class.csv`, `reports/pseudo_online/summary_ccnn_6class.csv`): five classes, accuracy 90.50 % and 29.5 % false activations; six classes (rest class), 75.50 %, 22.00 % missed and 5.00 % false activations. These values come from the P25 fix round 1 rerun (CCNN in the R-8 layout, code at 987742b), seed 42 only; the pre-P25 values (P20 draw 89.00 %, P24 rerun 88.50 %) used the non-conforming layout and are superseded. The two tags have different class sets, so they are not a before/after pair. The drop from five to six classes is mostly missed stimulus periods (30 of the 31 periods correct with five classes and not with six; 28 of the 30 missed periods are in S01 and S02; `reports/pseudo_online/decisions_ccnn_{5class,6class}.csv`). The six-class ITR uses N = 5 (46.3065 bits/min, `reports/pseudo_online/summary_ccnn_6class.csv`); the five-class ITR is 58.0368 bits/min (`reports/pseudo_online/summary_ccnn_5class.csv`). Of the 59 five-class false activations on rest periods, 50 do not occur with six classes; one six-class false activation (S01) does not occur with five classes.
 
 **Open questions.** The mOO run is a second recording of the same paradigm; the paradigm of the `m` prefix is not documented in the project and is treated as a second run.
 
@@ -146,8 +146,10 @@ The ITR is highest at 0.5 s for every method. The 4 s network value is driven by
 | lda | LOSO | 87.61 |
 | lda_subjnorm (offline upper bound) | LOSO | 90.03 |
 | within_lda | within-subject | 90.79 |
-| ccnn (seed 42; three-seed range 85.36–86.58) | LOSO | 86.17 |
+| ccnn (seed 42; three-seed range 83.45–85.88; CCNN fixed in P25, see note) | LOSO | 85.88 |
 | eegnet (sweep network; three-seed range 78.58–79.76) | LOSO | 79.76 |
+
+Note on the CCNN rows: **CCNN spec deviation, fixed in P25 (fix round 1, code in 987742b).** From P20 to P24 the CCNN stacked [real, imag] as two input maps with bias-free convolutions (pre-P25 layout, non-conforming: 14,817 / 17,285 parameters). The roadmap and R-8 require one `[real | imag] / T` map with convolution biases (27,977 / 32,309 parameters). Every CCNN value produced before P25 is non-conforming and superseded; the CCNN values in this document are the P25 regenerated outputs.
 
 The `within_lda` rows are within-subject. Their `Data source` text in the CSV still reads "LOSO" (a labelling defect, W-1, carried). For lda, LOSO is strictly below the matched within-subject reference for S01, S02 and S05 in the common set (z −2.74, −2.56, −2.68 SE_Δ). Warm-up (`reports/loso_warmup/cohort.csv`): warm-up minus no normalization is −25.03 pp at K = 1 and −16.95 pp at K = 2; at K = 10 the means are 88.19 % (none), 89.78 % (warm-up) and 90.69 % (whole session).
 

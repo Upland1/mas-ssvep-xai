@@ -188,11 +188,13 @@ Cohort S01–S05, 1 s windows, stride 0.25 s, channels `common` (7). Data source
 | lda | LOSO | 87.61 | pooled CSP and scaler, in-fold |
 | lda_subjnorm | LOSO | 90.03 | test-time, whole-session statistics (offline upper bound) |
 | within_lda | within-subject (trial-grouped 5-fold) | 90.79 | in-fold |
-| ccnn | LOSO, seed 42 (three-seed cohort means 85.36–86.58) | 86.17 | in-fold |
+| ccnn (note 1) | LOSO, seed 42 (three-seed cohort means 83.45–85.88) | 85.88 | in-fold |
 | eegnet (sweep network, kernel 128) | LOSO, seed 42 (three-seed cohort means 78.58–79.76) | 79.76 | in-fold |
 | GNN nodes+F | LOSO, three seeds, pooled | 89.22 | in-fold (z-scored on training windows) |
 | GNN nodes+F (3-seed ensemble) | LOSO, subject normalization | 90.32 | test-time (offline upper bound) |
 | GNN nodes+F (3-seed ensemble) | within-subject | 86.81 | in-fold |
+
+**Note 1 (CCNN).** CCNN spec deviation, fixed in P25 (fix round 1, code in 987742b): from P20 to P24 the CCNN stacked [real, imag] as two input maps with bias-free convolutions (pre-P25 layout, non-conforming: 14,817 / 17,285 parameters). The roadmap and R-8 require one `[real | imag] / T` map with convolution biases (27,977 / 32,309 parameters). Every CCNN value produced before P25 is non-conforming and superseded. The `ccnn` rows of this section are the P25 regenerated outputs (`reports/loso_w1_s01-s05/summary.csv`, `reports/loso_w1_s01-s05_seed43/summary.csv`, `reports/loso_w1_s01-s05_seed44/summary.csv`); results are not comparable seed by seed with the pre-P25 values.
 
 The GNN rows are three-seed ensembles (seeds 42, 43, 44). Per-seed cohort means: LOSO `nodes+F` pooled 87.69, 88.66 and 89.06 (mean 88.47); LOSO `nodes+F` subject normalization 89.89, 90.49 and 90.01; within-subject `nodes+F` 85.42, 85.21 and 86.01 (`reports/loso_gnn/seeds.csv`, `reports/within_gnn/seeds.csv`).
 
@@ -203,7 +205,7 @@ never as "beats".
 
 Cohort 39 (39 subjects, S01–S040 without S020; `reports/loso_w1_all/summary.csv`, `reports/loso_w1/summary.csv`):
 `all` (8 channels; 39 subject rows per method) fbcca 75.80, lda 83.42, lda_subjnorm 86.13 (an offline upper bound); the within-subject comparison uses the 32 matched subjects only (lda 85.67 % against within 86.51 %).
-`common` (POz, PO4, O1; three channels) fbcca 64.56, lda 72.54, lda_subjnorm 75.16; ccnn 71.58 (one repeat). The `common`
+`common` (POz, PO4, O1; three channels) fbcca 64.56, lda 72.54, lda_subjnorm 75.16; ccnn 72.08 (one repeat, P25 regenerated `reports/loso_w1/summary.csv`). The `common`
 rows are three-channel results, not comparable with cohort 5 or with within-subject results.
 
 **Per-subject LOSO and within-subject accuracy at 1.0 s**, seven common channels (%). Data source: `reports/loso_w1_s01-s05/summary.csv`, `reports/loso_w1_p22_common/summary.csv`, `reports/loso_gnn/summary.csv`, `reports/within_gnn/summary.csv` (continuous build `w1_s0.25`, OO).
@@ -230,15 +232,15 @@ Cohort S01–S05, OO session (`reports/window_sweep/summary.csv`, `reports/nn_sw
 | 4.0 | 98.03 / 28.93 | 96.86 / 28.15 | 83.10 / 21.56 |
 
 Window-level ITR is highest at 0.5 s for every method; accuracy rises with length, except the `compact_eegnet` value at 4 s,
-which is driven by S02 (early-stopping failures in single-repeat folds, §9). One-second networks: ccnn 91.25, compact_eegnet
+which is driven by S02 (early-stopping failures in single-repeat folds, §9). One-second networks: ccnn 90.53 (P25 regenerated, `reports/nn_sweep/summary.csv`; pre-P25 value 91.25, non-conforming), compact_eegnet
 92.08, eegnet 89.69 %, a single repeat; all differences below 3 pp, not distinguishable.
 
-Pseudo-online (`ccnn`, 0.5 s windows; trained on OO, replayed on mOO as a causal stream), cohort means: five classes 88.50 % accuracy and 28.5 % false activations (`reports/pseudo_online/summary_ccnn_5class.csv`); six classes 75.50 % accuracy, 21.00 % missed and 5.5 % false activations (`reports/pseudo_online/summary_ccnn_6class.csv`). These values come from the P24 rerun with deterministic cuDNN (2026-10-29, code at afcd417), seed 42 only; the P20 run (2026-10-28) had no determinism flags and gave one non-reproducible draw. The two runs have different class sets, so they are not a before/after pair. The drop from five to six classes is mostly missed stimulus periods (30 of the 32 periods correct with five classes and not with six, 27 of them in S01 and S02), and of the 57 five-class false activations on rest periods, 46 do not occur with six classes and none is new (`reports/pseudo_online/decisions_ccnn_{5class,6class}.csv`).
+Pseudo-online (`ccnn`, 0.5 s windows; trained on OO, replayed on mOO as a causal stream), cohort means: five classes 90.50 % accuracy and 29.5 % false activations (`reports/pseudo_online/summary_ccnn_5class.csv`; ITR 58.0368 bits/min); six classes 75.50 % accuracy, 22.00 % missed and 5.00 % false activations (`reports/pseudo_online/summary_ccnn_6class.csv`; ITR 46.3065 bits/min). These values come from the P25 fix round 1 rerun (CCNN in the R-8 layout, code at 987742b; deterministic cuDNN flags from e2bd25d), seed 42 only; a second run of both tags is identical in every column except `Seconds` (`mas/state/phases/P25-final-audit/06_verify.md`). The pre-P25 values (P20 draw 89.00 / 74.00 %; P24 rerun 88.50 / 75.50 %) came from the non-conforming CCNN layout and are superseded. The two tags have different class sets, so they are not a before/after pair. The drop from five to six classes is mostly missed stimulus periods (30 of the 31 periods correct with five classes and not with six; 28 of those 30 missed periods are in S01 and S02, `reports/pseudo_online/decisions_ccnn_{5class,6class}.csv`). Of the 59 five-class false activations on rest periods, 50 do not occur with six classes; one six-class false activation (S01, onset 50.03 s) does not occur with five classes.
 Dynamic stopping: LDA reaches 61.53 bits/min at 0.5 s (`reports/dynamic_stopping/best_threshold.csv`) against 60.23 for the time-matched single window (`mas/state/reports/P20.md`; thresholds chosen in-sample, descriptive).
 
 **Per-subject window sweep** (`reports/window_sweep/summary.csv`, accuracy %, continuous build, five stimulus classes): LDA 0.5 / 1.0 / 2.0 / 4.0 s: S01 64.26 / 75.88 / 87.58 / 95.00; S02 60.66 / 77.36 / 90.68 / 95.16; S03 90.50 / 97.31 / 99.88 / 100.00; S04 98.28 / 99.79 / 100.00 / 100.00; S05 95.31 / 99.09 / 100.00 / 100.00. `compact_eegnet` 0.5 / 1.0 / 2.0 / 4.0 s: S01 69.87 / 84.12 / 89.42 / 77.00; S02 42.96 / 77.48 / 89.32 / 39.56; S03 93.42 / 98.94 / 98.80 / 98.92; S04 98.93 / 99.85 / 100.00 / 100.00; S05 98.55 / 100.00 / 100.00 / 100.00. The S02 values of `compact_eegnet` at 0.5 and 4 s are the early-stopping failures described above.
 
-**Per-subject pseudo-online** (`ccnn`, 0.5 s windows, P24 rerun, seed 42; `reports/pseudo_online/summary_ccnn_{5class,6class}.csv`): five classes S01–S05, accuracy 60.00, 87.50, 97.50, 100.00, 97.50 % (false activations 57.5, 45.0, 20.0, 0.0, 20.0 %); six classes 40.00, 45.00, 95.00, 100.00, 97.50 % (missed 45.0, 52.5, 5.0, 0.0, 2.5 %; false activations 17.5, 10.0, 0.0, 0.0, 0.0 %).
+**Per-subject pseudo-online** (`ccnn`, 0.5 s windows, P25 fix round 1 rerun, seed 42; `reports/pseudo_online/summary_ccnn_{5class,6class}.csv`): five classes S01–S05, accuracy 72.50, 85.00, 95.00, 100.00, 100.00 % (false activations 62.5, 45.0, 20.0, 5.0, 15.0 %); six classes 35.00, 50.00, 95.00, 100.00, 97.50 % (missed 55.0, 47.5, 5.0, 0.0, 2.5 %; false activations 15.0, 7.5, 0.0, 0.0, 2.5 %).
 
 ### 3.8 Era-C checks (P16, P19)
 

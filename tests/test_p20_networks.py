@@ -41,7 +41,7 @@ def test_ccnn_shape_nfft_bins_and_params():
     out = m(torch.randn(3, C, n))
     assert out.shape == (3, 5)
     F = 2 * C
-    expected = 2 * F * C + 2 * F + F * F * 10 + 2 * F + F * (189 - 10 + 1) * 5 + 5  # bias-free convs (B004)
+    expected = (F * C + F) + 2 * F + (F * F * 10 + F) + 2 * F + F * (2 * 189 - 10 + 1) * 5 + 5  # convs keep bias (R-8)
     assert count_parameters(m) == expected
   assert CCNN(5, 8, 256, fs=FS).spectral[0].kernel_size == (1, 10)
 
@@ -57,13 +57,34 @@ def test_ccnn_spectrum_known_answer():
   t = np.arange(n) / FS
   x = torch.tensor(A * np.cos(2 * np.pi * f * t), dtype=torch.float32).view(1, 1, n).repeat(1, 4, 1)
   m = CCNN(5, 4, n, fs=FS)
-  s = m.spectrum(x)  # (1, 2, 4, bins)
+  s = m.spectrum(x)  # (1, 1, 4, 2 * bins)
   j = int(np.argmin(np.abs(m.bins_hz - f)))
   assert m.bins_hz[j] == pytest.approx(f)
-  assert s.shape == (1, 2, 4, m.n_bins)
-  assert s[0, 0, 0].argmax().item() == j
-  assert s[0, 0, 0, j].item() == pytest.approx(A / 2, rel=1e-4)
-  assert abs(s[0, 1, 0, j].item()) < 1e-4
+  nb = m.n_bins
+  assert s.shape == (1, 1, 4, 2 * nb)
+  assert s[0, 0, 0, :nb].argmax().item() == j
+  assert s[0, 0, 0, j].item() == pytest.approx(A / 2, rel=1e-4)  # real at k
+  assert abs(s[0, 0, 0, nb + j].item()) < 1e-4                   # imag at n_bins + k
+
+
+def test_ccnn_parameter_count_matches_r8():
+  """R-8 (original classes, 256 samples, 256 Hz, 3-50 Hz, 0.25 Hz, 5 classes): 27,977 at 7 channels, 32,309 at 8."""
+  assert count_parameters(CCNN(5, 7, 256, fs=FS)) == 27977
+  assert count_parameters(CCNN(5, 8, 256, fs=FS)) == 32309
+
+
+def test_ccnn_single_map_real_then_imag_layout():
+  """R6: a sine of amplitude A at bin k has imag -A/2 at position n_bins + k and real ~0 at k, in ONE input map."""
+  n, f, A = 256, 15.0, 2.0
+  t = np.arange(n) / FS
+  x = torch.tensor(A * np.sin(2 * np.pi * f * t), dtype=torch.float32).view(1, 1, n).repeat(1, 3, 1)
+  m = CCNN(5, 3, n, fs=FS)
+  s = m.spectrum(x)
+  j = int(np.argmin(np.abs(m.bins_hz - f)))
+  assert s.shape[1] == 1 and m.spatial[0].in_channels == 1
+  assert s[0, 0, 0, m.n_bins + j].item() == pytest.approx(-A / 2, rel=1e-4)
+  assert abs(s[0, 0, 0, j].item()) < 1e-4
+  assert s[0, 0, 0].abs().argmax().item() == m.n_bins + j
 
 
 def test_ccnn_rejects_wrong_shape():
