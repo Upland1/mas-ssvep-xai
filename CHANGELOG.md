@@ -664,3 +664,21 @@ Open (none changes a published number)
 
 Fixed
 - `RESEARCH_LOG.md`, P25 close entry: the closed P21 sources defect is named as the `window_sweep_colab` folder instead of a `reports/` path, so the cited-path check `tests/test_p24_docs.py::test_cited_reports_paths_exist` passes (it failed on v1.0). No code, test or result changed.
+
+## v1.0.2 (2026-10-30)
+
+Added to `docs/report/v2/report.md` (MODIFIED): coverage gaps only; no existing result changed.
+- §2.7: one sentence listing the seven rebuild-only additions (`mas/state/reports/P25.md` §4.4).
+- §2.8 Explainability (legacy, full-data fit): method and the R2 exception (P04).
+- §3.1.1 Raw-signal quality option (P19): `--quality-source` values, rejection counts, the S03 base change.
+- §3.4.1 Power and alpha confounds (P14.3, P18): regression, R-squared values, the 1000-permutation alpha file and the R7 flip of one S05 cell.
+- §3.7: network `cnn (compact_eegnet)` dynamic-stopping row beside the LDA sentence, with the in-sample caveat.
+- §3.9 Explainability: Shrinkage-LDA weights (P04), descriptive.
+- §3.10 and Table 9: other classifiers and feature spaces, feature selection and the harmonic benchmark (P04–P06), legacy, with the grouped rerun for contrast.
+- §4 Discussion: pseudo-online session-pair limitation.
+
+Changed
+- §3.4: the R-squared 0.675 sentence now states that it regresses the coherence delta on SNR and alpha change over 25 cells, not frequency similarity.
+- `## Sources` extended to [26]; §6 and the Abstract are unchanged.
+
+Note: the top-level `reports/feature_space_benchmark_S03.csv` and `reports/feature_selection_ablation_S03.csv` hold the grouped P11 rerun; the legacy values are read from `reports/legacy_leaky/`.
