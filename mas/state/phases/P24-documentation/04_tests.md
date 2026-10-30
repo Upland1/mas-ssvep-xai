@@ -54,3 +54,32 @@ None.
 3. The guard hook's vendor pattern (reproduced from fragments only).
 
 ## Questions
+
+## Round 2 (fix)
+
+Status: READY
+
+Trigger: `06_verify.md`, reason 3. In the clean clone after `make all`, `test_cited_reports_paths_exist` failed for four documents (`mas/state/scratch/p24_make/pytest_clone.log`) on paths a clone does not have.
+
+MODIFIED `tests/test_p24_docs.py`:
+
+- The checked tree is the repository or the one named in `P24_DOCS_ROOT`.
+- A cited `reports/` path passes if it exists. If it does not, it can pass only when the tree is a make-all clone, meaning `reports/` exists, `reports/logs/` does not, and `reports/legacy_leaky/` does. In that case one of two conditions must hold:
+  - V-6 (`02_plan.md`): the path is, or lies under, one of the outputs `all` does not produce. These are `reports/loso_w1`, `loso_w1_all`, `loso_w1_fbcca_all`, `window_sweep_w1_all` (`make loso-all`), `reports/logs` (V-6 "logs") and `reports/diagnostics`. Matching is exact or by prefix plus `/`, so `reports/loso_w1_s01/...` is not covered. `reports/diagnostics` is not named in V-6. It is listed because its only cited file, `p11_seed_spread_eegnet.csv`, comes from `scripts/diagnostics/network_seed_spread.py`, which no Makefile target runs (`grep seed_spread Makefile` finds nothing). The reviewer should confirm this class.
+  - V-2: the path is one of the Era-A files (`flagship_S*.csv`, `eegnet_benchmark_{cpu,cuda}.csv`, `compact_cnn_benchmark_cpu.csv`, `shallow_convnet_benchmark_cpu.csv`, `classification_report_*.txt`, `feature_selection_sfs_{audit,diagnostics}_S03.csv`), and `reports/legacy_leaky/<f>` exists in that tree.
+- In the main tree, which has `reports/logs/`, every cited path must still exist as written.
+- NEW `test_reports_path_rule_synthetic` builds temporary trees with known answers:
+  - In both the main-like and clone-like trees, a missing ordinary path fails, a non-V-6 neighbour (`reports/loso_w1_s01/summary.csv`) fails, and a V-2 file whose `legacy_leaky` copy is missing fails.
+  - The V-6 and V-2-mapped paths fail in the main-like tree and pass in the clone-like tree.
+  - A tree without `legacy_leaky/` is not treated as a clone.
+
+Commands and output:
+
+```bash
+.venv/bin/python -m pytest tests/test_p24_docs.py tests/test_p24_make_all.py -q -o addopts=""
+# 53 passed in 2.71s
+P24_DOCS_ROOT=$PWD/mas/state/scratch/clean_clone .venv/bin/python -m pytest tests/test_p24_docs.py -q -o addopts=""
+# 35 passed in 0.25s
+```
+
+Non-vacuity check on the clone root: `_is_make_all_clone` is True. 32 cited paths do not exist as written, and the rule accepts every one: README 6, RESEARCH_LOG 20, report v2 4, progress report 2. These are the same paths as in the verifier's log. They break down as 8 V-2 files with their `legacy_leaky` copies present, 9 `loso_w1`/`loso_w1_all` citations, 14 `reports/logs` citations and 1 `reports/diagnostics` file. I ran no `make` target and no real-data script.
