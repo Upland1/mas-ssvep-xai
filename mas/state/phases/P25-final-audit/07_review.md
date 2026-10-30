@@ -1,6 +1,6 @@
 # P25 · 07 · Scientific review
 
-Status: AUDIT DONE (results review pending 06_verify.md)
+Status: RESULTS REVIEW DONE (APPROVE)
 Author: scientific-reviewer
 Reads: 00, 02 (settled 2, 6, 7), mas/RULES.md, mas/state/decisions.md, src/, scripts/, tests/ at a4520ec; the original repository through `git ls-tree` / `git show` only (R11, listed below)
 
@@ -352,19 +352,7 @@ with deep-learning.
 
 ## Results review
 
-Verdict: pending (after 06_verify.md)
-
-### Deviations from references
-
-| Ref | Expected | Obtained (log) | Δ | Within tolerance? | Explanation | Accepted? |
-|---|---|---|---|---|---|---|
-| | | | | | | |
-
-### Interpretation check
-
-### Decisions for decisions.md
-
-## Sources spot-check
+Written after fix round 1; see "Results review (after fix round 1)" at the end of this file.
 
 ## Questions
 
@@ -563,3 +551,187 @@ appended to: the documents cite them as the record of the old runs.
 | fs from metadata | PASS: `fs` comes from `model_factory(..., fs)`; no literal was added. |
 
 Verdict: PASS
+
+## Results review (after fix round 1)
+
+Reads: `02_plan.md` (settled 1–8, acceptance 1–7); `05_run.md` and `06_verify.md` (round 1 FAIL 5300347; "Fix round 1
+rerun" PASS 896288d); my earlier sections of this file; `03_changes_scribe.md` (S-4 table, 42 rows); the last rows
+of `mas/state/decisions.md`; `log.md`. I reran nothing on recordings and opened nothing in the reference repository
+for this section. Every number below comes from a shown command that reads CSVs only (`.venv/bin/python -I -c ...`,
+pandas). Code under test: `git diff --stat 463c793 HEAD -- src scripts configs tests Makefile` and
+`git diff --stat 987742b HEAD -- ...` are both empty, so the G-0 suite and the regenerated trees ran the code at HEAD.
+
+### 1. Acceptance
+
+| # | Criterion | Own check | Met? |
+|---|---|---|---|
+| 1 | P00–P24 `passed`, no open blocker | `yaml.safe_load(mas/state/phase_status.yaml)`: 25 of P00–P24 `passed`, P25 `in_progress`. Blockers B001, B002, B004, B005 `resolved 2026-10-24`; B003 `RESOLVED 2026-10-28`; B006 `RESOLVED 2026-10-26`; B007 `RESOLVED 2026-10-27` (`grep -i status mas/state/blockers/*`) | yes |
+| 2 | Suite on a clean checkout; rebuild evidence cited | G-0 at 463c793: 1565 passed, 6 skipped, 0 F/E (`mas/state/scratch/p25_fix1/g0_pytest.log`, per 06). Rebuild evidence: P24 `make all` at bb9c091 plus the P25 regeneration of the six CCNN trees; G-5 shows every non-CCNN row EXACT and `reports/` outside the six trees byte-identical (1154 files) | yes |
+| 3 | Every split guarded | my audit section (24 splits, all guarded; N1, N2 open test notes) | yes |
+| 4 | Every R-x within tolerance or explained | §2 below | yes |
+| 5 | Autonomy and sources reports complete | 06 B and C; the three sources defects are closed by dated notes (§4) | yes |
+| 6 | Module diff | my audit section (37 rows) | yes |
+| 7 | Privacy scan of the net diff | orchestrator's gate step. Own pre-check of the five scribe commits: `git diff 10c5f70~5 10c5f70` piped through `grep -ciE` with the vendor and tooling terms built from fragments: 0 | gate |
+
+No unexplained result deviation remains. The only runtime items are P24 A-5 and the fix-round GPU overrun (§5),
+and neither changes a number.
+
+### 2. R-x table
+
+I read the verifier's table (06 §A, rows R-1 to R-16) together with the fix-round settlement (06, "Settled reasons of
+the first verdict"). Rows that were W or E in round 1 are unchanged: G-5 holds every non-CCNN output EXACT, and no
+R-x row other than R-8 reads a CCNN output. Two rows changed status.
+
+- **R-8 Era-C sweep networks: W, exact.** Own read of `reports/nn_sweep/summary.csv` `Params`: ccnn 27977 (S01, S03,
+  S04) and 32309 (S02, S05); compact_eegnet 28133 / 28229; eegnet 2373 / 2389. This equals R-8 at exact tolerance.
+  The old values 14,817 / 17,285 exist only in `mas/state/scratch/p25_fix1/old/` and in historical text, which is
+  labelled.
+- **R-13 split-half reliability: E, confirmed by the pre-registered seed check.** Own recomputation from the base-42
+  CSVs and the five `_diag_r13_rs{1..5}` CSVs, with the R-13 values typed from `mas/04_REFERENCE_RESULTS.md:237–246`:
+  19 cells have |ours₄₂ − R-13| > 0.05, and 13 of them have R-13 inside the per-cell [min, max] of the six draws.
+  This equals the verifier's count. The six outside cells are coherence S02 10.91 (R 0.34, draws −0.182 to 0.199),
+  coherence S03 10.91 (0.78; 0.635 to 0.755), coherence S05 24 (0.84; 0.873 to 0.924), wPLI S02 10.91 (−0.75; −0.466
+  to −0.252), wPLI S02 24 (−0.02; 0.139 to 0.315) and wPLI S04 15 (−0.25; −0.071 to 0.404). R-13 lies above the range
+  in 2 cells and below it in 4, so the misses do not share one sign.
+  Under the pre-registered rule (confirmed ≥ 10), the reading is **confirmed**. The count also matches pure split
+  variation: with six draws the chance that a new draw falls inside their range is (k−1)/(k+1) = 0.714, so the
+  expected count is 13.57 of 19 (`.venv/bin/python -I -c "k=6;p=(k-1)/(k+1);print(round(p,3),round(19*p,2))"` →
+  `0.714 13.57`). Observed: 13.
+  - **Ruling on "probable".** The word "probable" is dropped for the split-half cells. P25.md writes: "R-13
+    split-half: 19 of 50 cells outside ±0.05; explained as Monte Carlo split variation by the pre-registered seed
+    check (13 of 19 inside the six-draw range, rule ≥ 10; expected 13.6 under pure split variation)." It does not
+    write "demonstrated identical" or "proven". The six outside cells are reported as a list: three are 10.91 Hz
+    cells, and nothing beyond the count is claimed for them.
+  - The ruling has two limits. (a) G-4 did not test the coherence pairwise magnitude count (10 against 6). That count
+    stays "within the analogous ±5 band, pattern-consistent, null design a documented ambiguity" (R-13 ruling §4),
+    not "confirmed". (b) The Fisher-vs-arithmetic similarity question stays open for Sebastian.
+  - Wording fix for the orchestrator: decisions row 2026-10-30 says "five-base-seed range". The range is over **six
+    draws** (base 42 plus bases 1–5). The new row uses "six-draw range".
+
+All other rows keep their round-1 status, each with its cited explanation: R-3 D-1, R-4 SFS P06 D-1, R-7 and R-9b
+P11 D-4 / B006, R-12 S05 wPLI P13 D-1, R-15 B007, R-16 no target. **Acceptance 4 is met.**
+
+### 3. Number check of the regenerated CCNN values (current-state documents and RESEARCH_LOG)
+
+I read every changed line of `git diff 10c5f70~5 10c5f70` in `README.md`, `docs/report/v2/report.md`,
+`docs/progress_report/progress_report.md`, `docs/infographic/methodology_infographic.svg` and `RESEARCH_LOG.md`.
+Each number was compared with the canonical CSVs:
+
+| Value in the documents | Own CSV read | Match |
+|---|---|---|
+| nn_sweep ccnn 90.53 (per subject 75.59, 77.95, 99.85, 100.00, 99.26); compact_eegnet 92.08, eegnet 89.69; Val 92.41, best epoch 31.76, ITR 72.16; ccnn − eegnet per subject −2.35, +6.52, +0.61, 0.00, −0.59 | `reports/nn_sweep/summary.csv`, groupby Method | yes |
+| LOSO cohort 5 ccnn 85.88 / 2-tap 87.25 (S01–S05 65.29, 73.45, 93.34, 99.70, 97.64); seeds 43 and 44 83.45 / 85.24 and 85.32 / 87.27; range 83.45–85.88; three-seed mean 84.88; 2-tap 86.59 | `reports/loso_w1_s01-s05{,_seed43,_seed44}/summary.csv` Mean rows | yes |
+| cohort 39 ccnn 72.08 / 2-tap 73.91 / Val 75.41 / SD 19.53; above lda 21, below 17, equal 1; S015 27.00 against 56.13; folds: 39 ccnn of 156 | `reports/loso_w1/summary.csv`, `folds.csv` (Method counts 39 × 4) | yes |
+| pseudo-online 5 classes 90.5 / FA 29.5 / ITR 58.0368; per subject 72.5, 85.0, 95.0, 100, 100 (FA 62.5, 45.0, 20.0, 5.0, 15.0); 6 classes 75.5 / missed 22.0 / FA 5.0 / ITR 46.3065; per subject 35.0, 50.0, 95.0, 100, 97.5 | `reports/pseudo_online/summary_ccnn_{5class,6class}.csv` | yes |
+| decompositions: stimulus correct 181 / 151; lost 31 = 30 missed + 1 wrong (S01 15, S02 14, S03 1, S05 1); gained 1; FA 59 / 10 (S01 25, S02 18, S03 8, S04 2, S05 6; S01 6, S02 3, S05 1); 50 of 59 absent with six classes, 1 new (S01, 50.0312 s, pred 102); next target 15 of 59 (p 0.1876), 4 of 10 (p 0.1209); max time 2.4375 s (1 above 2 s, S01, 185.062 s) and 1.46875 s; per-subject Acc5 − Acc6 37.5, 35.0, 0.0, 0.0, 2.5 | merge of `decisions_ccnn_{5class,6class}.csv` on (Subject, onset_sec, period), `validate='1:1'`; `scipy.stats.binomtest(k, n, 0.2, 'greater')` | yes |
+| infographic headline 90.50 %, six-class 75.50 %, footnote to the P25 rerun | SVG lines 121, 123, 162–163 | yes |
+| Colab estimate 1.5 h | `reports/loso_w1/folds.csv` ccnn `Seconds` sum 5297.87 over 39 → 40 subjects 1.51 h | yes |
+| P23 note: GNN per-seed means 88.47 / 88.11 above the ccnn seed mean 84.88 | `reports/loso_gnn/seeds.csv` per-seed cohort means | yes |
+
+No fabricated or mismatched value was found. One like-for-like issue: the P20 and P23 notes say "ccnn 2-tap 86.59 stays
+below the GNN LOSO 2-tap 90.32". The 90.32 is the three-seed **ensemble** value, and the ccnn value is a per-seed
+mean. The like-for-like GNN per-seed 2-tap value is 89.91 (`nodes+F`) and 89.72 (`nodes+coh+F`) (own, `seeds.csv`
+grouped by Method and Seed). The direction holds (89.91 − 86.59 = 3.32 pp), so the appended note can stay. P25.md
+must not repeat the 90.32 comparison, and should cite 89.91 if it states one.
+
+**Flipped claims are stated as flipped, not reworded.** In the current-state documents the old sentence "none is new"
+is replaced by the true statement ("one six-class false activation (S01) does not occur with five classes"). Updating
+a current-state document in place is correct for S-2. The flip itself is recorded in RESEARCH_LOG (P25 entry,
+"Flipped: ..."), in CHANGELOG ("Flipped claims (not reworded)"), and in the P20, P21 and P24 dated notes. P6(a)
+(fail → holds), the R-P9 next-target p (0.0064 → 0.1209) and the R-P9 five-class timing (one of 59 at 2.4375 s, which
+is in the cue part of the rest period: fixation 0–2 s, cue 2–4 s per P20.md:293) are each labelled FLIPPED where they
+are restated.
+
+Count consistency: the S-4 table marks 8 rows FLIPPED (#8, #11, #13, #26, #29, #30, #37, #39). #13 and #39 are the
+same timing claim (P20 and P24), so there are 7 distinct claims, which matches `log.md`'s "7 flipped". Of these, #26
+(train accuracy "about 75–77 %"), #29 (validation mean) and #30 (seed range) are descriptive values, not tested
+claims. The RESEARCH_LOG P25 entry lists them as "changed numbers". **P25.md uses one classification:** 4
+substantive claim flips (P6(a); R-P9 next-target significance; R-P9 five-class timing; "none is new") plus 3 superseded
+descriptive values (#26, #29, #30). It writes "7 flipped" only with that split.
+
+**Ruling on the scribe's caveat (#20, ccnn − lda over three seeds).** The value is −2.73 pp (84.88 − 87.61). P21 had
+no pre-registered difference rule (P21.md:351). The only rule in this line is P20's R-P5 (≥ 3 pp and ≥ 4 of 5 signs).
+Under it, −2.73 pp is **not a difference**: the magnitude criterion fails (2.73 < 3) and the sign criterion is met
+(4 of 5 negative: −0.44, −8.69, −3.99, +0.20, −0.69; own). The qualifier "tie inside the per-subject seed range" is no
+longer supported. lda lies outside the ccnn three-seed range on S02 (76.24 against 63.66–73.45) and S03 (96.07 against
+91.38–93.34), both above, and on S04 (99.55 against 99.70–99.85), below. ccnn is below lda in 10 of 15 seed × subject
+cells (own, three summaries). Ruling:
+- the P21 dated note ("weakest reading, not strengthened") is acceptable as an appended note;
+- P25.md writes: "ccnn − lda over three seeds: −2.73 pp, not a difference under R-P5 (magnitude below 3 pp; 4 of 5
+  subjects negative); no ranking. The P21 wording 'a tie inside the per-subject seed range' is superseded and not
+  repeated."
+- no current-state document repeats the "tie" wording (`grep` of README, report v2, progress report: none). The
+  RESEARCH_LOG P25 entry already gives the sign pattern. Nothing to change there.
+
+### 4. Historical reports P11 and P20–P24
+
+`git diff 10c5f70~5 10c5f70 -- mas/state/reports/P{11,20,21,22,23,24}.md`: one hunk per file, at the end of the
+file, with 0 removed lines (added 2, 24, 12, 2, 6 and 8; old lengths 412, 426, 468, 466, 420 and 388 lines). Each hunk
+is under a "Dated note(s), 2026-10-30" heading. `RESEARCH_LOG.md` and `CHANGELOG.md` also have 0 removed lines; the
+P20/P21/P24 paragraphs get pointer lines inserted after them, and their text is untouched. **Nothing historical was
+rewritten.** The three sources defects of round 1 (P22 `[23]`, P11 log path, P21 `window_sweep_colab`) are closed by
+these notes.
+
+### 5. Deviations and open items
+
+**Accepted deviations (copy into decisions.md):**
+1. **R-8 CCNN layout (P20–P24): spec deviation, fixed in P25.** Code 987742b. Every CCNN output was regenerated
+   (G-0..G-7) and R-8 is now exact. The pre-P25 values are labelled "pre-P25 layout, non-conforming" wherever they
+   are quoted. This is a fixed deviation, not an open one. 987742b (`docs:` prefix, carries code) stays on the
+   squash list.
+2. **R-13 split-half (19 of 50 cells outside ±0.05).** Accepted Monte Carlo split variation, confirmed by the
+   pre-registered seed check (13 of 19 inside the six-draw range; rule ≥ 10). The pairwise coherence count 10 against
+   6 falls within the analogous ±5 band. Fisher similarity stays open.
+3. **N3 layout.** `benchmark_nn_sweep.py` sits in `scripts/benchmarks/neural_networks/` instead of
+   `scripts/benchmarks/` (P20 plan choice). It has no effect on results (already recorded, decisions 2026-10-29).
+4. **P24 A-5.** An unexplained **runtime observation**: the p19 clone ran 10.2 min against 2.5 min recorded, and the
+   results were identical. It is kept out of the R-x deviation table.
+5. **Fix-round GPU overrun.** 2.33 GPU h against `MAX_GPU_HOURS_PER_PHASE` 2 (`05_run.md` steps.txt sum), run locally
+   and detached under Sebastian's standing local-run authorisation. This is a budget observation; no result depends
+   on it.
+6. **Schema drift in the regenerated trees.** `Seconds`, `Data source` and `Folds` column drift is the known P24 A-2
+   type (string or timing only, numbers EXACT per G-5).
+
+**Open questions for P25.md (not deviations; each "changes no published number" unless stated):**
+- **N1** (synthetic-tester): the fusion-CNN inline legacy splitter is not in the `tests/test_no_leakage.py`
+  registry.
+- **N2** (synthetic-tester): the NN-sweep split has no spy test of its own (it is guarded by the runtime assert and
+  by probability identity with the window-sweep cell).
+- **Colab notebook sections not run end to end on a T4.** This is a verification gap. The 1.5 h ccnn estimate is
+  from the local RTX 3050-class GPU and was not measured on a T4.
+- **P17 C-d** (harmonic attribution untested; the published wording avoids it) and **P17 C-e** (optional per-offset
+  metric).
+- **P22 `within_lda` `Data source` label** in the old main-tree CSVs. This is string only (P24 A-2).
+- **Cohort-39 eegnet not re-run (G-3e).** The 2 abandoned eegnet folds were in no CSV. They are preserved in
+  `mas/state/scratch/p25_fix1/old/` and absent from the canonical tree. A full 39-subject eegnet (and compact_eegnet)
+  run is Sebastian's choice.
+- **`reports/loso_w1` now holds 156 folds** (117 classical + 39 ccnn) against 158 before. The difference is exactly
+  those 2 eegnet folds; no summary row changes because of it.
+- The P21 "tie" wording (§3 ruling) and the ensemble-vs-per-seed GNN 2-tap comparison (§3) are wording items for
+  P25.md, not deviations.
+
+### 6. Binding items for P25.md (scribe)
+
+- **S-5:** use the R-13 wording of §2 ("confirmed", six-draw range, expected 13.6). Drop "probable" for the
+  split-half cells only.
+- **S-4 summary:** 4 substantive flips + 3 superseded descriptive values (§3). Use the #20 wording of §3. If a GNN
+  2-tap comparison is stated, use the per-seed value 89.91.
+- **S-6:** list my R11 verification read (`fde4b5a:src/models/cnn/ccnn.py`) and the 12 task-4 accesses. Add that
+  this results review opened nothing in the reference.
+- The deviations and open questions of §5, each with its owner.
+
+### Era matrix (results)
+
+| Rule | Status |
+|---|---|
+| R1, R2 | PASS: since the audit the only code change is the CCNN model (987742b), which touches no split or fit; `git diff --stat 463c793 HEAD -- src scripts configs tests Makefile` is empty. |
+| R6 | PASS: the CCNN layout is pinned by known-answer tests, and R-8 is exact on the real outputs. |
+| R7 | PASS: the R-13 Monte Carlo reading rests on a pre-registered rule, and the flipped p-value (R-P9) is reported as flipped. |
+| R9 | PASS: per-subject values with data source in every regenerated table (README, report v2, P20/P21/P23/P24 notes). |
+| R10 | PASS: CSV paths beside every regenerated value; sources defects closed. |
+| R11 | PASS: no reference access in fix round 1 except my logged verification read; none in this section. |
+
+Verdict: APPROVE
+
+No fix round is required. The items of §6 bind the P25.md write-up, and the orchestrator's decisions row uses the
+"six-draw range" wording of §2.
