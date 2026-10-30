@@ -13,6 +13,8 @@ Eras: **A** (P00–P10) legacy pipeline reproduced as it was, leaky window-level
 **B** (P11–P15) trial-leakage fix, connectivity and the first GNN; **C** (P16–P23) continuous
 filtering at the recorded 256 Hz, detection, pseudo-online and leave-one-subject-out (LOSO).
 
+*Current CCNN values: every CCNN number in the P20–P24 entries is pre-P25 (non-conforming layout) and superseded by the P25 fix round 1 entry (2026-10-30).*
+
 ## Era A: the legacy pipeline (P00–P10)
 
 ### P00 · Bootstrap and data intake (2026-10-24)
@@ -505,9 +507,13 @@ Window sweep (cohort mean over five subjects; `reports/window_sweep/summary.csv`
 
 1 s networks (`reports/nn_sweep/summary.csv`, single repeat, cohort mean): ccnn 91.25 %, compact_eegnet 92.08 %, eegnet 89.69 %. All differences are below 3 pp: not distinguishable.
 
+*Pointer (2026-10-30, P25 fix round 1): the CCNN values in this paragraph are pre-P25 (non-conforming layout) and superseded; the current values are in the P25 entry.*
+
 Dynamic stopping (`reports/dynamic_stopping/best_threshold.csv`): thresholds are selected in-sample and are descriptive. LDA reaches 61.53 bits/min at 0.5 s (threshold 0.7) against 60.23 for the time-matched single window; the per-subject split is mixed (S04 negative) and several thresholds sit on the grid edge.
 
 Pseudo-online (0.5 s windows; the original run wrote `reports/pseudo_online/summary_ccnn_{5class,6class}.csv`, which the P24 rerun has since overwritten, so the P20 values are read from its console logs `reports/logs/P20/pseudo_online_{5class,6class}.log`, Mean row): mean accuracy 89.00 % (5 classes) and 74.00 % (6 classes); mean false activations 27.5 % (5 classes) and 5.0 % (6 classes). This is the original run without cuDNN determinism flags, not reproducible (one draw of a nondeterministic trajectory); its console logs are `reports/logs/P20/pseudo_online_5class.log` and `reports/logs/P20/pseudo_online_6class.log`, and a copy of its CSVs is kept (git-ignored) at `mas/state/scratch/p24_fix2/p20_original/`. The rest-class and missed-period readings written for this run were drawn from this draw; they are re-checked in the P24 entry, which carries the values now used. Two runs with different class sets, not a before/after pair.
+
+*Pointer (2026-10-30, P25 fix round 1): the CCNN values in this paragraph are pre-P25 (non-conforming layout) and superseded; the current values are in the P25 entry.*
 
 Checks: A–I met; acceptance 1–7 met; protected hashes unchanged. Suite first run `2 failed, 1295 passed` (two hash-pinned P09/P10 tests, explained by the intra-op thread count, not P20 code), isolated re-run `1297 passed`. Directions P1–P6: P1, P2, P3, P4, P5 and P6(b), P6(c) hold; P6(a) fails as worded (S04 0.0 against 0.0, at the floor). Review: ACCEPT with D-1 to D-6.
 
@@ -519,13 +525,19 @@ Cohort decision (B003, option B, 2026-10-28): cohort 5 (S01–S05) for the main 
 
 Cohort 5 (1 s; `reports/loso_w1_s01-s05/summary.csv`, `reports/loso_w1_s01-s05_all/summary.csv`): `common` fbcca 82.40, lda 87.61, lda_subjnorm 90.03; `all` lda 86.34, lda_subjnorm 88.75. Networks, `common`, seed 42: ccnn 86.17, compact_eegnet 79.11, eegnet 79.76; three seeds for ccnn (86.17, 85.36, 86.58) and eegnet (79.76, 78.58, 78.77).
 
+*Pointer (2026-10-30, P25 fix round 1): the CCNN values in this paragraph are pre-P25 (non-conforming layout) and superseded; the current values are in the P25 entry.*
+
 Cohort 39 (1 s; `reports/loso_w1_all/summary.csv`, `reports/loso_w1/summary.csv`): `all` (8 channels) fbcca 75.80, lda 83.42, lda_subjnorm 86.13 (39 subject rows per method; lda_subjnorm is an offline upper bound; the within-subject comparison uses the 32 matched subjects). `common` (3 channels, POz, PO4, O1): fbcca 64.56, lda 72.54, lda_subjnorm 75.16; ccnn 71.58 (one repeat). The `common` rows of cohort 39 are three-channel results and are not comparable with cohort 5 or with within-subject results.
+
+*Pointer (2026-10-30, P25 fix round 1): the CCNN values in this paragraph are pre-P25 (non-conforming layout) and superseded; the current values are in the P25 entry.*
 
 Directions (R-16). Cohort 5: LOSO below within for lda (5 of 5 matched subjects, 86.63 against 89.89) and for each network (3 of 3 matched, seed 42); lda_subjnorm above lda (+2.42 pp on `common`); fbcca identical to within on matched channels (0 mismatches). Cohort 39: P2 for lda is **direction not observed** (22 of 32 subjects at or below within + 1 pp; mean 85.67 against 86.51; maximum S015 +4.94; signs 15 positive and 17 negative); P3 holds (+2.72 pp, `all`). No mechanism is shown and nothing was changed.
 
 Checks: acceptance 1–7 met for cohort 5 and the cohort-39 classical runs; B3 (21 rows, max difference 0.0), B8, B10 (no held-out subject in any training set), P4 (0 degenerate network folds). Suite run alone `1360 passed in 783.33 s`.
 
 Budget and limits: the cohort-39 network job ran beyond the local budget under Sebastian's authorisation (decisions 2026-10-28). Sebastian then limited it: the 39-subject network job stopped after ccnn completed all 39 folds (eegnet 2 of 39 folds, not a result; compact_eegnet not run); cohort 39 networks are an extra descriptive data source with a single repeat, and the networks are reported on cohort 5. The S06–S040 built folders pre-existed the verifier's resume (build parameters equal, 34 of 34). The Colab notebook has not run on a T4 (human run). Review: APPROVE with D-1 to D-9.
+
+*Pointer (2026-10-30, P25 fix round 1): the CCNN values in this paragraph are pre-P25 (non-conforming layout) and superseded; the current values are in the P25 entry.*
 
 ### P22 · LOSO extensions: within-subject reference, explicit channels, resume guard and warm-up (2026-10-28)
 
@@ -557,11 +569,54 @@ Limits: the within GNN reached the 150-epoch cap in 19 of 50 folds (D-3), a stat
 
 Aim of this entry: the pseudo-online numbers in the documents must come from a reproducible run. The P20 run had no cuDNN determinism flags, so its values (89.00 % and 74.00 %, above) were one non-reproducible draw. Fix e2bd25d (`scripts/benchmarks/pseudo_online.py`) sets `cudnn.deterministic = True` and `benchmark = False` after the device is resolved. Round 2 reran both tags three times at head afcd417 (the code is unchanged since e2bd25d; later commits are documentation only), seed 42, device cuda: main tree A (canonical outputs in `reports/pseudo_online/`, logs `reports/logs/P24/pseudo_online_{5,6}class_A.log`), main tree B (logs `reports/logs/P24/pseudo_online_{5,6}class_B.log`, outputs outside `reports/`) and a clean checkout C (outside `reports/`). A, B and C agree exactly on every column of `summary_ccnn_{5,6}class.csv` except `Seconds`, on every cell of `decisions_ccnn_{5,6}class.csv`, and on the per-subject validation and best-epoch log lines (`mas/state/phases/P24-documentation/06_verify.md`, round 2).
 
+*Pointer (2026-10-30, P25 fix round 1): the CCNN values in this paragraph are pre-P25 (non-conforming layout) and superseded; the current values are in the P25 entry.*
+
 Values (`reports/pseudo_online/summary_ccnn_5class.csv` and `summary_ccnn_6class.csv`, Mean row; the ITR uses N = 5 in both tags, `scripts/benchmarks/pseudo_online.py` line 283): five classes accuracy 88.50 %, false activations 28.5 %, ITR 55.0978 bits/min; six classes accuracy 75.50 %, missed 21.00 %, false activations 5.5 %, ITR 45.3336 bits/min. The six-class drop is missed stimulus periods: of the 32 periods correct with five classes and not with six, 30 are missed periods, and 27 of the 30 missed are in S01 and S02 (`reports/pseudo_online/decisions_ccnn_{5class,6class}.csv`). Of the 57 five-class false activations on rest periods, 46 do not occur with six classes and none is new. The output files do not contain the rest-class probability, so how the rest class affects the decisions is not measured here. The run is one seed (42): it is not a seed-spread estimate. The P24 and P20 values are two draws of one seed on the same code path; no difference between them is read as an effect.
+
+*Pointer (2026-10-30, P25 fix round 1): the CCNN values in this paragraph are pre-P25 (non-conforming layout) and superseded; the current values are in the P25 entry.*
+
+### P25 · Final audit: CCNN spec deviation, fixed by regenerating every CCNN output (fix round 1, 2026-10-30)
+
+Aim of this entry: the final audit found that the CCNN did not match the roadmap (P20.3) or R-8. From P20 to P24 it stacked `[real, imag]` as two input maps with bias-free convolutions (pre-P25 layout, non-conforming: 14,817 / 17,285 parameters). The roadmap and R-8 require one `[real | imag] / T` map with convolution biases (27,977 / 32,309 parameters, R-8 exact). The fix is in 987742b (`src/models/cnn/ccnn.py`; the commit carries the fix under a `docs:` prefix, a shared-index accident recorded in `mas/state/decisions.md`). The R-8 count, the single-map layout and the real-then-imaginary block position are pinned by tests that fail on the old code (`tests/test_p20_networks.py`, `tests/test_p20_independent_known_answer.py`) [19, 20].
+
+Label (binding wording of the review): CCNN spec deviation, fixed in P25 (fix round 1, code in 987742b). Every CCNN value produced before P25 is non-conforming and superseded; the old values are not called a bug demonstration or a legacy stage, because no era-matrix row prescribes that layout. Results are not comparable seed by seed.
+
+Regeneration: every CCNN output was rerun into staging directories and swapped in after the checks (G-0 to G-7; the other trees were checked to be identical). The GPU steps took 2.33 h, above `MAX_GPU_HOURS_PER_PHASE` 2, and were run locally under the standing local-run authorisation; the overrun is stated in the verifier's record [20].
+
+Before → after (CSV paths are the canonical files; the before values are the pre-P25 layout, non-conforming):
+
+| Output | Before (pre-P25 layout, non-conforming) | After (P25 regenerated) | Source |
+|---|---|---|---|
+| CCNN parameters at 7 / 8 channels | 14,817 / 17,285 | 27,977 / 32,309 | `reports/nn_sweep/summary.csv`, `Params` [19] |
+| `nn_sweep`, 1 s, cohort mean Acc (ccnn) | 91.25 % | 90.53 % | `reports/nn_sweep/summary.csv` [19] |
+| `nn_sweep`, ccnn Val / best epoch / ITR (cohort mean) | 92.99 % / 41.52 / 73.18 | 92.41 % / 31.76 / 72.16 | same [19] |
+| LOSO cohort 5, seed 42, Mean Acc / 2-tap | 86.17 % / 88.31 % | 85.88 % / 87.25 % | `reports/loso_w1_s01-s05/summary.csv` [19] |
+| LOSO cohort 5, seed 43, Mean Acc / 2-tap | 85.36 % / 87.06 % | 83.45 % / 85.24 % | `reports/loso_w1_s01-s05_seed43/summary.csv` [19] |
+| LOSO cohort 5, seed 44, Mean Acc / 2-tap | 86.58 % / 88.52 % | 85.32 % / 87.27 % | `reports/loso_w1_s01-s05_seed44/summary.csv` [19] |
+| LOSO cohort 5, three-seed mean Acc (range) | 86.04 % (85.36–86.58) | 84.88 % (83.45–85.88) | the three summaries above [19] |
+| LOSO cohort 5, three-seed mean 2-tap | 87.96 % | 86.59 % | the three summaries above [19] |
+| LOSO cohort 39, `common`, Mean Acc / 2-tap | 71.58 % / 73.55 % | 72.08 % / 73.91 % | `reports/loso_w1/summary.csv` [19] |
+| Pseudo-online, five classes, mean Acc / false activations / ITR (P24 rerun, the values the documents used) | 88.50 % / 28.5 % / 55.10 bits/min | 90.50 % / 29.5 % / 58.04 bits/min | `reports/pseudo_online/summary_ccnn_5class.csv` [19] |
+| Pseudo-online, six classes, mean Acc / missed / false activations / ITR | 75.50 % / 21.00 % / 5.5 % / 45.33 bits/min | 75.50 % / 22.00 % / 5.0 % / 46.31 bits/min | `reports/pseudo_online/summary_ccnn_6class.csv` [19] |
+
+The pseudo-online "before" column reports the P24 rerun values that the documents used; the P20 draw is 89.00 % and 74.00 % (`mas/state/reports/P20.md`). The rerun of both tags is identical in every column except `Seconds`.
+
+Claims re-tested under the rules they were made under (S-4): the claims that hold are kept; the claims that do not hold are stated as flipped and are not reworded.
+- Flipped: "none of the 57 five-class false activations is new" (P24 entry, README, report v2, progress report): one six-class false activation (S01, onset 50.03 s) does not occur with five classes. With the regenerated decisions the counts are 59 five-class false activations, 50 of them absent with six classes, and 1 new (`reports/pseudo_online/decisions_ccnn_{5class,6class}.csv`) [19].
+- Flipped: the six-class "6 of 10 predict the next target, p = 0.0064" (P20 R-P9): 4 of 10 predict it now, one-sided binomial p = 0.1209 (`scipy.stats.binomtest`, shown in the P25 handoff). The five-class share is 15 of 59 (p = 0.1876). These remain post hoc and descriptive.
+- Flipped: "every five-class false activation has time ≤ 2 s" (P20 R-P9, P24): one of 59 (S01, onset 185.06 s) has `time_sec` 2.4375 s, in the cue section; the six-class maximum is 1.46875 s.
+- Flipped (wording): the P20 P6(a) check "false activations lower with six classes in every subject with a rest period" failed as worded (S04 0.0 against 0.0). With the regenerated values it holds in 5 of 5 (S04 5.0 to 0.0), so the floor note no longer applies.
+- Holds, numbers changed: the nn_sweep ordering (ccnn above eegnet by 0.84 pp; below compact_eegnet by 1.55 pp; all pairwise differences below 3 pp, not distinguishable); P20 P4 (every model above 20 %, Train ≥ Val in all rows); P20 P6(b) and (c); the P21 networks below within on the three matched subjects (3 of 3; ccnn LOSO 86.11 against within 91.81); no degenerate ccnn folds (0 in each cohort-5 seed, 0 of 39); the cohort-5 ccnn − lda three-seed difference (−2.73 pp, previously −1.57 pp; below the 3 pp difference rule, but the per-subject sign pattern is 4 of 5 negative); the cohort-39 ccnn − lda (−0.46 pp, previously −0.96 pp; a tie by any reading); the GNN per-seed means above the ccnn seed mean (88.47 and 88.11 against 84.88).
+- Changed numbers: cohort-39 ccnn above lda in 21 of 39 subjects (previously 19; 17 below and 1 equal; `reports/loso_w1/per_subject.csv`); the S015 ccnn value 27.00 % against lda 56.13 % (previously 29.66 % against 56.13 %); the cohort-39 fold statistics (best epoch minimum / median / maximum 7 / 30 / 78, previously 6 / 26 / 69; train accuracy minimum 77.59 % and median 79.44 %, previously 75.05 % and 76.81 %; `reports/loso_w1/folds.csv`); the minimum ccnn best epoch on cohort 5 in seed 42 is 29 (previously 18).
+
+The P25 reading of the R-13 seed check (G-4) is recorded by the verifier in `mas/state/phases/P25-final-audit/06_verify.md` and is not repeated here. Results review of fix round 1 is pending; the phase report and its verdict follow that review and are not written yet.
+
 
 ## Status at the end of P23
 
 Phases P00–P23 have passed their gates (verifier PASS and reviewer APPROVE, with the deviations listed above). P00–P03 were merged by Sebastian (`MERGE_POLICY: human` at the time); P04–P23 were merged `--no-ff` into `main` by the orchestrator and tagged `pNN-done` (`mas/state/decisions.md`). Open at the end of Era C, carried to P24 and P25: the P17 C-d and C-e (fundamentals-only ablation; per-offset Missed/FalseAct), the P20 and P23 carry-forwards C-1 to C-5, the P21 notebook on Colab (not run on a T4), the P22 `within_lda` labelling (W-1), the P11 smoothing question for legacy folders, and blocker-level items listed in `mas/state/blockers/` and in the progress report.
+
+*Note (2026-10-30, P25 fix round 1): the CCNN values in the status above are pre-P25 values; the P25 entry carries the regenerated values.*
 
 ## Sources
 
@@ -583,3 +638,5 @@ Phases P00–P23 have passed their gates (verifier PASS and reviewer APPROVE, wi
 16. REQUEST — `mas/03_ROADMAP.md` (phase tasks P00–P24). Used for: the phase aims.
 17. OWN-CODE — ssvep-eeg-xai (the original project), consulted under R11 where the phase reports record it (P05 round 2, P06, P11 round 2, P15 and the reviewer's verification). Used for: definitions only (the P05 mask and smoothing rule; `bias=False` in P15; the RNG stream of P11 not adopted). No function was copied.
 18. DATA — `mas/state/scratch/reference_access.log` (42 lines; read for the R11 count only). Used for: the R11 record.
+19. DATA — `reports/nn_sweep/summary.csv`, `reports/pseudo_online/summary_ccnn_{5class,6class}.csv`, `reports/pseudo_online/decisions_ccnn_{5class,6class}.csv`, `reports/loso_w1_s01-s05/summary.csv`, `reports/loso_w1_s01-s05_seed43/summary.csv`, `reports/loso_w1_s01-s05_seed44/summary.csv`, `reports/loso_w1/summary.csv`, `reports/loso_w1/per_subject.csv`, `reports/loso_w1/folds.csv` (P25 fix round 1 canonical outputs, regenerated at 987742b; read by the scribe with `.venv/bin/python`, shown commands in the P25 handoff `mas/state/phases/P25-final-audit/03_changes_scribe.md`). Used for: the P25 values and the claim re-tests.
+20. HANDOFF — `mas/state/phases/P25-final-audit/07_review.md` ("Fix round 1 audit (CCNN)", binding items G-0 to G-7 and S-1 to S-6), `05_run.md` and `06_verify.md` ("Fix round 1 rerun"). Used for: the fix scope, the CCNN label, the run record and the overrun statement.
