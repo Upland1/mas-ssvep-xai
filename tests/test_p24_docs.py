@@ -194,7 +194,7 @@ def test_no_bare_compact_model_name_in_tables(rel):
 
 
 # the guard's vendor/tool pattern, assembled from fragments so no term appears whole here
-_TERMS = [["cla", "ude"], ["anthr", "opic"], ["co-auth", "ored-by"]]
+_TERMS = [["cla", "ude"], ["anthr", "opic"], ["co-", "auth", "ored-by"]]
 _VENDOR = re.compile("|".join("".join(t) for t in _TERMS), re.I)
 
 
