@@ -3,6 +3,8 @@
 Status: READY
 
 ## Files
+Note: part of this work (ccnn.py, both test files and an earlier version of this handoff) landed in the reviewer's commit 987742b by accident (shared index); history is not rewritten, this commit only updates the handoff.
+
 - MODIFIED `src/models/cnn/ccnn.py` - single input map `[real | imag] / T`, convolutions with bias, docstring and parameter formula updated.
 - MODIFIED `tests/test_p20_networks.py` - count test now pins R-8; new `test_ccnn_parameter_count_matches_r8`, `test_ccnn_single_map_real_then_imag_layout`; `test_ccnn_spectrum_known_answer` reads real at `k`, imag at `n_bins + k`.
 - MODIFIED `tests/test_p20_independent_known_answer.py` - `test_ccnn_spectrum_bin_scaling_and_nfft` pinned the old `(B, 2, C, n_bins)` layout; it now splits the new `(B, 1, C, 2*n_bins)` map back into real and imag halves (assertions otherwise unchanged).
@@ -16,7 +18,7 @@ B004 note: convs keep bias here because the R-8 Era-C count includes it; BN afte
 
 ## Tests
 - Fail on old code (verified by restoring the HEAD version of ccnn.py): 4 in `test_p20_networks.py` (shape/params, spectrum known answer, R-8 count, single-map layout) and 4 parametrised in `test_p20_independent_known_answer.py`.
-- With the fix: `pytest tests/test_p20_networks.py tests/test_p20_independent_known_answer.py tests/test_p21_loso_networks.py tests/test_p21_independent_known_answer.py tests/test_p20_online.py -q`: all pass (85 tests, none failed). Full suite: see commit message / below.
+- With the fix: `pytest tests/test_p20_networks.py tests/test_p20_independent_known_answer.py tests/test_p21_loso_networks.py tests/test_p21_independent_known_answer.py tests/test_p20_online.py -q`: all pass (85 tests, none failed). Full suite `pytest tests/ -q`: 1571 tests, all passed (no F/E in the progress lines; the repo pytest config suppresses the summary line).
 - CPU/CUDA: forward is device-agnostic (`bin_idx` is a buffer); CPU tested.
 
 ## Consumers checked
