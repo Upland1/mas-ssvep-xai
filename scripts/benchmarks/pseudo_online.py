@@ -415,6 +415,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     return 1
   tag = args.tag or f"{args.model}_{6 if args.rest_class else 5}class"
   device = resolve_device(args.device)
+  if device == "cuda":                                    # same seed -> same training trajectory (P24 verify)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
   warn = paradigm_warning(args.train_session, args.test_session)
   print(f"Pseudo-online: {args.model}, {6 if args.rest_class else 5} classes, train {args.train_session} -> test "
         f"{args.test_session}, window {args.window_sec:g} s, stride {args.stride_sec:g} s, skip {args.skip_sec:g} s, "

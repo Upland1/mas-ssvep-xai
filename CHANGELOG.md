@@ -494,7 +494,7 @@ Result
 - cnn (compact_eegnet) at 4 s: 83.10 %, driven by S02 and S01. Two S02 folds at each endpoint restored an early-stopping state from epoch 1–3 (single repeat) [10].
 - 1 s networks: ccnn 91.25 %, compact_eegnet 92.08 %, eegnet 89.69 %; not distinguishable [12].
 - Dynamic stopping: lda cohort ITR 61.53 bits/min at 0.5 s (in-sample threshold 0.70) against 60.23 for the time-matched window; per-subject split mixed [13].
-- Pseudo-online, OO → mOO, ccnn, 0.5 s window: 5 classes 89.00 %, 6 classes 74.00 %; false activations 27.5 % → 5.0 % [14].
+- Pseudo-online, OO → mOO, ccnn, 0.5 s window. Original P20 run, without cuDNN determinism flags (not reproducible; `reports/logs/P20/pseudo_online_{5,6}class.log`): 5 classes 89.00 %, 6 classes 74.00 %; false activations 27.5 % → 5.0 % [14]. P24 rerun, deterministic cuDNN (2026-10-29, code at afcd417, seed 42; `reports/logs/P24/pseudo_online_{5,6}class_{A,B}.log`): 5 classes 88.50 %, 6 classes 75.50 %; false activations 28.5 % → 5.5 % [14].
 
 Review
 - Pre-run audit PASS (`db474b6`), no code fix. Results review ACCEPT (`1ec3c01`): D-1 to D-6 and C-1 to C-5 in the report.
@@ -586,5 +586,36 @@ Review
 
 Open
 - Notebook section 10b not yet run on Colab. Within GNN epoch cap (D-3). The P22 `within_lda` rows still carry the "LOSO" string (W-1). Carry-forwards C-1 to C-4 for P24–P25 (decision row 176).
+
+Next phase: after the orchestrator's gate.
+
+## P24 — Documentation and deliverables: README, research log, report v2, infographic, progress report, make all
+
+2026-10-29, branch `phase/P24-documentation`. Verifier PASS `7a084c4` (round 2; round 1 FAIL `cd708ac`); results review APPROVE `795296f`; review round 1 FAIL `1a99104`, round 2 PASS `a3b3c6e`, round 3 audit PASS `8e333c6`. Phase report: `mas/state/reports/P24.md`.
+
+Added
+- `docs/report/v2/report.md`, `docs/progress_report/progress_report.md`, `docs/infographic/methodology_infographic.svg` (NEW): academic report v2 (Sources section), progress report for the professor (one section per assignment, open questions in §11), one-page methodology infographic (SVG).
+- `Makefile` (MODIFIED): per-phase targets `p00` … `p23`, `all`, `all-dry`, optional `loso-all`; variables `PYTHON`, `RAW_DIR`, `NN_DEVICES`, `STAMPS`, `FORCE`. Resumable through stamps in `mas/state/scratch/make_stamps/` (git-ignored).
+- `tests/test_p24_make_all.py`, `tests/test_p24_docs.py` (NEW): make-target checks (13) and document checks (35 cases: Sources sections, cited `reports/` paths, SVG parse, privacy pattern).
+- `mas/state/phases/P24-documentation/*` (NEW): phase documents 00–07 and `log.md`.
+
+Changed
+- `README.md` (MODIFIED): replaces the operator guide; results, usage for every script, make targets and runtime, development process pointing to `mas/README.md`.
+- `RESEARCH_LOG.md` (MODIFIED): one chronological narrative P00 → P23 with a before/after line per fix, and a P24 entry.
+- `scripts/benchmarks/pseudo_online.py` (MODIFIED, 3 lines): cuDNN determinism flags when the device is CUDA (`e2bd25d`). `tests/test_p20_online.py` (MODIFIED): determinism and flag tests (`35bd278`).
+- `mas/state/reports/P20.md` (MODIFIED): "Note (P24, 2026-10-29)" appended; no original line edited.
+- The P20 pseudo-online bullet above is labelled as the original run (not reproducible).
+
+Result
+- `make all` on a clean clone at `bb9c091`: exit 0, 24 phase stamps, 720 `.npy` arrays identical, 245 CPU CSVs exact. Wall time 9 h 27 min 36 s, authorised by Sebastian (decision row 179). The `loso-all` outputs and the logs are outside the comparison (V-6).
+- Pseudo-online was not reproducible at P20 (no cuDNN determinism flags). Deterministic rerun at `afcd417`, seed 42, three identical runs (A, B, C): 5 classes accuracy 88.50 %, false activations 28.5 %, ITR 55.0978 bits/min; 6 classes accuracy 75.50 %, missed 21.00 %, false activations 5.5 %, ITR 45.3336 bits/min. The P20 draw (89.00 % and 74.00 %) is kept and labelled. Not a method comparison.
+
+Review
+- Round 1 FAIL (`1a99104`): Makefile F1–F4 and documents D1–D14, fixed in `e43f8af`, `3436a5b`, `ff7b556`. Round 2 PASS (`a3b3c6e`). Round 3 audit PASS (`8e333c6`) of the pseudo-online determinism fix. Results review APPROVE (`795296f`) with deviations A-1 to A-6 (report §9).
+
+Open
+- The pseudo-online P24 values are one seed. The P20 draw and the make-all clone draw are not reproducible.
+- `p19` clone runtime 10.2 min against 2.5 min recorded (A-5, not explained). Main-tree P22 `within_lda` CSV rows still carry "LOSO" (W-1). Notebook section 10b and the P21 notebook not run on Colab. Carry-forwards C-1 to C-4 for P25.
+- Merge by the orchestrator (`MERGE_POLICY: orchestrator`).
 
 Next phase: after the orchestrator's gate.

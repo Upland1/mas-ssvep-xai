@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1700" viewBox="0 0 1200 1700" font-family="DejaVu Sans, Arial, Helvetica, sans-serif">
+  <title>Methodology infographic v2 (P24): pipeline, protocol and key numbers</title>
+  <defs>
+    <marker id="arr" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#333333"/>
+    </marker>
+  </defs>
+  <rect x="0" y="0" width="1200" height="1700" fill="#ffffff"/>
+
+  <!-- header -->
+  <text x="30" y="50" font-size="30" font-weight="bold" fill="#111111">SSVEP decoding: methodology and key numbers (v2, P24)</text>
+  <text x="30" y="80" font-size="15" fill="#333333">Five-class SSVEP decoder, eight parieto-occipital channels at 256 Hz, five subjects (S01–S05), session OO.</text>
+  <text x="30" y="102" font-size="14" fill="#333333">Legacy protocol reproduced as it was; corrected protocol from P16. Reference values (R-x) are the original project's, labelled as targets.</text>
+
+  <!-- pipeline -->
+  <text x="30" y="140" font-size="20" font-weight="bold" fill="#111111">1 · Pipeline</text>
+  <rect x="30" y="156" width="170" height="92" rx="6" fill="#e8f0fe" stroke="#1a56a0" stroke-width="2"/>
+  <text x="115" y="184" font-size="15" font-weight="bold" text-anchor="middle" fill="#111111">Recordings</text>
+  <text x="115" y="206" font-size="13" text-anchor="middle" fill="#333333">OO, mOO; S01–S05</text>
+  <text x="115" y="226" font-size="13" text-anchor="middle" fill="#333333">256 Hz, git-ignored</text>
+  <line x1="200" y1="202" x2="232" y2="202" stroke="#333333" stroke-width="2" marker-end="url(#arr)"/>
+  <rect x="232" y="156" width="170" height="92" rx="6" fill="#e8f0fe" stroke="#1a56a0" stroke-width="2"/>
+  <text x="317" y="184" font-size="15" font-weight="bold" text-anchor="middle" fill="#111111">Filter, then cut</text>
+  <text x="317" y="206" font-size="13" text-anchor="middle" fill="#333333">continuous 1–90 Hz</text>
+  <text x="317" y="226" font-size="13" text-anchor="middle" fill="#333333">notch 60 Hz, then windows</text>
+  <line x1="402" y1="202" x2="434" y2="202" stroke="#333333" stroke-width="2" marker-end="url(#arr)"/>
+  <rect x="434" y="156" width="170" height="92" rx="6" fill="#e8f0fe" stroke="#1a56a0" stroke-width="2"/>
+  <text x="519" y="184" font-size="15" font-weight="bold" text-anchor="middle" fill="#111111">Windows</text>
+  <text x="519" y="206" font-size="13" text-anchor="middle" fill="#333333">1.0 s, stride 0.25 s</text>
+  <text x="519" y="226" font-size="13" text-anchor="middle" fill="#333333">true trial ids (P16+)</text>
+  <line x1="604" y1="202" x2="636" y2="202" stroke="#333333" stroke-width="2" marker-end="url(#arr)"/>
+  <rect x="636" y="156" width="170" height="92" rx="6" fill="#fff4e0" stroke="#b36b00" stroke-width="2"/>
+  <text x="721" y="184" font-size="15" font-weight="bold" text-anchor="middle" fill="#111111">Quality (R5)</text>
+  <text x="721" y="206" font-size="13" text-anchor="middle" fill="#333333">channel drop, window gate</text>
+  <text x="721" y="226" font-size="13" text-anchor="middle" fill="#333333">vpp 5–120 µV, std 1–35 µV</text>
+  <line x1="806" y1="202" x2="838" y2="202" stroke="#333333" stroke-width="2" marker-end="url(#arr)"/>
+  <rect x="838" y="156" width="332" height="92" rx="6" fill="#e8f0fe" stroke="#1a56a0" stroke-width="2"/>
+  <text x="1004" y="184" font-size="15" font-weight="bold" text-anchor="middle" fill="#111111">Features and models</text>
+  <text x="1004" y="206" font-size="13" text-anchor="middle" fill="#333333">FBCSP (m = 1, in-fold) + FBCCA → scaler → Shrinkage-LDA</text>
+  <text x="1004" y="226" font-size="13" text-anchor="middle" fill="#333333">networks (EEGNet, Compact-CNN, ShallowConvNet) and a graph model</text>
+
+  <rect x="30" y="268" width="1140" height="60" rx="6" fill="#f5f5f5" stroke="#666666" stroke-width="1.5"/>
+  <text x="50" y="294" font-size="15" font-weight="bold" fill="#111111">Evaluation</text>
+  <text x="200" y="294" font-size="14" fill="#333333">trial-grouped 5-fold CV, seed 42 (R1, corrected) · LOSO over subjects, group = subject · within-subject reference · smoothing per trial (R8)</text>
+  <text x="50" y="316" font-size="14" fill="#333333">Legacy (P02–P15, labelled): window-level CV (PF-01), i % 5 smoothing (PF-02), fs 250 (PF-04), per-window filtering (PF-14), per-script gate (R5).</text>
+
+  <!-- protocol -->
+  <text x="30" y="368" font-size="20" font-weight="bold" fill="#111111">2 · Protocol</text>
+  <rect x="30" y="384" width="555" height="186" rx="6" fill="#ffffff" stroke="#999999" stroke-width="1.5"/>
+  <text x="46" y="410" font-size="15" font-weight="bold" fill="#111111">Trial (15 s) and classes</text>
+  <text x="46" y="434" font-size="13" fill="#333333">201 fixation (2 windows, rest class from P17) → 202 cue → 203 preparation</text>
+  <text x="46" y="456" font-size="13" fill="#333333">→ 5 s flicker: 101 24.00 Hz · 102 20.00 Hz · 103 15.00 Hz</text>
+  <text x="46" y="478" font-size="13" fill="#333333">104 10.9091 Hz · 105 8.5714 Hz → 200 end</text>
+  <text x="46" y="506" font-size="13" fill="#333333">40 trials per run, 8 per target, randomized order.</text>
+  <text x="46" y="528" font-size="13" fill="#333333">Chance: 20 % (five classes), 16.7 % (six classes).</text>
+  <text x="46" y="550" font-size="13" fill="#333333">Recordings: 10 of 23 in the measured inventory (S01–S05, OO and mOO).</text>
+
+  <rect x="615" y="384" width="555" height="186" rx="6" fill="#ffffff" stroke="#999999" stroke-width="1.5"/>
+  <text x="631" y="410" font-size="15" font-weight="bold" fill="#111111">Evaluation rules</text>
+  <text x="631" y="434" font-size="13" fill="#333333">Trial-grouped CV (R1); scalers and selection in-fold (R2).</text>
+  <text x="631" y="456" font-size="13" fill="#333333">Filter the continuous signal, then window (R3); fs from metadata.</text>
+  <text x="631" y="478" font-size="13" fill="#333333">One quality decision with explicit thresholds (R5).</text>
+  <text x="631" y="500" font-size="13" fill="#333333">Permutations at trial level (R7); FDR and NBS reported separately.</text>
+  <text x="631" y="522" font-size="13" fill="#333333">Test-time normalization is labelled offline upper bound (R2).</text>
+  <text x="631" y="544" font-size="13" fill="#333333">Per-subject numbers with data source (R9); every number from a CSV.</text>
+
+  <!-- key numbers -->
+  <text x="30" y="604" font-size="20" font-weight="bold" fill="#111111">3 · Key numbers (cohort S01–S05 unless stated)</text>
+
+  <rect x="30" y="620" width="270" height="170" rx="6" fill="#eef7ee" stroke="#2e7d32" stroke-width="2"/>
+  <text x="165" y="648" font-size="15" font-weight="bold" text-anchor="middle" fill="#111111">Leak (legacy → grouped)</text>
+  <text x="165" y="684" font-size="26" font-weight="bold" text-anchor="middle" fill="#111111">83.33 → 79.28 %</text>
+  <text x="165" y="710" font-size="14" text-anchor="middle" fill="#333333">1.0 s flagship, mean</text>
+  <text x="165" y="734" font-size="13" text-anchor="middle" fill="#333333">change −4.06 pp (1.0 s)</text>
+  <text x="165" y="752" font-size="13" text-anchor="middle" fill="#333333">−4.96 pp (2.0 s)</text>
+  <text x="165" y="778" font-size="11" text-anchor="middle" fill="#555555">reports/n_subjects_benchmark.csv; cv_leakage_demo.csv</text>
+
+  <rect x="315" y="620" width="270" height="170" rx="6" fill="#eef7ee" stroke="#2e7d32" stroke-width="2"/>
+  <text x="450" y="648" font-size="15" font-weight="bold" text-anchor="middle" fill="#111111">Corrected build (P16)</text>
+  <text x="450" y="684" font-size="26" font-weight="bold" text-anchor="middle" fill="#111111">87.38 %</text>
+  <text x="450" y="710" font-size="14" text-anchor="middle" fill="#333333">1.0 s, fs 256, continuous</text>
+  <text x="450" y="734" font-size="13" text-anchor="middle" fill="#333333">harm bank 94.29 % (P17)</text>
+  <text x="450" y="752" font-size="13" text-anchor="middle" fill="#333333">base bank 87.65 % (P17)</text>
+  <text x="450" y="778" font-size="11" text-anchor="middle" fill="#555555">reports/v1_vs_v2/flagship.csv</text>
+
+  <rect x="600" y="620" width="270" height="170" rx="6" fill="#eef7ee" stroke="#2e7d32" stroke-width="2"/>
+  <text x="735" y="648" font-size="15" font-weight="bold" text-anchor="middle" fill="#111111">LOSO (P21–P22)</text>
+  <text x="735" y="684" font-size="26" font-weight="bold" text-anchor="middle" fill="#111111">87.61 %</text>
+  <text x="735" y="710" font-size="14" text-anchor="middle" fill="#333333">lda, leave one subject out</text>
+  <text x="735" y="734" font-size="13" text-anchor="middle" fill="#333333">within-subject reference 90.79 %</text>
+  <text x="735" y="752" font-size="13" text-anchor="middle" fill="#333333">common channels (7), 1.0 s</text>
+  <text x="735" y="778" font-size="11" text-anchor="middle" fill="#555555">reports/loso_w1_p22_common/summary.csv</text>
+
+  <rect x="900" y="620" width="270" height="170" rx="6" fill="#eef7ee" stroke="#2e7d32" stroke-width="2"/>
+  <text x="1035" y="648" font-size="15" font-weight="bold" text-anchor="middle" fill="#111111">GNN (P23)</text>
+  <text x="1035" y="684" font-size="26" font-weight="bold" text-anchor="middle" fill="#111111">89.22 %</text>
+  <text x="1035" y="710" font-size="14" text-anchor="middle" fill="#333333">LOSO, nodes+F, 3-seed ensemble</text>
+  <text x="1035" y="734" font-size="13" text-anchor="middle" fill="#333333">within subject 86.81 % (3-seed)</text>
+  <text x="1035" y="752" font-size="13" text-anchor="middle" fill="#333333">direction not observed (LOSO vs within)</text>
+  <text x="1035" y="778" font-size="11" text-anchor="middle" fill="#555555">reports/loso_gnn/summary.csv</text>
+
+  <rect x="30" y="806" width="270" height="170" rx="6" fill="#eef7ee" stroke="#2e7d32" stroke-width="2"/>
+  <text x="165" y="834" font-size="15" font-weight="bold" text-anchor="middle" fill="#111111">Connectivity statistics (P18)</text>
+  <text x="165" y="870" font-size="26" font-weight="bold" text-anchor="middle" fill="#111111">48 · 43 · 32</text>
+  <text x="165" y="896" font-size="13" text-anchor="middle" fill="#333333">cells: A-FDR · A-NBS · B</text>
+  <text x="165" y="920" font-size="13" text-anchor="middle" fill="#333333">1000 permutations, 100 cells</text>
+  <text x="165" y="942" font-size="13" text-anchor="middle" fill="#333333">FDR and NBS kept as separate criteria</text>
+  <text x="165" y="964" font-size="11" text-anchor="middle" fill="#555555">reports/connectivity_cohort_summary_p18_nbs.csv</text>
+
+  <rect x="315" y="806" width="270" height="170" rx="6" fill="#eef7ee" stroke="#2e7d32" stroke-width="2"/>
+  <text x="450" y="834" font-size="15" font-weight="bold" text-anchor="middle" fill="#111111">Window length (P20)</text>
+  <text x="450" y="870" font-size="26" font-weight="bold" text-anchor="middle" fill="#111111">84.37 bits/min</text>
+  <text x="450" y="896" font-size="13" text-anchor="middle" fill="#333333">LDA ITR at 0.5 s (highest)</text>
+  <text x="450" y="920" font-size="13" text-anchor="middle" fill="#333333">accuracy 81.80 % at 0.5 s,</text>
+  <text x="450" y="942" font-size="13" text-anchor="middle" fill="#333333">98.03 % at 4 s</text>
+  <text x="450" y="964" font-size="11" text-anchor="middle" fill="#555555">reports/window_sweep/summary.csv</text>
+
+  <rect x="600" y="806" width="270" height="170" rx="6" fill="#eef7ee" stroke="#2e7d32" stroke-width="2"/>
+  <text x="735" y="834" font-size="15" font-weight="bold" text-anchor="middle" fill="#111111">Pseudo-online (P20) †</text>
+  <text x="735" y="870" font-size="26" font-weight="bold" text-anchor="middle" fill="#111111">88.50 %</text>
+  <text x="735" y="896" font-size="13" text-anchor="middle" fill="#333333">five classes, train OO, replay mOO</text>
+  <text x="735" y="920" font-size="13" text-anchor="middle" fill="#333333">75.50 % with six classes (rest class)</text>
+  <text x="735" y="942" font-size="13" text-anchor="middle" fill="#333333">ccnn, 0.5 s windows; single repeat</text>
+  <text x="735" y="964" font-size="11" text-anchor="middle" fill="#555555">reports/pseudo_online/summary_ccnn_5class.csv</text>
+
+  <rect x="900" y="806" width="270" height="170" rx="6" fill="#eef7ee" stroke="#2e7d32" stroke-width="2"/>
+  <text x="1035" y="834" font-size="15" font-weight="bold" text-anchor="middle" fill="#111111">Reference (original, R-x)</text>
+  <text x="1035" y="870" font-size="26" font-weight="bold" text-anchor="middle" fill="#111111">79.28 / 82.61</text>
+  <text x="1035" y="896" font-size="13" text-anchor="middle" fill="#333333">R-6 leak-free flagship, 1.0 / 2.0 s</text>
+  <text x="1035" y="920" font-size="13" text-anchor="middle" fill="#333333">targets for diagnosis, not results</text>
+  <text x="1035" y="942" font-size="13" text-anchor="middle" fill="#333333">reproduced on every cell</text>
+  <text x="1035" y="964" font-size="11" text-anchor="middle" fill="#555555">mas/04_REFERENCE_RESULTS.md R-6</text>
+
+  <!-- open items and limits -->
+  <text x="30" y="1024" font-size="20" font-weight="bold" fill="#111111">4 · Limits and open items</text>
+  <rect x="30" y="1040" width="1140" height="150" rx="6" fill="#fff4e0" stroke="#b36b00" stroke-width="1.5"/>
+  <text x="46" y="1066" font-size="14" fill="#333333">· Five subjects; results are descriptive for this cohort. The 39-subject LOSO cohort is a separate data source.</text>
+  <text x="46" y="1090" font-size="14" fill="#333333">· Accepted deviations: sequential forward selection row (R-4; ours, legacy leaky 89.85 / 95.94); Compact-CNN S03 2.0 s ON (B006); GNN S02 2.0 s (B007).</text>
+  <text x="46" y="1114" font-size="14" fill="#333333">· Open: the smoothing rule on legacy folders (trial-reset vs i % 5); the cause of the unreproduced cells; the fundamentals-only filter ablation.</text>
+  <text x="46" y="1138" font-size="14" fill="#333333">· 6-class results are not compared with 5-class accuracy; ITR uses N = 5 for the six-class pseudo-online run.</text>
+  <text x="46" y="1162" font-size="14" fill="#333333">· Trial-level permutation results are inconclusive where a flip crosses p = 0.05 between permutation counts (R7).</text>
+
+  <!-- confusion, not in the infographic: a sentence only -->
+  <text x="30" y="1222" font-size="20" font-weight="bold" fill="#111111">5 · Data and reproduction</text>
+  <text x="30" y="1248" font-size="14" fill="#333333">Recordings are private and git-ignored (data/raw). Every CSV under reports/ is regenerated by make all from the recordings (per-phase targets p00 to p23).</text>
+  <text x="30" y="1270" font-size="14" fill="#333333">The full suite runs on CPU without recordings. Each number on this page has its CSV path under its box.</text>
+
+  <!-- sources -->
+  <rect x="30" y="1300" width="1140" height="330" rx="6" fill="#f5f5f5" stroke="#999999" stroke-width="1"/>
+  <text x="46" y="1330" font-size="16" font-weight="bold" fill="#111111">Sources</text>
+  <text x="46" y="1356" font-size="12" fill="#333333">[1] Chailloux Peguero et al. (2023), Frontiers in Neuroscience 17:1142892 (paradigm reference, cited as given in mas/01_DATA_SPEC.md §3; the specification was opened, the paper was not).</text>
+  <text x="46" y="1378" font-size="12" fill="#333333">[2] mas/01_DATA_SPEC.md §3 and §6 (event codes, paradigms, class conventions).</text>
+  <text x="46" y="1400" font-size="12" fill="#333333">[3] mas/04_REFERENCE_RESULTS.md, R-6 and R-14 to R-16 (original project's reference values, targets for diagnosis).</text>
+  <text x="46" y="1422" font-size="12" fill="#333333">[4] reports/n_subjects_benchmark.csv, reports/cv_leakage_demo.csv (flagship, leak, P06–P11).</text>
+  <text x="46" y="1444" font-size="12" fill="#333333">[5] reports/v1_vs_v2/flagship.csv, reports/n_subjects_benchmark_p17_harm_5class.csv (continuous build, filter bank, P16–P17).</text>
+  <text x="46" y="1466" font-size="12" fill="#333333">[6] reports/loso_w1_p22_common/summary.csv, reports/loso_gnn/summary.csv, reports/within_gnn/summary.csv (LOSO and GNN, P22–P23).</text>
+  <text x="46" y="1488" font-size="12" fill="#333333">[7] reports/connectivity_cohort_summary_p18_nbs.csv (NBS and FDR cells, P18); reports/window_sweep/summary.csv; reports/pseudo_online/summary_ccnn_5class.csv (P20).</text>
+  <text x="46" y="1510" font-size="12" fill="#333333">[8] Phase decisions and blockers: mas/state/decisions.md, mas/state/blockers/B003, B005, B006, B007.</text>
+  <text x="46" y="1532" font-size="12" fill="#333333">Full sources, derivations and per-subject tables: docs/report/v2/report.md and README.md.</text>
+  <text x="46" y="1600" font-size="12" fill="#555555">Figure: one page, version 2 (P24). The version 1 figure is kept as history in docs/report/v1/.</text>
+  <text x="46" y="1562" font-size="12" fill="#333333">† Pseudo-online values: P24 rerun with deterministic cuDNN (2026-10-29, code at afcd417), seed 42 only;</text>
+  <text x="46" y="1582" font-size="12" fill="#333333">the P20 run (2026-10-28) had no determinism flags and gave one non-reproducible draw. CSVs: reports/pseudo_online/summary_ccnn_{5class,6class}.csv.</text>
+</svg>
