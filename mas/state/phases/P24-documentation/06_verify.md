@@ -119,7 +119,7 @@ Not part of this verification (no new sources are cited in the Makefile or the r
 
 ## Reference consultations check
 
-`03_changes_data-signal.md` states "No consultation of `reference/ssvep-eeg-xai/`". `mas/state/scratch/reference_access.log` holds 42 lines, none dated 2026-10-29. Privacy scan: no match for the forbidden terms in `README.md`, `docs/`, `RESEARCH_LOG.md`, `Makefile`, `tests/test_p24_make_all.py` (`git grep`), and no tracked `CLAUDE.md` or `.claude/` file (`git ls-files`).
+`03_changes_data-signal.md` states "No consultation of `reference/ssvep-eeg-xai/`". `mas/state/scratch/reference_access.log` holds 42 lines, none dated 2026-10-29. Privacy scan: no match for the forbidden terms in `README.md`, `docs/`, `RESEARCH_LOG.md`, `Makefile`, `tests/test_p24_make_all.py` (`git grep`), and no tracked local-only instruction files (`git ls-files` check).
 
 ## Reasons (if FAIL)
 
