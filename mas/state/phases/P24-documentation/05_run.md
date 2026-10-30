@@ -77,3 +77,7 @@ Paths only, in the clone (`mas/state/scratch/clean_clone/`): `reports/` (769 fil
 ## Questions
 
 None.
+
+## Round 2 rerun
+
+Pseudo-online tags `ccnn_5class` and `ccnn_6class`, three runs each (A main canonical, B main `--out-dir`, C clean checkout), head afcd417538dc311eda8118951d720d2073ed14ef, `device cuda, seed 42` in all six logs. All exits 0 (35, 34, 34 s for 5-class; 69, 73, 71 s for 6-class). Preserved originals and sha256 manifests: `mas/state/scratch/p24_fix2/` (`manifest.txt`, `manifest_after.txt`, `p20_original/`, `clone_bb9c091/`, `main_B/`, `clone_C/`, `exits.txt`, `run_fix2.sh`, `f4.py`, `tables.md`). New canonical outputs: `reports/pseudo_online/{summary,decisions}_ccnn_{5,6}class.csv`; logs `reports/logs/P24/pseudo_online_{5,6}class_{A,B}.log`. Full suite main tree `1569 passed in 895.87s`; docs test on the clone `35 passed`. Details and the per-subject old/new tables are in `06_verify.md` "Round 2 rerun".

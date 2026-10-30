@@ -5,7 +5,9 @@ Author: verifier
 Reads: 00_assignment.md (acceptance), 02_plan.md (acceptance, Run commands, Review additions V-1..V-8), 03_changes_data-signal.md, 03_changes_scribe.md, 05_run.md, the phase branch
 Clean checkout: `mas/state/scratch/clean_clone` @ bb9c0913624238310b8b7f6d7b543c18e495b624 (`git clone --no-hardlinks`, committed files only, empty stamps, `RAW_DIR` = the main raw folder, `NN_DEVICES="cpu cuda"`)
 
-Verdict: FAIL
+Verdict: PASS
+
+Round 1 verdict (cd708ac, superseded by the Round 2 rerun below): FAIL; its three reasons are kept unchanged below as the record.
 
 One acceptance sub-criterion is not met: acceptance 3, "within the stated tolerance for GPU paths", fails for the 6-class pseudo-online summary (reason 1). Everything else compared is exact or differs only in the ways listed under V-3 and the label/timing columns below. Numbers come from `mas/state/scratch/p24_make/compare_reports.csv`, `compare_npz.txt`, `hash_data.txt`, `make_all.log` and the stamps; nothing was fixed or re-run.
 
@@ -124,3 +126,68 @@ Not part of this verification (no new sources are cited in the Makefile or the r
 1. Acceptance 3, GPU part: `reports/pseudo_online/summary_ccnn_6class.csv` of the clone is outside the network tolerance of `mas/04_REFERENCE_RESULTS.md` (per subject +-5 pp, cohort mean +-3 pp) in two cells: S01 accuracy 45.0 against 35.0 (10.0 pp) and the cohort mean 78.0 against 74.0 (4.0 pp); S03 is at 5.0 pp (limit). The 5-class summary is inside tolerance (largest 2.5 pp per subject, 0.5 pp mean). All other GPU outputs agree exactly outside their time columns. I report the cells and do not interpret them.
 2. V-3: the extra `Normalization` column in the clone's `loso_warmup/{cohort,summary}.csv` is not on the expected NBS list. Its cause is stated above (commit 06cd42d, main files older); the shared columns are equal. This alone would not change the verdict.
 3. Tests in the clone: 4 failures of `test_cited_reports_paths_exist` (above). The test is written for the main tree, so on a regenerated tree it fails on paths that `make all` does not produce or places elsewhere. Not a defect of a document in the main tree; reported because the suite is not green on the clone.
+
+## Round 2 rerun (pseudo-online tags, fix round 2)
+
+Reads: `07_review.md` "Round 3 audit (fix round 2)" (8e333c6, PASS; binding items F-1..F-6), `03_changes_data-signal.md` and `04_tests.md` "Round 2 (fix)", decisions.md row afcd417.
+
+Head (F-2): `git rev-parse HEAD` = afcd417538dc311eda8118951d720d2073ed14ef on `phase/P24-documentation`. `git diff e2bd25d HEAD --stat -- scripts/benchmarks/pseudo_online.py src/` is empty (both in the main tree and in the clean checkout). Files changed between e2bd25d and HEAD outside `mas/`: `tests/test_p20_online.py` only (35bd278, tests); the rest are `mas/state/` documents (35bd278..afcd417: 32bd825, 7b17c52, 8e333c6, afcd417).
+
+Preserved first (F-1), `mas/state/scratch/p24_fix2/`: `p20_original/` (4 CSVs of the main-tree `reports/pseudo_online/` and `logs/pseudo_online_{5,6}class.log` copied from `reports/logs/P20/`), `clone_bb9c091/` (4 CSVs of the make-all clone), sha256 of the 10 files in `manifest.txt` (re-checked after the runs: `sha256sum -c` all OK). `reports/logs/P20/` was only read. After the runs: `manifest_after.txt` (sha256 of A, B and C outputs and logs).
+
+Commands (F-3), the Makefile p20 commands with the explicit subjects, run by `p24_fix2/run_fix2.sh` (no `--resume`; same `--raw-dir`; the recordings read only by the script): `python -m scripts.benchmarks.pseudo_online --subjects S01 S02 S03 S04 S05 --train-session OO --test-session mOO --model ccnn --window-sec 0.5 --stride-sec 0.25 --skip-sec 0.5 --threshold 0.6 --quality-source both --raw-dir <raw> --tag ccnn_5class` and the same with `--rest-class --tag ccnn_6class`. A: main tree, default out-dir `reports/pseudo_online/`, log `reports/logs/P24/pseudo_online_{5,6}class_A.log`. B: main tree, `--out-dir mas/state/scratch/p24_fix2/main_B`, log `..._B.log`. C: a separate clean `git clone --no-hardlinks` checkout at the same head (`p24_fix2/clone_C_checkout`), `--out-dir mas/state/scratch/p24_fix2/clone_C`, logs `p24_fix2/clone_C_{5,6}class.log` (outside any `reports/`; the make-all clone `clean_clone` was not touched).
+
+| Run | Exit | Elapsed |
+|---|---|---|
+| A 5-class | 0 | 35 s |
+| B 5-class | 0 | 34 s |
+| C 5-class | 0 | 34 s |
+| A 6-class | 0 | 69 s |
+| B 6-class | 0 | 73 s |
+| C 6-class | 0 | 71 s |
+
+(`p24_fix2/exits.txt`.) All six logs contain `device cuda, seed 42`.
+
+F-4 identity (`p24_fix2/f4.py`): for both tags and the pairs A-B, A-C, B-C: `summary_*.csv` equal on every column except `Seconds`; `decisions_*.csv` equal on every cell; the per-subject `val acc` / `best epoch` log lines equal (6 lines per log). Output: `F-4 ALL EQUAL`. No retry was made; each run was done once.
+
+F-5 per-subject values, read from `p24_fix2/p20_original/summary_ccnn_*.csv` (run 1) and `reports/pseudo_online/summary_ccnn_*.csv` (run 2). These are two runs of one seed (42) on the same code path, the first without cuDNN determinism flags; they are not a comparison of methods. The make-all clone values (bb9c091, also without flags) are in `clone_bb9c091/` and differ from both.
+
+5-class (`ccnn_5class`), accuracy %, false activations %, forced %, ITR bits/min; run 1 = P20 original (2026-10-28, no cuDNN determinism flags), run 2 = P24 rerun (deterministic cuDNN, same seed 42):
+
+| Subject | Acc run 1 | Acc run 2 | False act. run 1 | False act. run 2 | Forced run 1 | Forced run 2 | ITR run 1 | ITR run 2 |
+|---|---|---|---|---|---|---|---|---|
+| S01 | 60 | 60 | 52.5 | 57.5 | 32.5 | 32.5 | 10.923 | 10.968 |
+| S02 | 90 | 87.5 | 45 | 45 | 17.5 | 22.5 | 40.364 | 34.841 |
+| S03 | 97.5 | 97.5 | 20 | 20 | 0 | 0 | 71.632 | 71.632 |
+| S04 | 100 | 100 | 0 | 0 | 0 | 0 | 84.957 | 84.957 |
+| S05 | 97.5 | 97.5 | 20 | 20 | 0 | 0 | 73.091 | 73.091 |
+| Mean | 89 | 88.5 | 27.5 | 28.5 | 10 | 11 | 56.193 | 55.098 |
+
+6-class (`ccnn_6class`), accuracy %, false activations %, missed %, ITR bits/min; run 1 = P20 original (2026-10-28, no cuDNN determinism flags), run 2 = P24 rerun (deterministic cuDNN, same seed 42):
+
+| Subject | Acc run 1 | Acc run 2 | False act. run 1 | False act. run 2 | Missed run 1 | Missed run 2 | ITR run 1 | ITR run 2 |
+|---|---|---|---|---|---|---|---|---|
+| S01 | 35 | 40 | 17.5 | 17.5 | 50 | 45 | 2.6713 | 4.5101 |
+| S02 | 47.5 | 45 | 7.5 | 10 | 52.5 | 52.5 | 8.6382 | 6.9547 |
+| S03 | 92.5 | 95 | 0 | 0 | 7.5 | 5 | 59.705 | 61.801 |
+| S04 | 100 | 100 | 0 | 0 | 0 | 0 | 84.957 | 84.957 |
+| S05 | 95 | 97.5 | 0 | 0 | 5 | 2.5 | 66.832 | 68.445 |
+| Mean | 74 | 75.5 | 5 | 5.5 | 23 | 21 | 44.561 | 45.334 |
+
+Cohort means, run 2: 5-class Acc 88.5, ITR 55.0978, false act. 28.5; 6-class Acc 75.5, ITR 45.3336, false act. 5.5.
+
+F-6 tests. Full suite in the main tree at afcd417 (`p24_fix2/pytest_main_full.log`): `1569 passed, 22 warnings in 895.87s (0:14:55)` (CUDA available, so the CUDA identity test ran). `P24_DOCS_ROOT=<clean_clone> pytest tests/test_p24_docs.py` (`p24_fix2/pytest_docs_clone.log`): `35 passed in 0.07s` (the 4 failures of round 1 are gone).
+
+Human run requests: none. Anomalies: none.
+
+## Round 2 verdict
+
+Resolution of the round 1 reasons:
+
+1. Reason 1 (pseudo-online outside GPU tolerance): the cause is a missing cuDNN determinism flag in `pseudo_online.py` (fixed in e2bd25d, audited PASS in round 3). With the fix, three independent runs (A, B, C) are identical on every compared cell (F-4), so the script is deterministic for seed 42 on this GPU; the P20 values and the make-all clone values were non-reproducible draws and are replaced by run 2 per the round 3 ruling (item 1d). Resolved. The tolerance comparison against the P20 files is no longer the criterion; the identity A = B = C is.
+2. Reason 2 (`Normalization` column in `loso_warmup`): accepted as expected by the round 3 audit (item 3) and by decisions row afcd417 (V-3 list). Settled.
+3. Reason 3 (4 failures of `test_cited_reports_paths_exist` in the clone): settled by the round 3 audit (item 2: narrow rule for a make-all tree; `reports/diagnostics/` added to V-6) and by the afcd417 decisions row; the suite in the main tree passes (1569) and the docs test on the clone passes (35).
+
+Scope note: this rerun covers the two pseudo-online tags only. The other 22 phases of `make all` were run once at bb9c091 (above) and are not repeated; `src/` is unchanged since then (`git diff` empty for `src/`), and the fix touches `scripts/benchmarks/pseudo_online.py` and `tests/test_p20_online.py` only. The documents' pseudo-online numbers still hold the P20 values until the scribe re-copies them (S-1); that re-check is the final review's (S-6).
+
+Verdict: PASS
