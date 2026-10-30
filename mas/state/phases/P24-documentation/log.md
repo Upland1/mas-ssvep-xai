@@ -23,3 +23,4 @@
 | 8 make all finished | orchestrator | 2026-10-29 | DONE marker by 17:47, stamps p00–p23; verifier resumed for the V-1..V-8 comparison and 05_run.md/06_verify.md | 1 | V-1..V-8 | none | |
 | 8 Verify | verifier | 2026-10-29 | FAIL (cd708ac): pseudo-online 6-class outside GPU tolerance; doc test fails on clean clone; extra Normalization column; everything else exact | 2 | V-1..V-8 | none | fix round 2 (opus) |
 | 5 Fix round 2 | data-signal, synthetic-tester (opus) | 2026-10-29 | dispatched: pseudo_online.py determinism + test; test_p24_docs clean-clone mapping (V-2/V-6) | 2 | V-4, V-5 | none | |
+| 6 Fix round 2 tests | synthetic-tester (opus) | 2026-10-29 | 1d1f60d: cited-path rule (exists; clone-only V-6/V-2 mapping), synthetic rule test; main 53 passed, clone 35 passed; reports/diagnostics added to not-produced set (reviewer ruling) | 2 | V-2, V-6 | none | |
