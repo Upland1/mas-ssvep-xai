@@ -659,3 +659,8 @@ Closed (P25 close, 2026-10-30)
 
 Open (none changes a published number)
 - N1, N2 (test notes); Colab sections not run end to end on a T4; P17 C-d and C-e; the P22 `within_lda` label in the old main-tree CSVs; cohort-39 eegnet not re-run (G-3e); `reports/loso_w1` at 156 folds against 158 before.
+
+## v1.0.1 (2026-10-30)
+
+Fixed
+- `RESEARCH_LOG.md`, P25 close entry: the closed P21 sources defect is named as the `window_sweep_colab` folder instead of a `reports/` path, so the cited-path check `tests/test_p24_docs.py::test_cited_reports_paths_exist` passes (it failed on v1.0). No code, test or result changed.
