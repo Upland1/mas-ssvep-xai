@@ -19,3 +19,4 @@
 | 8 Fix round 1 rerun end | verifier | 2026-10-30 | driver DONE 00:53, all 17 steps rc=0 (c39_ccnn 5308 s); verifier resumed for G-5/G-6 checks, G-4 scoring, swap | 1 | G-0..G-7 | none | |
 | 8 Fix round 1 verify | verifier | 2026-10-30 | PASS (896288d): G-5 identical, G-6 changed, R-8 exact; G-4 confirmed 13/19; swap done; 2.33 GPU h local | 1 | G-0..G-7 | none | next: scribe S-1..S-6 |
 | 10 Scribe S-1..S-6 | scribe | 2026-10-30 | READY (ded1818, b5b2af1, f4a0103, 4d3f517): CCNN numbers re-copied; 42 claims re-tested, 7 flipped stated as flipped; sources defects P22/P11/P21 fixed by dated notes | 1 | CSV paths in 03_changes_scribe.md | none | next: results review |
+| 9 Results review | scientific-reviewer | 2026-10-30 | APPROVE (0e28c4f): acceptance met; R-8 exact; R-13 confirmed (six-draw range); number check clean; historical reports append-only; 6 accepted deviations copied to decisions.md | 1 | R-x, R-P5 | none (this review) | next: P25.md |
