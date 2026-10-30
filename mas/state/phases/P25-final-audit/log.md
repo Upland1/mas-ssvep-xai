@@ -8,3 +8,4 @@
 | 3 Research | orchestrator | 2026-10-29 | skipped (audit, no new method) | | | none | |
 | 4 Plan | orchestrator | 2026-10-29 | READY (auto); settled 1–8; verifier + reviewer in parallel, then scribe | | | none | |
 | 5–6 Build/Test | orchestrator | 2026-10-29 | skipped: no code changes, no builder rows | | | none | |
+| 7–8 Audit + verify | scientific-reviewer, verifier | 2026-10-29 | dispatched in parallel: leakage audit + module diff; suite on clean checkout + R-x table, autonomy and sources reports | 1 | | task 4 counts as an R11 consultation (verification) | |
