@@ -35,3 +35,30 @@ None.
 3. `reports/nn_sweep/summary.csv` (CCNN) and the R-8 table disagree on the CCNN parameter count; see 06_verify.md reason 1.
 
 ## Questions
+
+## Fix round 1 rerun (CCNN regeneration)
+
+Author: verifier. Binding items: `07_review.md` "Fix round 1 audit (CCNN)" G-0..G-7 (they replace the handoff's rerun plan). Code under test: CCNN fix 987742b; HEAD at start 463c793bcba5ade6c2c0b1bfaf107b3be511ac81 (`mas/state/scratch/p25_fix1/head.txt`). Later commits changed only documents: `git diff --stat 463c793 HEAD -- src scripts configs Makefile tests` is empty. `git status --porcelain -- src scripts configs Makefile` was empty at start and in every step log header (dirty count 0). Fold configs: `git_dirty` False in all 206 new network and classical fold files, `git_head` 81e32794 (the head at the LOSO invocations; src/scripts identical to 463c793).
+
+### Commands executed
+
+| # | Command | Start | Runtime | Exit | Log |
+|---|---|---|---|---|---|
+| G-0 | detached clean checkout at 463c793, `<main>/.venv/bin/python -m pytest tests/ -q -rs` | 2026-10-29T21:53:09-06:00 | 14 min 54 s | 0 failures | `mas/state/scratch/p25_fix1/g0_pytest.log` |
+| G-1 | `cp -a` of the six trees to `mas/state/scratch/p25_fix1/old/`, `sha256sum` manifest, `sha256sum -c` on the copies | 21:55 | seconds | 240 OK, 0 not OK | `old_manifest.sha256`, `old_manifest_copy.sha256` |
+| G-3 | `mas/state/scratch/p25_fix1/run_fix1.sh` (detached, stamped, resumable): nn_sweep (ccnn compact eegnet), pseudo-online 5/6 class and repeat of both, cohort-5 classical, networks (ccnn compact eegnet), classical again, seeds 43 and 44 (ccnn eegnet), cohort-39 classical, ccnn, classical again, G-4 | 2026-10-29T22:08:15-06:00 | to 2026-10-30T00:53:23-06:00 (wall 2 h 45 min; step sum 9907 s) | every step rc=0 | `reports/logs/P25/fix1_<step>.log`, `mas/state/scratch/p25_fix1/steps.txt`, marker `DONE` |
+| G-5/G-6 | `.venv/bin/python mas/state/scratch/p25_fix1/check_fix1.py` | after DONE | seconds | 0 (no G-5 failure) | `mas/state/scratch/p25_fix1/check_fix1.out` |
+| G-2 swap | `mv reports/<t> mas/state/scratch/p25_fix1/replaced/<t>; mv reports/<t>__p25fix1 reports/<t>` for the six trees | after checks | seconds | 0 | (console) |
+| G-7 | `find ... | sha256sum > new_manifest.sha256` | after swap | seconds | 238 files | `mas/state/scratch/p25_fix1/new_manifest.sha256` |
+
+Step runtimes (`steps.txt`): nn_sweep 975 s; po5 31 s; po6 81 s; po5_repeat 30 s; po6_repeat 63 s; c5_classical 12 s; c5_networks 1028 s; c5_classical2 6 s; seed43 428 s; seed44 440 s; c39_classical 488 s; c39_ccnn 5308 s; c39_classical2 18 s; g4_rs1..5 197, 202, 201, 202, 197 s. GPU steps sum to 8384 s = 2.33 h (`.venv/bin/python -I -c` over steps.txt), above `MAX_GPU_HOURS_PER_PHASE` 2 (`mas/state/config.yaml`). **Overrun stated:** the run was done locally, detached, under the standing authorisation for long local runs (decisions 2026-10-28/29, G-3). The cohort-39 eegnet run was not made (G-3e: only if asked); its 2 abandoned old folds are in `old/` only.
+
+### Produced files
+
+New canonical trees (swapped in): `reports/nn_sweep/`, `reports/pseudo_online/`, `reports/loso_w1_s01-s05/`, `reports/loso_w1_s01-s05_seed43/`, `reports/loso_w1_s01-s05_seed44/`, `reports/loso_w1/` (156 folds, 117 classical and 39 ccnn). Old trees: `mas/state/scratch/p25_fix1/old/` (copy, verified) and `mas/state/scratch/p25_fix1/replaced/` (the moved originals, identical to `old/` by `diff -rq` for nn_sweep and loso_w1). G-4 outputs: `reports/connectivity_comparison/*_diag_r13_rs{1..5}.csv`. Logs: `reports/logs/P25/fix1_*.log`. Manifests: `old_manifest.sha256`, `new_manifest.sha256`, `reports_other_before.sha256`, `reports_other_after_g3.sha256`.
+
+### Anomalies
+
+1. Two background wait loops (watching for the marker) were stopped by the session for low memory; the detached driver was not affected.
+2. `loso_w1` now has 156 folds against 158 before, because the 2 abandoned eegnet folds are not recreated (G-3e).
+3. `Folds` column drift in three `summary.csv` files and `Data source` / `Seconds` differences are the known P24 A-2 schema drift, reported as soft.

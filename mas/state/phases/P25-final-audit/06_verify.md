@@ -5,7 +5,9 @@ Author: verifier
 Reads: 00_assignment.md (acceptance), 02_plan.md (settled 1, 3, 4, 5; Run commands; Acceptance checks), 05_run.md, mas/state/decisions.md, the phase branch
 Clean checkout: `mas/state/scratch/verify/P25` @ 6490a6c (detached worktree of `phase/P25-final-audit`)
 
-Verdict: FAIL
+Round 1 verdict (superseded by "Fix round 1 rerun" at the end of this file): FAIL
+
+Verdict: PASS
 
 Scope: acceptance 1, 2, 4 and 5 of `02_plan.md`. Acceptance 3 (every split guarded) and 6 (module diff) belong to `07_review.md`; acceptance 7 (privacy scan of the net diff) is the orchestrator's gate step. The only commands I ran are in `05_run.md`. Nothing was fixed or interpreted beyond comparing numbers with the criteria.
 
@@ -127,3 +129,43 @@ Each consultation in B1 has an R11 trigger recorded in the phase report (after a
 ## Not covered
 
 Acceptance 3 and 6 (leakage audit, module diff): reviewer. Acceptance 7 (privacy scan of the net diff): orchestrator. The six skipped tests were not itemised (`-rs` was not given and the suite was not rerun).
+
+## Fix round 1 rerun (CCNN)
+
+Binding items: G-0..G-7 of `07_review.md` "Fix round 1 audit (CCNN)". Commands, runtimes and the GPU overrun statement are in `05_run.md` "Fix round 1 rerun". Evidence: `mas/state/scratch/p25_fix1/check_fix1.out`, `steps.txt`, manifests.
+
+| Item | Result | Evidence |
+|---|---|---|
+| G-0 suite, clean checkout at 463c793 | met: 1565 passed, 6 skipped (1 `test_p14_connectivity_comparison.py:139`, 5 `test_p24_docs.py:129`), 0 F/E | `g0_pytest.log` (progress characters; summary line suppressed by `addopts = -q`) |
+| G-1 preserve | met: 240 files copied, `sha256sum -c` 240 OK before any run | `old_manifest.sha256`, `old_manifest_copy.sha256` |
+| G-2 staging then swap | met: all six trees written to `reports/<name>__p25fix1/`, swapped after G-5/G-6 passed; file sets equal old vs new except loso_w1 folds 158 vs 156 | `check_fix1.out`, `mv` commands |
+| G-3 commands | met: all steps rc=0; cohort-39 classical then ccnn (5308 s), eegnet not run | `steps.txt` |
+| G-4 R-13 seed check | **Confirmed: 13 of 19 cells inside** (rule: confirmed at >= 10; refuted <= 6; inconclusive 7-9). 19 cells recomputed with |ours42 - R-13| > 0.05 (count 19 as required). Outside cells (6): coherence S02 10.91 Hz, S03 10.91, S05 24; wPLI S02 10.91, S02 24, S04 15 Hz. Signs of the outside cells: 2 below and 4 above the draws' range, so not one sign. Base-42 split-half CSVs unchanged (sha256 equal to the pre-run hashes) | `g4_base42_before_early.sha256`, `reports/connectivity_comparison/*_split_half_reliability_diag_r13_rs{1..5}.csv`; the scoring command was an inline Python over those CSVs (per-cell [min, max] of base 42 plus bases 1-5) |
+| G-5 must stay identical | met, 0 failures: non-ccnn rows EXACT in nn_sweep (summary, folds, predictions, confusion), cohort-5 (five methods: summary, folds, predictions, confusion, per_subject), both seed dirs (eegnet), cohort-39 (fbcca, lda, lda_subjnorm: 4 files plus per_subject); soft only: `Seconds`, `Data source`, `Folds` column. `reports/` outside the six targets: manifest identical before and after G-3 (1154 files, `diff` empty); the only additions afterwards are the 5 x 5 suffixed `*_diag_r13_rs*` G-4 CSVs (0 removed or changed) | `check_fix1.out`, `reports_other_before.sha256`, `reports_other_after_g3.sha256` |
+| G-6 must change | met: nn_sweep ccnn Params 27977 (S01, S03, S04) and 32309 (S02, S05); ccnn predictions differ from the old in all five trees; pseudo-online repeat identical in all non-Seconds columns and in both decisions files; ccnn degenerate folds 0 in cohort-5 and both seed dirs and 0 of 39 in cohort-39 (the nn_sweep folds file has no degenerate column); best epoch min/median/max: nn_sweep 8/29/93, cohort-5 29/39/60, seed43 24/41/60, seed44 27/55/64, cohort-39 7/30/78; Train >= Val for every subject row (5/5, 5/5, 5/5, 5/5, 39/39) | `check_fix1.out` |
+| G-7 close-out | met: `new_manifest.sha256` (238 files) written after the swap; old and new cohort means below | manifests |
+
+### ccnn numbers, old (pre-P25 layout, non-conforming) and new (for the scribe), CSV paths are the canonical ones
+
+| Tree (CSV `summary.csv` unless stated) | Old | New |
+|---|---|---|
+| `reports/nn_sweep/` 1 s within-subject, mean of 5 subjects (`.venv/bin/python` over the summary) | 91.25 (S01 80.29, S02 77.02, S03 99.24, S04 100.00, S05 99.71) | 90.53 (S01 75.59, S02 77.95, S03 99.85, S04 100.00, S05 99.26); eegnet 89.69 and compact_eegnet 92.08 unchanged |
+| `reports/loso_w1_s01-s05/` seed 42, Mean Acc / 2-tap | 86.17 / 88.31 | 85.88 / 87.25 (S01 65.29, S02 73.45, S03 93.34, S04 99.70, S05 97.64; smoothed 67.21, 76.40, 94.70, 99.85, 98.09) |
+| `reports/loso_w1_s01-s05_seed43/` | 85.36 / 87.06 | 83.45 / 85.24 (67.21, 63.66, 91.38, 99.85, 95.14) |
+| `reports/loso_w1_s01-s05_seed44/` | 86.58 / 88.52 | 85.32 / 87.27 (73.97, 65.53, 91.53, 99.70, 95.88) |
+| three-seed mean and range of cohort-5 Mean Acc | 86.04; 85.36-86.58 | 84.88; 83.45-85.88 (`.venv/bin/python -I -c "print(round((85.88+83.45+85.32)/3,2), round((86.17+85.36+86.58)/3,2))"` -> `84.88 86.04`) |
+| `reports/loso_w1/` 39 subjects, Mean Acc / 2-tap / SD | 71.58 / 73.55 / 18.92 | 72.08 / 73.91 / 19.53; ccnn above lda in 21 of 39 subjects (`check_fix1.out`) |
+| `reports/pseudo_online/summary_ccnn_5class.csv` mean Acc / Time / False act. / ITR | 88.50 / 1.655 / 28.5 / 55.10 | 90.5 / 1.524 / 29.5 / 58.04 (S01 72.5, S02 85.0, S03 95.0, S04 100.0, S05 100.0) |
+| `reports/pseudo_online/summary_ccnn_6class.csv` | 75.5 / 1.370 / 5.5 / 45.33 | 75.5 / 1.400 / 5.0 / 46.31 (S01 35.0, S02 50.0, S03 95.0, S04 100.0, S05 97.5) |
+
+Per-subject new rows for every tree are in `check_fix1.out` and the CSVs. The old pseudo-online values are the deterministic rerun of P24 A-4 (88.50 / 75.50). The scribe re-tests the CCNN claims (S-4); I make no reading.
+
+### Settled reasons of the first verdict
+
+1. **R-8 CCNN parameter count: settled.** The new `reports/nn_sweep/summary.csv` `Params` column is 27977 for 7-channel subjects and 32309 for 8-channel subjects, equal to R-8 (exact tolerance). Row W.
+2. **R-13: settled per the reviewer's ruling and G-4.** The 19 split-half cells are an accepted Monte Carlo deviation (reviewer-signed, decisions row 308a610); the pre-registered seed check is **confirmed (13 of 19 inside the per-cell range of six draws)**, so the wording "probable" is not needed. The pairwise magnitude count (10 against 6) is within the analogous band per the ruling. Row E, acceptance 4 met for R-13.
+3. **Sources defects (P22 `[23]`, P11 path)** stay with the scribe and do not block this verdict; they are listed in section C.
+
+Acceptance 4 ("every R-x row within tolerance or explained"): met after this round, with R-8 W and R-13 E. Acceptance 1, 2 and 5 are unchanged (met). Acceptance 2 note: the CCNN rows of the P24 rebuild evidence are superseded by this rerun; non-CCNN outputs stay covered by P24 and were re-confirmed EXACT here.
+
+Verdict: PASS
