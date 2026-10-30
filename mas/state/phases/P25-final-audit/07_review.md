@@ -367,3 +367,199 @@ Verdict: pending (after 06_verify.md)
 ## Sources spot-check
 
 ## Questions
+
+## Fix round 1 audit (CCNN)
+
+Scope: `03_changes_deep-learning.md` (Status READY, 1a848fa); the code diff, which landed in 987742b (a commit
+labelled `docs:`; shared-index accident, recorded in decisions.md 308a610 and the squash list); `mas/03_ROADMAP.md`
+P20 task 3; `mas/04_REFERENCE_RESULTS.md` R-8; decisions.md rows 160c2bc and 308a610. No file was changed by me
+except this section.
+
+### 1. Layout, tests, consumers
+
+**Layout: matches the roadmap, R-8 and the original exactly.**
+- Roadmap P20.3 `[real | imag] / T`: `spectrum` returns `torch.cat([z.real, z.imag], dim=-1).unsqueeze(1)`, one
+  map `(B, 1, C, 2·n_bins)`, real at `k`, imag at `n_bins + k` (`src/models/cnn/ccnn.py:43–46`). Spatial
+  Conv2d(1 → F, (C, 1)) and spectral Conv2d(F → F, (1, 10)), both with bias, BN/ReLU/Dropout after each, Linear on
+  `F·(2·n_bins − K + 1)` (lines 37–41).
+- R-8 count, instantiated (own):
+  `.venv/bin/python -c "...count(New(5,C,256,fs=256)), count(Old(5,C,256,fs=256))..."` (old class exec'd from
+  `git show 987742b^:src/models/cnn/ccnn.py`, nothing written) → `7 new 27977 old 14817`, `8 new 32309 old 17285`.
+  Both equal R-8 (27,977 / 32,309), exact tolerance. Old spectrum shape `(1, 2, 3, 189)`, new `(1, 1, 3, 378)`.
+- Count-equivalent alternative excluded: an interleaved `[r0, i0, r1, i1, …]` map has the same count, so the count
+  alone does not fix the layout. The roadmap notation and the block-position test do. R11 verification of the finished,
+  passing implementation (logged in `reference_access.log`): `git show fde4b5a:src/models/cnn/ccnn.py` in the
+  reference repo, lines 33, 39, 50–51 (read through `grep`/`sed`, no file opened in the tree): `nn.Conv2d(1, nf,
+  kernel_size=(n_channels, 1))`, `nn.Conv2d(nf, nf, kernel_size=(1, spectral_kernel))` (default bias), and
+  `torch.cat([z.real, z.imag], dim=-1)`: block concatenation, convolutions with bias. Same structure. The spectral
+  kernel crosses the real/imag junction at positions 180–197. The original does the same (its Linear width comes
+  from the same 369 positions), so this is by design, not a defect.
+- B004 scope: the bias-free rule is written for the first R-8 table ("every convolution followed by BatchNorm has
+  `bias=False` (EEGNet, Compact-CNN, ShallowConvNet …, DualBranchFusionCNN …)"). The Era-C table is "verified by
+  instantiating the original classes", and the original CCNN keeps conv biases. The ruling in decisions 160c2bc is
+  correct.
+
+**Tests (R6): known-answer, and they fail on the old code.**
+- `test_ccnn_parameter_count_matches_r8` pins 27,977 / 32,309, copied from R-8. That is an external answer, not one
+  derived from the code. Old code gives 14,817 / 17,285, so it fails.
+- `test_ccnn_single_map_real_then_imag_layout` uses a sine of amplitude A, whose answer is imag −A/2 at `n_bins + k`,
+  real ≈ 0 at `k`, `in_channels == 1`. It fails on the old shape `(B, 2, C, n_bins)`.
+- `test_ccnn_spectrum_known_answer` (cos: real A/2 at `k`) and the independent `test_ccnn_spectrum_bin_scaling_and_nfft`
+  (4 parametrised cases, shape assertion) also fail on the old layout. They keep their analytic answers.
+- `test_ccnn_shape_nfft_bins_and_params` uses a closed formula, so it is a consistency check, not an independent
+  answer. The R-8 pin covers that.
+- Own run: `.venv/bin/python -m pytest -p no:cacheprovider -q tests/test_p20_networks.py
+  tests/test_p20_independent_known_answer.py -k ccnn` → 12 passed. I did not re-verify the full-suite claim (1571
+  passed). The verifier's clean-checkout suite run binds (G-0).
+
+**Consumers.** `git grep -i ccnn -- src scripts Makefile notebooks` shows that `CCNN` is built only in
+`src/models/cnn/training.py:50–51` (`model_factory`). That factory is reached by `benchmark_nn_sweep`,
+`benchmark_loso` and `pseudo_online`. None of them reads `spectrum`, the input shape or a parameter count, except the
+nn_sweep `Params` column, which will change (G-6).
+- `benchmark_window_sweep.py` `cnn` = `compact_eegnet` only (`CLI_METHODS`, line 73). The handoff's claim that it is
+  unaffected holds.
+- `simulate_dynamic_stopping` reads only `reports/window_sweep/predictions.csv` (Makefile 270, 274). The claim that it
+  is unaffected holds.
+- The GNN harnesses (P22–P23) have no CCNN hit.
+- `bb9c091..HEAD` changes only `ccnn.py` and `pseudo_online.py` (+3) in src/scripts/configs/Makefile
+  (`git diff --stat`). So every non-CCNN output stays covered by the P24 make-all reproduction.
+
+**The handoff's run plan is wrong in three places. Do not follow it. The G-items below replace it.**
+1. `benchmark_nn_sweep` is **not resumable and has no `--overwrite`** (`--help` flags: config, data-root, device,
+   filter-mode, max-epochs, max-folds, models, no-augment, out-dir, patience, repeats, seed, stride, stride-sec,
+   subjects, windows). `main` writes `summary.csv`, `folds.csv`, `predictions.csv` and `confusion.csv` from this
+   invocation's rows only (`benchmark_nn_sweep.py:204–211`). So `--models ccnn` into `reports/nn_sweep` would
+   **delete the compact_eegnet and eegnet rows**.
+2. Deleting only the CCNN folds and rerunning `--methods ccnn` into an existing LOSO dir **silently drops every
+   other method's rows**. The P21 folds were saved before 271a1f4 (P23) and lack the keys `n_windows_train`,
+   `build_git_commits`, `config_hash` and `git_dirty`. Saved key list of `reports/loso_w1_s01-s05/folds/lda__test-S01.npz`
+   (own): channels, channels_mode, classes, cohort, data_root, fs, git_head, hyper, method, n_windows_test, quality,
+   seed, stride_sec, test_subject, train_subjects, trial_offset, window_sec. `config_diff` is therefore non-empty for
+   every old fold. `build_summary` leaves non-requested methods out with a `[warn]` (`benchmark_loso.py:626–631`), and
+   the rewritten `summary.csv` of `reports/loso_w1` would hold ccnn rows only. The fold heads confirm the vintage:
+   s01-s05 dirs `e349656` (all methods), `loso_w1` `f0fa371` (classical) and `f0fa371`/`da92a47` (ccnn).
+3. Old folds of a *requested* method are not "[skip]"-reused. `check_fold` raises SystemExit ("use a new --out-dir"),
+   so stale reuse is impossible at this HEAD. The real hazard is item 2.
+
+### 2. Binding run items for the verifier
+
+Every run starts from the main working tree at the fix HEAD, with `git status --porcelain -- src scripts configs
+Makefile` empty. Record that HEAD and `git rev-parse HEAD` in `05_run.md`. New fold configs must show
+`git_dirty: false` and that head. New logs go to `reports/logs/P25/fix1_<name>.log`. P20 and P21 logs are never
+appended to: the documents cite them as the record of the old runs.
+
+- **G-0 Suite.** Run `pytest tests/ -q` once at the fix HEAD from a clean checkout and record the pass/skip counts.
+  Nothing starts if any test fails.
+- **G-1 Preserve before running.** Copy (`cp -a`, no move yet) into `mas/state/scratch/p25_fix1/old/` the dirs
+  `reports/nn_sweep/`, `reports/pseudo_online/` (the 4 ccnn CSVs), `reports/loso_w1_s01-s05/`,
+  `reports/loso_w1_s01-s05_seed43/`, `reports/loso_w1_s01-s05_seed44/` and `reports/loso_w1/`, all `folds/*.npz`
+  included (the 39 old ccnn folds and the 2 abandoned eegnet folds too). Write `mas/state/scratch/p25_fix1/old_manifest.sha256`
+  (`sha256sum` of every original file, relative paths). Then run `sha256sum -c` on the copies, which must report all
+  OK. The rest of the procedure starts only after that.
+- **G-2 Fresh staging out-dirs, then swap.** Write every rerun to a new sibling dir `reports/<name>__p25fix1/`.
+  Never write to a canonical dir, never resume into an old fold set, never delete single fold files. The documents
+  cite the canonical paths. The out-dir is not recorded in fold configs or `loso_config.json` (keys checked:
+  cohort, channels_mode, channels, window_sec, stride_sec, seed, trial_offset, source, plus git/folds keys), so
+  renaming is safe. After G-5 and G-6 pass for a dir, move the canonical dir aside, which is already copied in G-1,
+  and rename the staging dir to the canonical name. If a check fails, do not swap that dir. Stop and report.
+- **G-3 Commands** (same recipes as the Makefile and P21 05_run.md, with only the out-dir changed):
+  (a) nn_sweep: Makefile 269 with **all three models** `--models ccnn compact eegnet`. That takes about 944 s
+      (`reports/logs/P20/nn_sweep.log`).
+  (b) pseudo-online: Makefile 271 and 272 (`ccnn_5class`, `ccnn_6class`), `--out-dir reports/pseudo_online__p25fix1`.
+      Then run both tags a second time into `mas/state/scratch/p25_fix1/po_repeat/`. This is a determinism check.
+  (c) cohort 5: Makefile 280, 282 and 283 into `reports/loso_w1_s01-s05__p25fix1`, which covers all six methods.
+  (d) seeds: Makefile 284 for k = 43 and 44 into `reports/loso_w1_s01-s05_seed<k>__p25fix1`.
+  (e) cohort 39: Makefile 306 (classical, CPU, about 589 s) and then the P21 05_run.md line 116 ccnn command, both
+      into `reports/loso_w1__p25fix1`. Run eegnet only if Sebastian asks: the 2 old eegnet folds were an abandoned
+      partial run, they are in no CSV, and they are preserved in G-1.
+  Pre-flight for (e): `data/processed_continuous/w1_s0.25/` holds 39 `S*` folders (own count: 39). Estimated GPU
+  time: `.venv/bin/python -I -c "g=944+33+63+773.66+412.21+438.26+5126; print(g, round(g/3600,2))"` → `7790.13 2.16`
+  h. That is above `MAX_GPU_HOURS_PER_PHASE` 2. Run it locally and detached, under the standing local-run
+  authorisation (decisions 160c2bc), and state the overrun in `05_run.md`. CPU parts take about 10 min.
+- **G-4 Pre-registered R-13 seed check** (P25 R-13 ruling §3; ordered by decisions 308a610). Run
+  `for B in 1 2 3 4 5; do .venv/bin/python -m scripts.connectivity.comparison.test_connectivity_frequency_differences
+  --methods coherence wpli --random-state $B --permutations 50 --n-jobs -1 --out-suffix diag_r13_rs$B; done`
+  (CPU, about 15 min). It writes only suffixed outputs. Before the runs, check `git status --porcelain reports/` for
+  unsuffixed files, and check the base-42 split-half CSVs against the G-1-style hash taken first.
+  - The 19 cells are those with |ours₄₂ − R-13| > 0.05 in `coherence_split_half_reliability.csv` and
+    `wpli_split_half_reliability.csv`. Recompute them with a shown command; the count must be 19.
+  - For each cell, take [min, max] over the 6 draws (base 42 plus 1–5). Count the cells whose R-13 value lies inside.
+  - **Confirmed** if ≥ 10 of 19. **Refuted** if ≤ 6 of 19 and the outside cells share one sign. **Inconclusive** at
+    7–9, in which case the deviation stays accepted as "probable".
+  - Read only the split-half CSVs; the 50-permutation p-values are not used.
+  - If refuted, P14 D-4 reopens with connectivity-stats, and acceptance 4 stays open.
+- **G-5 Must stay identical** (compare like `mas/state/scratch/p24_make/compare.py`: keyed rows, numeric columns, and
+  `Seconds` / `Data source` / `Folds` schema drift reported but not failing, per P24 A-2):
+  - non-CCNN rows of nn_sweep `summary.csv`, `folds.csv` (except Seconds), `predictions.csv` and `confusion.csv`
+    (compact_eegnet, eegnet): EXACT. P24 reproduced all of them EXACT on this machine (`compare_reports.csv`).
+  - fbcca, lda, lda_subjnorm, compact_eegnet and eegnet rows of the cohort-5 dir, and eegnet rows of both seed dirs:
+    EXACT in summary, per_subject, predictions and confusion.
+  - fbcca, lda and lda_subjnorm rows of cohort 39: EXACT. This tree was not in the P24 comparison, so a difference
+    here is a new finding. Stop and report; do not swap.
+  - Also identical: every other file under `reports/`. Take a sha256 manifest of `reports/` excluding the six
+    targets before G-3 and after G-3.
+- **G-6 Must change, with sanity checks.**
+  - nn_sweep `Params` for ccnn equals 27977 (7-channel subjects) and 32309 (8-channel subjects).
+  - ccnn rows differ from the old ones. Identical ccnn predictions would mean the old model ran.
+  - pseudo-online repeat (G-3b): all non-`Seconds` columns EXACT between the two runs.
+  - Report `degenerate` ccnn folds per dir (`folds.csv`), the best-epoch min/median/max, and Train ≥ Val per subject.
+  - List every ccnn number in a table with its CSV path, for the scribe.
+- **G-7 Close-out.** Write `mas/state/scratch/p25_fix1/new_manifest.sha256` for the swapped canonical dirs. Record
+  in `05_run.md` and `06_verify.md`: old and new cohort means for ccnn per tree, both manifests' paths, and the
+  G-4 count and reading.
+
+### 3. Binding items for the scribe
+
+- **S-1 Label.** "CCNN spec deviation, fixed in P25 (fix round 1, code in 987742b): from P20 to P24 the CCNN stacked
+  [real, imag] as two input maps with bias-free convolutions (14,817 / 17,285 parameters). The roadmap and R-8
+  require one `[real | imag] / T` map with conv biases (27,977 / 32,309). Every CCNN value produced before P25 is
+  non-conforming and superseded." Do not call it a "bug demo" or "legacy": no era-matrix row prescribes it. Wherever
+  an old value is mentioned, it carries "(pre-P25 layout, non-conforming)". Results are not comparable seed by seed
+  (handoff, open points).
+- **S-2 Current-state documents: update in place with the G-6 values, plus one footnote of S-1.**
+  - `README.md` lines 191, 206, 233, 236 and 241 (cohort-5 ccnn and three-seed range, cohort-39 ccnn 71.58, 1 s
+    networks, pseudo-online mean and per-subject). Line 264 "reference network R-8" is now true; keep it.
+  - `docs/report/v2/report.md` lines 33 and 215. Add the CCNN parameter count if §2 lists counts; check every
+    nn_sweep or loso table that the report cites.
+  - `docs/progress_report/progress_report.md` lines 131 and 149.
+  - `docs/infographic/methodology_infographic.svg` lines 124–125 and 163, plus every pseudo-online number in it.
+  - `notebooks/loso_colab.ipynb` "ccnn about 2.2 h": recompute it from the new per-fold `Seconds`, or mark it as a
+    pre-fix estimate.
+- **S-3 Historical records: append dated notes only, no rewriting.**
+  - `RESEARCH_LOG.md`: a new P25 entry with the old and new values side by side. Each old P20/P21/P24 paragraph
+    that quotes ccnn (lines 506, 510, 520, 522, 528, 558–560) gets a one-line dated pointer.
+  - `CHANGELOG.md`: a P25 "Fixed" entry, with pointers at 495, 497 and 523.
+  - `mas/state/reports/P20.md` (187, 207, 209, 315, 317, 345), `P21.md` (339, 345, 351, 365, 375, 116),
+    `P23.md` (214, 220, 325) and `P24.md` (pseudo-online values): appended dated notes only.
+- **S-4 Re-test every claim made with CCNN, using the new values and the rules the claim was made under.** Report any
+  claim that flips as **flipped**. Do not reword it to hold.
+  - P20 P4: every model > 20 %; **ccnn ≥ eegnet on the cohort mean**; Train ≥ Val for every model.
+  - P20 pairwise ccnn − eegnet and ccnn − compact_eegnet: "not distinguishable" under R-P5 (≥ 3 pp and ≥ 4 of 5
+    signs). P20 Q2 "which 1 s network performs best".
+  - P20 P6 (a), (b) and (c) on the new pseudo-online CSVs, including the S04 floor note.
+  - P21 P2 networks: LOSO below within on the 3 matched subjects, against the new nn_sweep ccnn.
+  - P21 P4: 0 degenerate ccnn folds in each cohort-5 seed and 0 of 39.
+  - P21 ccnn − lda over three seeds (−1.57 pp), and "tie inside the per-subject seed range".
+  - P21 cohort-39 ccnn − lda (−0.96 pp) and "above lda in 19 of 39".
+  - P21 C-4, and "no network ranking" (keep it).
+  - P23 "GNN per-seed cohort means above the ccnn seed mean (86.04)", the table row at 214, and the ccnn smoothed
+    87.96.
+  - README and progress report "three-seed range 85.36–86.58".
+  - P25.md states each re-test result with its CSV.
+- **S-5 R-13.** P25.md uses the G-4 reading: confirmed, inconclusive with "probable", or refuted with acceptance 4
+  open. It does not reuse the "probable" wording from the R-13 ruling if G-4 confirmed.
+- **S-6 Sources.** P25.md lists this review's R11 consultation (reference `fde4b5a:src/models/cnn/ccnn.py`, verify a
+  finished implementation) and the deep-learning statement "reference not opened". Commit 987742b (mislabelled
+  `docs:`, carrying the fix) is cited as the CCNN fix commit and stays on the squash list.
+
+### Era matrix
+
+| Rule | Status |
+|---|---|
+| R2, R1 (in-fold, grouped CV) | PASS: the fix touches only the model; splits and fits are unchanged (`git diff bb9c091 HEAD` above). |
+| R6 layout verified | PASS: the single-map position test and the R-8 pin both fail on the old code. |
+| R9 per-subject reporting with source | Binding via S-2 to S-4: per-subject rows for every regenerated tree. |
+| R10, R11 | PASS: the deep-learning agent did not open the reference. My consultation came after a finished, passing implementation and is listed (S-6). |
+| fs from metadata | PASS: `fs` comes from `model_factory(..., fs)`; no literal was added. |
+
+Verdict: PASS
