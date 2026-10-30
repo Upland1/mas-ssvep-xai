@@ -21,3 +21,4 @@
 | 8 make all rerun | verifier | 2026-10-29 | fresh clone at bb9c091, started 08:14:07, PID 889269, torch threads 12, NN_DEVICES "cpu cuda"; expected ≈ 15:30 | 1 | V-1..V-8 | none | |
 | 8 make all (in progress) | orchestrator | 2026-10-29 | laptop suspended mid-run, resumed; process alive, p00–p17 stamped at 14:21, p18 running; watcher restarted after a low-memory reap; wall time includes the suspend (V-8 note) | 1 | V-8 | none | |
 | 8 make all finished | orchestrator | 2026-10-29 | DONE marker by 17:47, stamps p00–p23; verifier resumed for the V-1..V-8 comparison and 05_run.md/06_verify.md | 1 | V-1..V-8 | none | |
+| 8 Verify | verifier | 2026-10-29 | FAIL (cd708ac): pseudo-online 6-class outside GPU tolerance; doc test fails on clean clone; extra Normalization column; everything else exact | 2 | V-1..V-8 | none | fix round 2 (opus) |
