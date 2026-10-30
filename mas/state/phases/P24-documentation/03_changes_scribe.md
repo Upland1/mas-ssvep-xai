@@ -1,6 +1,6 @@
 # P24 · 03 · Changes — scribe
 
-Status: READY (documents, fix round 1 applied; see "Fix round 1". The test file `tests/test_p24_docs.py` is owned by the test agent)
+Status: READY (documents; fix rounds 1 and 2 applied; round 2 is the last section, "Round 2 (pseudo-online re-copy)")
 Author: scribe
 Reads: 00_assignment.md, 01_brief.md (not re-read in this run), 02_plan.md (settled 1–8, work split row 2, tests), 03_changes_data-signal.md (targets, runtime table), mas/03_ROADMAP.md P24, mas/CITING.md, mas/01_DATA_SPEC.md §3 and §6, mas/04_REFERENCE_RESULTS.md (all), mas/state/decisions.md (all rows), mas/state/blockers/B001–B007 (all), README.md (before), RESEARCH_LOG.md (before, all 528 lines), docs/report/v1/report.md (all), docs/report/v1/methodology_infographic_v1.svg (head), CHANGELOG.md (not read), reports/*.csv listed under "Numbers" (opened through a read-only script), Makefile (targets and headers), scripts/**/*.py (argparse options and docstrings read through `ast`; no script was run, no recording was read), mas/state/reports/P23.md (header only), and the phase records of P00–P22 through RESEARCH_LOG.md and decisions.md (see "Not opened").
 Branch: phase/P24-documentation
@@ -133,3 +133,73 @@ Wording items N1–N4 (review round 2, a3b3c6e): progress §2 row a′t says "re
 
 ## Questions
 <!-- receivers append: ACK <agent> <YYYY-MM-DD>, then questions; answers appended, never deleted -->
+
+## Round 2 (pseudo-online re-copy)
+
+Reads: `07_review.md` "Round 3 audit (fix round 2)", binding items S-1 to S-5; `06_verify.md` "Round 2 rerun" (Verdict PASS, head afcd417, F-4 identity); `reports/pseudo_online/summary_ccnn_{5class,6class}.csv` and `decisions_ccnn_{5class,6class}.csv`; `reports/logs/P24/pseudo_online_{5,6}class_{A,B}.log`; `reports/logs/P20/pseudo_online_{5,6}class.log` (device line only); `mas/state/scratch/p24_fix2/p20_original/summary_ccnn_{5,6}class.csv` (copies of the P20 CSVs, Mean rows); `scripts/benchmarks/pseudo_online.py` lines 76, 204–265 and 283. Not read: the raw recordings folder, the reference repository. The F-4 identity was rechecked by the scribe with `mas/state/scratch/p24_fix2/scribe_r2_f4.py` (output `ALL EQUAL`: summary columns except `Seconds` and decision cells equal for A = B, A = C and B = C, both tags).
+
+### Files
+
+| Path | NEW / MODIFIED | Change |
+|---|---|---|
+| `README.md` | MODIFIED | §3.7 pseudo-online paragraph replaced with the P24 values and the label; per-subject line re-copied; "absorbs" sentence replaced by counts; `loso-all` row now also lists `scripts/diagnostics/network_seed_spread.py` and `reports/diagnostics/` (S-5) |
+| `RESEARCH_LOG.md` | MODIFIED | P20 entry: 89.00 / 74.00 labelled as the original run without cuDNN determinism flags, not reproducible, with the log paths (S-3); NEW "### P24" entry before "## Status at the end of P23" with the new values and the F-4 identity (S-3); Sources item 12 adds the decision CSVs and the pseudo-online logs |
+| `CHANGELOG.md` | MODIFIED | P20 bullet (line 497) labelled and the P24 rerun values added; found by the "any other hit" search of S-1, not in its list |
+| `docs/report/v2/report.md` | MODIFIED | §3.7 pseudo-online paragraph (line 215) |
+| `docs/progress_report/progress_report.md` | MODIFIED | §7 "Result" paragraph (line 131) |
+| `docs/infographic/methodology_infographic.svg` | MODIFIED | pseudo-online box 88.50 % and "75.50 % with six classes"; dagger in the box title; two footnote lines (label and CSV paths) at the foot of the Sources box; parses as XML |
+| `mas/state/reports/P20.md` | MODIFIED | "Note (P24, 2026-10-29)" appended at the end (S-4); the diff has 2 added lines and 0 removed |
+| `mas/state/phases/P24-documentation/03_changes_scribe.md` | MODIFIED | status line and this section |
+| `mas/state/scratch/p24_fix2/scribe_r2_decomp.py`, `scribe_r2_itr.py`, `scribe_r2_f4.py` | NEW (scratch, git-ignored) | checks behind the derived values below |
+
+### Numbers and their paths
+
+New, `reports/pseudo_online/summary_ccnn_5class.csv` (Mean row): accuracy 88.5, false activations 28.5, forced 11, ITR 55.0978 bits/min. Per subject S01–S05: accuracy 60, 87.5, 97.5, 100, 97.5; false activations 57.5, 45, 20, 0, 20; ITR 10.9681, 34.8407, 71.6323, 84.9567, 73.0909.
+
+New, `reports/pseudo_online/summary_ccnn_6class.csv` (Mean row): accuracy 75.5, missed 21, false activations 5.5, ITR 45.3336 bits/min. Per subject: accuracy 40, 45, 95, 100, 97.5; missed 45, 52.5, 5, 0, 2.5; false activations 17.5, 10, 0, 0, 0; ITR 4.5101, 6.9547, 61.8015, 84.9567, 68.4453.
+
+P20 original, `mas/state/scratch/p24_fix2/p20_original/summary_ccnn_{5,6}class.csv` (Mean row; logs `reports/logs/P20/pseudo_online_{5,6}class.log`): 5 classes accuracy 89, false activations 27.5, ITR 56.1934; 6 classes accuracy 74, missed 23, false activations 5, ITR 44.5606. Used only in the labelled P20 passages (RESEARCH_LOG P20 entry and note, CHANGELOG, P20.md note).
+
+Decision counts, `reports/pseudo_online/decisions_ccnn_{5class,6class}.csv`, from `scribe_r2_decomp.py` (400 rows per tag, 200 stimulus and 200 rest, matched on subject, period, onset): stimulus periods correct with five classes and not with six: lost to missed 10 (S01), 17 (S02), 2 (S03), 0 (S04), 1 (S05); lost to wrong class 2 (S01); gained 4, 0, 1, 0, 1. Cohort correct 177 of 200 (five) and 151 of 200 (six). Missed with six classes 18, 21, 2, 0, 1 (total 42). Rest-period false activations with five classes 23, 18, 8, 0, 8 (57); of these, 16, 14, 8, 0, 8 (46) do not occur with six classes; new with six classes 0.
+
+Derived values (each with its command, run from the repository root):
+
+| Value | Command | Output |
+|---|---|---|
+| 30 missed of 32 lost; 27 in S01 and S02; 26 net | `.venv/bin/python -c "print(10+17+2+0+1, 10+17+2+0+1+2, 10+17, 177-151)"` | 30 32 27 26 (lost 30 missed + 2 wrong = 32; net 177 − 151 = 26) |
+| 46 of 57 removed | `.venv/bin/python -c "print(16+14+8+0+8, 23+18+8+0+8)"` | 46 57 |
+| 39 of 42 missed in S01 and S02 | `.venv/bin/python -c "print(18+21, 18+21+2+0+1)"` | 39 42 |
+| ITR recomputed with N = 5 | `.venv/bin/python mas/state/scratch/p24_fix2/scribe_r2_itr.py` | max abs difference to the CSV 0.000177 bits/min (Time column rounded); S01 six-class with N = 6 would be 6.5975, CSV 4.5101 |
+| Mean of per-subject ITR | same script | 5 classes 55.09774, 6 classes 45.33366 (CSV Mean 55.0978, 45.3336) |
+
+### S-1 claim check (new CSVs and decisions)
+
+| Claim | Old wording | Evidence | Ruling |
+|---|---|---|---|
+| 6-class drop is missed periods in S01 and S02 | "missed stimulus periods in S01 (50.00 %) and S02 (52.50 %)" | Missed S01 45.0 %, S02 52.5 % (summary_ccnn_6class.csv); 30 of 32 lost periods are missed; 27 in S01 and S02 (decisions CSVs) | Kept with new values |
+| Rest class absorbs false activations | "the rest class absorbs false activations" | 46 of 57 five-class false activations do not occur with six classes; none new. The output files have no rest-class probability column, so the mechanism is not measured | Reworded to the counts; mechanism not claimed |
+| N = 5 ITR | "the 6-class ITR uses N = 5 (44.56 bits/min)" | `scripts/benchmarks/pseudo_online.py` line 283 passes `len(TARGETS)` (line 76 = 5 targets) for both tags; recomputation matches the CSVs (see table above) | Kept with 45.3336 bits/min |
+| Two runs, not a before/after pair | same | Different class sets | Kept; no P24 − P20 difference stated |
+
+### S-2 label
+
+One label sentence next to the numbers in README §3.7, report v2 §3.7, progress §7, the SVG (footnote, dagger), RESEARCH_LOG P24 and P20 entries, CHANGELOG and the P20 note: P24 rerun with deterministic cuDNN (2026-10-29, code at afcd417), seed 42 only; the P20 run (2026-10-28) had no determinism flags and gave one non-reproducible draw. No "improved" or "changed" wording; no P24 − P20 difference presented as an effect.
+
+### S-3, S-4, S-5
+
+- S-3: RESEARCH_LOG P20 entry keeps 89.00 / 74.00 labelled, with `reports/logs/P20/pseudo_online_{5class,6class}.log`; the P24 entry gives 88.50 / 75.50 and the F-4 identity (main A, B and clean checkout C).
+- S-4: `mas/state/reports/P20.md`, "Note (P24, 2026-10-29)" appended; covers the missing determinism flags, fix e2bd25d, old and new means for both tags, and the P24 record (06_verify.md round 2 and the RESEARCH_LOG P24 entry). The P24 phase report is not written yet, so the note does not cite it.
+- S-5: README `loso-all` row lists `scripts/diagnostics/network_seed_spread.py` (outside `all`, standalone, `reports/diagnostics/`).
+
+### Checks
+
+- `.venv/bin/python -m pytest tests/test_p24_docs.py -q -p no:cacheprovider`: exit 0, no failures (the -q summary line is not printed in this environment; 35 items collected).
+- SVG parses as XML (`xml.etree.ElementTree`).
+- Privacy scan (guard term pattern, case-insensitive) on the added lines of the diff and of this file: recorded in the commit step.
+- No file under `reports/` or `reports/logs/` edited; no access to the reference repository; no raw recording read.
+
+### Open for the orchestrator
+
+1. The P24 phase report (`mas/state/reports/P24.md`) is not written; the RESEARCH_LOG P24 entry covers the pseudo-online values only. CHANGELOG has no P24 section yet.
+2. `docs/report/v2/report.md` line 254 ("the rest class absorbing weak responses") refers to the offline six-class confusion matrix (Table 4), not to the pseudo-online run; not changed in this round.
+3. The P20 note re-checks the P20 readings only through the means; the P1–P6 directions of P20 are not re-read against the P24 values.

@@ -494,7 +494,7 @@ Result
 - cnn (compact_eegnet) at 4 s: 83.10 %, driven by S02 and S01. Two S02 folds at each endpoint restored an early-stopping state from epoch 1–3 (single repeat) [10].
 - 1 s networks: ccnn 91.25 %, compact_eegnet 92.08 %, eegnet 89.69 %; not distinguishable [12].
 - Dynamic stopping: lda cohort ITR 61.53 bits/min at 0.5 s (in-sample threshold 0.70) against 60.23 for the time-matched window; per-subject split mixed [13].
-- Pseudo-online, OO → mOO, ccnn, 0.5 s window: 5 classes 89.00 %, 6 classes 74.00 %; false activations 27.5 % → 5.0 % [14].
+- Pseudo-online, OO → mOO, ccnn, 0.5 s window. Original P20 run, without cuDNN determinism flags (not reproducible; `reports/logs/P20/pseudo_online_{5,6}class.log`): 5 classes 89.00 %, 6 classes 74.00 %; false activations 27.5 % → 5.0 % [14]. P24 rerun, deterministic cuDNN (2026-10-29, code at afcd417, seed 42; `reports/logs/P24/pseudo_online_{5,6}class_{A,B}.log`): 5 classes 88.50 %, 6 classes 75.50 %; false activations 28.5 % → 5.5 % [14].
 
 Review
 - Pre-run audit PASS (`db474b6`), no code fix. Results review ACCEPT (`1ec3c01`): D-1 to D-6 and C-1 to C-5 in the report.

@@ -233,13 +233,12 @@ Window-level ITR is highest at 0.5 s for every method; accuracy rises with lengt
 which is driven by S02 (early-stopping failures in single-repeat folds, §9). One-second networks: ccnn 91.25, compact_eegnet
 92.08, eegnet 89.69 %, a single repeat; all differences below 3 pp, not distinguishable.
 
-Pseudo-online (`ccnn`, 0.5 s windows; trained on OO, replayed on mOO as a causal stream): 89.00 % accuracy and 27.5 % false activations with five
-classes; 74.00 % and 5.0 % with six classes (the rest class absorbs false activations; two runs, not a before/after pair).
+Pseudo-online (`ccnn`, 0.5 s windows; trained on OO, replayed on mOO as a causal stream), cohort means: five classes 88.50 % accuracy and 28.5 % false activations (`reports/pseudo_online/summary_ccnn_5class.csv`); six classes 75.50 % accuracy, 21.00 % missed and 5.5 % false activations (`reports/pseudo_online/summary_ccnn_6class.csv`). These values come from the P24 rerun with deterministic cuDNN (2026-10-29, code at afcd417), seed 42 only; the P20 run (2026-10-28) had no determinism flags and gave one non-reproducible draw. The two runs have different class sets, so they are not a before/after pair. The drop from five to six classes is mostly missed stimulus periods (30 of the 32 periods correct with five classes and not with six, 27 of them in S01 and S02), and of the 57 five-class false activations on rest periods, 46 do not occur with six classes and none is new (`reports/pseudo_online/decisions_ccnn_{5class,6class}.csv`).
 Dynamic stopping: LDA reaches 61.53 bits/min at 0.5 s (`reports/dynamic_stopping/best_threshold.csv`) against 60.23 for the time-matched single window (`mas/state/reports/P20.md`; thresholds chosen in-sample, descriptive).
 
 **Per-subject window sweep** (`reports/window_sweep/summary.csv`, accuracy %, continuous build, five stimulus classes): LDA 0.5 / 1.0 / 2.0 / 4.0 s: S01 64.26 / 75.88 / 87.58 / 95.00; S02 60.66 / 77.36 / 90.68 / 95.16; S03 90.50 / 97.31 / 99.88 / 100.00; S04 98.28 / 99.79 / 100.00 / 100.00; S05 95.31 / 99.09 / 100.00 / 100.00. `compact_eegnet` 0.5 / 1.0 / 2.0 / 4.0 s: S01 69.87 / 84.12 / 89.42 / 77.00; S02 42.96 / 77.48 / 89.32 / 39.56; S03 93.42 / 98.94 / 98.80 / 98.92; S04 98.93 / 99.85 / 100.00 / 100.00; S05 98.55 / 100.00 / 100.00 / 100.00. The S02 values of `compact_eegnet` at 0.5 and 4 s are the early-stopping failures described above.
 
-**Per-subject pseudo-online** (`ccnn`, 0.5 s windows; `reports/pseudo_online/summary_ccnn_{5class,6class}.csv`): five classes S01–S05, accuracy 60.00, 90.00, 97.50, 100.00, 97.50 % (false activations 52.5, 45.0, 20.0, 0.0, 20.0 %); six classes 35.00, 47.50, 92.50, 100.00, 95.00 % (false activations 17.5, 7.5, 0.0, 0.0, 0.0 %).
+**Per-subject pseudo-online** (`ccnn`, 0.5 s windows, P24 rerun, seed 42; `reports/pseudo_online/summary_ccnn_{5class,6class}.csv`): five classes S01–S05, accuracy 60.00, 87.50, 97.50, 100.00, 97.50 % (false activations 57.5, 45.0, 20.0, 0.0, 20.0 %); six classes 40.00, 45.00, 95.00, 100.00, 97.50 % (missed 45.0, 52.5, 5.0, 0.0, 2.5 %; false activations 17.5, 10.0, 0.0, 0.0, 0.0 %).
 
 ### 3.8 Era-C checks (P16, P19)
 
@@ -492,7 +491,7 @@ Measured minutes come from the "Commands executed" tables of each `mas/state/pha
 | p22 | `reports/loso_w1_p22_*`, `reports/loso_warmup` | 1.1 | | 1.1 |
 | p23 | `reports/within_gnn`, `reports/loso_gnn` | 20.5 | | 20.5 |
 | **Total `make all`** | | **325.6 (5.43 h)** | **110.5 (1.84 h)** | **436.1 (7.27 h)** |
-| `loso-all` (outside `all`) | `reports/window_sweep_w1_all`, `loso_w1_fbcca_all`, `loso_w1`, `loso_w1_all` | | | 33.6 min CPU (P21 record, classical) |
+| `loso-all` and `scripts/diagnostics/network_seed_spread.py` (both outside `all`) | `reports/window_sweep_w1_all`, `loso_w1_fbcca_all`, `loso_w1`, `loso_w1_all`; `reports/diagnostics/` (seed spread, standalone) | | | 33.6 min CPU for `loso-all` (P21 record, classical); seed spread not timed in this table |
 
 The GPU total includes the p08 CUDA row (0.4 min), which `make all` runs only with `NN_DEVICES="cpu cuda"`; without it the GPU total is 110.1 min. The total exceeds the 4 h limit of the project's run policy, so the orchestrator asks Sebastian before a full local run. `make all` writes a
 `.done` stamp per phase under `mas/state/scratch/make_stamps/` and resumes at the first unstamped phase. The 39-subject networks (ccnn, eegnet,
