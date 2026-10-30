@@ -626,7 +626,7 @@ Next phase: after the orchestrator's gate.
 
 ## P25 — Final audit: CCNN fix round 1, regeneration of every CCNN output (2026-10-30)
 
-2026-10-30, branch `phase/P25-final-audit`. Handoff: `mas/state/phases/P25-final-audit/` (`07_review.md` "Fix round 1 audit (CCNN)", `05_run.md` and `06_verify.md` "Fix round 1 rerun"). Report: written after the results review (not yet written).
+2026-10-30, branch `phase/P25-final-audit`. Handoff: `mas/state/phases/P25-final-audit/` (`07_review.md` "Fix round 1 audit (CCNN)", `05_run.md` and `06_verify.md` "Fix round 1 rerun"). Report: `mas/state/reports/P25.md`, written after the results review (`0e28c4f`).
 
 Fixed
 - `src/models/cnn/ccnn.py` (MODIFIED, code in 987742b, committed under a `docs:` prefix by a shared-index accident, recorded in `mas/state/decisions.md`): the CCNN input is one `[real | imag] / T` map with convolution biases (27,977 / 32,309 parameters, R-8 exact). The previous layout stacked `[real, imag]` as two bias-free input maps (14,817 / 17,285 parameters; pre-P25 layout, non-conforming). Tests pin the count and the single-map position and fail on the old code (`tests/test_p20_networks.py`, `tests/test_p20_independent_known_answer.py`). Label: CCNN spec deviation, fixed in P25; every CCNN value produced before P25 is superseded.
@@ -650,7 +650,12 @@ Result (CCNN, pre-P25 layout → regenerated; CSV paths in RESEARCH_LOG P25 entr
 - Flipped claims (not reworded): "none of the five-class false activations is new" (one new six-class false activation); the six-class next-target share is no longer significant at 0.05 (p 0.0064 → 0.1209, post hoc); "every five-class false activation within 2 s" (one at 2.44 s). P20 P6(a) now holds as worded.
 
 Review
-- Fix round 1 audit (S-1 to S-6) and verifier PASS (`896288d`). R-13 seed check G-4 confirmed (13 of 19 cells inside). Results review of this round: pending.
+- Fix round 1 audit (S-1 to S-6) and verifier PASS (`896288d`). R-13 seed check G-4 confirmed (13 of 19 cells inside). Results review of this round: APPROVE (`0e28c4f`, 2026-10-30).
 
-Open
-- Results review of fix round 1 and the P25 report; the R-13 reading goes in that report.
+Closed (P25 close, 2026-10-30)
+- Audit PASS `3f779c0`; verifier FAIL `5300347`, then PASS `896288d`; fix round 1 audit PASS `57eb915`; results review APPROVE `0e28c4f`.
+- P25 report `mas/state/reports/P25.md`: verdicts, clean-machine evidence (P24 `make all`; suite 1565 passed, 6 skipped), leakage audit (24 splits, all guarded), module diff (38 rows, nothing missing in the rebuild), R-x table, autonomy (21 of 25 phases, 84.0 %), sources report, CCNN section, six accepted deviations, history-squash list for Sebastian.
+- Flipped claims stated as flipped (four substantive, three superseded values); the cohort-5 ccnn − lda difference (−2.73 pp over three seeds) is not a difference under R-P5 and is not a ranking.
+
+Open (none changes a published number)
+- N1, N2 (test notes); Colab sections not run end to end on a T4; P17 C-d and C-e; the P22 `within_lda` label in the old main-tree CSVs; cohort-39 eegnet not re-run (G-3e); `reports/loso_w1` at 156 folds against 158 before.
