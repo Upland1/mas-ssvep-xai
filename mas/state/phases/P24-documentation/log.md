@@ -25,3 +25,4 @@
 | 5 Fix round 2 | data-signal, synthetic-tester (opus) | 2026-10-29 | dispatched: pseudo_online.py determinism + test; test_p24_docs clean-clone mapping (V-2/V-6) | 2 | V-4, V-5 | none | |
 | 6 Fix round 2 tests | synthetic-tester (opus) | 2026-10-29 | 1d1f60d: cited-path rule (exists; clone-only V-6/V-2 mapping), synthetic rule test; main 53 passed, clone 35 passed; reports/diagnostics added to not-produced set (reviewer ruling) | 2 | V-2, V-6 | none | |
 | 5 Fix round 2 build | data-signal (opus) | 2026-10-29 | e2bd25d/35bd278/7b17c52: cudnn determinism flags in pseudo_online.py (diagnosis confirmed on synthetic GPU runs); 3 tests (2 fail on old code); full suite 1569 passed | 2 | V-4, V-5 | none | documents to re-copy pseudo-online numbers after the rerun |
+| 7 Round 3 audit | scientific-reviewer | 2026-10-29 | PASS (8e333c6); V-6 +reports/diagnostics, V-3 +Normalization (decisions); F-1..F-6 verifier, S-1..S-6 scribe | 2 | V-3, V-6 | none | |
