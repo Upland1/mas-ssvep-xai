@@ -193,12 +193,12 @@ phases:
     passed: '2026-10-29'
   P24:
     slug: documentation
-    status: in_progress
+    status: passed
     owner: orchestrator
     branch: phase/P24-documentation
-    commit: null
+    commit: 89c823a
     opened: '2026-10-29'
-    passed: null
+    passed: '2026-10-29'
   P25:
     slug: final-audit
     status: pending
