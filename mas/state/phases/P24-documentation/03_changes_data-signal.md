@@ -159,3 +159,48 @@ p07's `n_subjects_benchmark.csv` is now written to `reports/legacy_leaky/` and p
 Not changed: runtimes (same work), the 149-command count (unchanged), targets and outputs of p11-p23.
 
 Full suite alone after this round (`mas/state/scratch/pytest_p24_fix1.txt`): `1565 passed, 22 warnings in 984.01s (0:16:24)`.
+
+
+## Round 2 (fix)
+
+Status: READY
+
+Reads: 06_verify.md (reason 1), 02_plan.md (V-4, V-5), `mas/state/decisions.md` (row "Verify FAIL (cd708ac)"), `reports/logs/P20/pseudo_online_{5,6}class.log`, `mas/state/scratch/p24_make/make_all.log` lines 8277-8321, `src/models/cnn/training.py`, `src/models/cnn/benchmark_common.py`, `src/preprocessing/dataset/augmentation.py`.
+Commits: e2bd25d (`fix:` script), 35bd278 (`test:`), this file (`docs:`).
+
+### Files
+
+- MODIFIED `scripts/benchmarks/pseudo_online.py`: in `main`, right after `resolve_device`, `if device == "cuda": torch.backends.cudnn.deterministic = True; torch.backends.cudnn.benchmark = False` (3 added lines, same idiom as `src/models/cnn/benchmark_common.py` line 144 and `scripts/benchmarks/benchmark_window_sweep.py` line 260). Nothing else changed; CPU runs untouched.
+- MODIFIED `tests/test_p20_online.py`: 3 tests appended (P24 fix round 2 block).
+
+### Diagnosis (confirmed)
+
+1. Same code, seed 42 and device cuda in both runs (header line of both logs: "device cuda, seed 42"), but different trajectories: 6-class best epoch S01 104/129 (P20 log) vs 109/134 (make all), S02 77/102 vs 43/68, S03 30/55 vs 32/57, S05 25/50 vs 27/52; S04 24/49 both.
+2. `pseudo_online.py` was the only network script without the cudnn flags (`grep -rn cudnn scripts src`: benchmark_loso, benchmark_window_sweep, benchmark_nn_sweep, benchmark_nn_augmentation, network_seed_spread, benchmark_gnn, benchmark_gnn_loso, benchmark_common set them; pseudo_online did not). Every CUDA output of those scripts was exact in the clone (06_verify.md "GPU paths"), `dynamic_stopping/` included, which trains the same ccnn on CUDA through the window sweep.
+3. Other nondeterminism sources checked in the pseudo-online path, none found: `fit_network` calls `torch.manual_seed(seed)` before the model, the DataLoader uses `shuffle=True` with `generator=torch.Generator().manual_seed(seed)` and `num_workers=0`; augmentation draws from its own `numpy.random.default_rng(seed)` (`SSVEPAugmentedDataset`); the inner validation split is `StratifiedGroupKFold(shuffle, random_state=seed)`; the two `set`s in the script (`channel_tier`, `check_channels`) only feed membership tests, `kept` is built in montage order and the reported lists are `sorted`. Torch default `cudnn.deterministic` is False here (`torch 2.14.1+cu130`, printed by `.venv/bin/python -c ...`).
+4. Synthetic reproduction on this GPU (`fit_network` ccnn, 60 synthetic trials x 8 windows, seed 42, 40 epochs, scratch script `det.py`): flags off, two runs give the same best epoch but `max |d val loss| 0.0004615858197212219`; flags on, `0.0`. Small per-epoch differences of this kind change the early-stopping epoch over 100+ epochs, which is what the logs show.
+
+### Tests
+
+- `test_pseudo_online_same_seed_gives_identical_probabilities_and_decisions_cpu`: two `main` runs on fake recordings, seed 42, CPU: stream probabilities `np.array_equal`, decisions and summary (minus `Seconds`) frame-equal. Honest note: it passes on the old code too (CPU kernels deterministic).
+- `test_pseudo_online_sets_cudnn_determinism_when_device_is_cuda`: device resolution and `run_subject` stubbed (no GPU needed); flags preset to deterministic False / benchmark True; asserts they are untouched for cpu and (True, False) at training time for cuda. Fails on the old code.
+- `test_pseudo_online_same_seed_gives_identical_probabilities_cuda` (skipped without CUDA): two real CUDA runs, 15 epochs, flags reset to False beforehand; probabilities and decisions identical. Fails on the old code on this machine (`assert np.array_equal(p1, p2, equal_nan=True)` False).
+- Against the old script (HEAD version restored temporarily): `2 failed, 1 passed, 8 deselected in 4.43s`. With the fix: `tests/test_p20_online.py` `11 passed in 5.53s`.
+- Full suite (`.venv/bin/python -m pytest tests/ -q -o addopts="" -p no:cacheprovider`, working tree = e2bd25d + 35bd278, CUDA available so the CUDA case ran): `1569 passed, 22 warnings in 944.75s (0:15:44)`.
+
+### Run commands for the verifier (not run by me)
+
+From the Makefile `p20` target (`P := $(PYTHON) -m`, `S := --subjects $(SUBJ)`, `RAW := --raw-dir $(RAW_DIR)`), with `SUBJ = S01 S02 S03 S04 S05`:
+
+```bash
+.venv/bin/python -m scripts.benchmarks.pseudo_online --subjects S01 S02 S03 S04 S05 --train-session OO --test-session mOO --model ccnn --window-sec 0.5 --stride-sec 0.25 --skip-sec 0.5 --threshold 0.6 --tag ccnn_5class --quality-source both --raw-dir <RAW_DIR>
+.venv/bin/python -m scripts.benchmarks.pseudo_online --subjects S01 S02 S03 S04 S05 --train-session OO --test-session mOO --model ccnn --window-sec 0.5 --stride-sec 0.25 --skip-sec 0.5 --threshold 0.6 --rest-class --tag ccnn_6class --quality-source both --raw-dir <RAW_DIR>
+```
+
+Expected runtime on cuda: per-subject `Seconds` in `reports/logs/P20/pseudo_online_5class.log` sum to 30 s and in `pseudo_online_6class.log` to 60.7 s (`python -c "print(10.5+8.4+5.7+2.7+2.7, 21.1+15.6+8.2+7.5+8.3)"`), so about 1 to 1.5 min per tag with start-up; deterministic cudnn may be slightly slower. Device: `auto` resolves to cuda here; both runs of a comparison must use the same device. Expected outcome: two main-tree runs and the clone run give identical `summary_ccnn_{5,6}class.csv` and `decisions_ccnn_{5,6}class.csv` apart from `Seconds`.
+
+Consequence for the documents: the new main-tree numbers will in general differ from the P20 ones (the P20 run was one draw of a nondeterministic trajectory), so the pseudo-online figures quoted in `README.md` (line 242), `RESEARCH_LOG.md` (line 510, "89.00 % (5 classes) and 74.00 % (6 classes)"), `docs/report/v2/report.md` (line 215), `docs/progress_report/progress_report.md` (line 131) and `docs/infographic/methodology_infographic.svg` must be re-copied from the regenerated CSVs (scribe), and the P20 log/report should record that the earlier numbers came from a run without the flags.
+
+### R11
+
+No consultation of `reference/ssvep-eeg-xai/`.
