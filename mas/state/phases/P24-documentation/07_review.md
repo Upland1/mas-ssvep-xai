@@ -207,3 +207,87 @@ Verdict: PASS
 
 ## Questions
 <!-- receivers append: ACK <agent> <YYYY-MM-DD>, then questions; answers appended, never deleted -->
+
+## Results review
+
+Reads: `05_run.md` (run 1 at bb9c091, round 2 rerun at afcd417), `06_verify.md` (round 1 FAIL cd708ac, round 2 PASS 7a084c4, wording fix b656ab6), `mas/state/decisions.md` (P24 rows up to afcd417), `03_changes_scribe.md` "## Round 2 (pseudo-online re-copy)" (24a977a), this file's round 3 items S-1..S-6, `git show 24a977a b656ab6 556db0f`, `git diff --stat afcd417 HEAD`, `reports/pseudo_online/{summary,decisions}_ccnn_{5,6}class.csv` (read-only), `mas/state/scratch/p24_fix2/{manifest_after.txt, p20_original/summary_ccnn_{5,6}class.csv}`, the device lines of `reports/logs/P24/pseudo_online_*.log`, `docs/report/v2/report.md` §3.3 and lines 250-256, `mas/state/reports/P20.md` §4.5, §5 and the appended note. Not read: the raw-data folder, the reference repository.
+Branch: phase/P24-documentation @ e828b0e. No `src/` or `scripts/` change since the rerun head (`git diff afcd417 HEAD -- src scripts` = 0 lines); the only code-adjacent change is `tests/test_p24_docs.py` (556db0f, privacy-pattern fragments). `pytest tests/test_p24_docs.py tests/test_p24_make_all.py -q` → `53 passed in 4.48s`.
+
+### S-6: pseudo-online numbers against the CSVs
+
+The canonical CSVs are the round 2 run A outputs: their sha256 equal the lines of `manifest_after.txt` (264d7dce…, e0a56273…, 9a2d53c4…, 249c3499…). All four P24 logs contain `device cuda, seed 42` (`grep -c` = 1 each).
+
+Independent recomputation from the decision CSVs (merge on Subject, period, onset_sec, `validate='1:1'`; 400 rows, 200 stimulus, 200 rest):
+
+```
+correct5 177 correct6 151
+lost 32 lost missed 30 {'S01': 10, 'S02': 17, 'S03': 2, 'S05': 1} wrong 2 ['S01', 'S01']
+gained {'S01': 4, 'S03': 1, 'S05': 1}
+missed6 {'S01': 18, 'S02': 21, 'S03': 2, 'S04': 0, 'S05': 1} 42
+FA5 {'S01': 23, 'S02': 18, 'S03': 8, 'S04': 0, 'S05': 8} 57
+FA5 not6 46 new6 0 FA6 11
+```
+
+Per-subject accuracy and false-activation rates recomputed from the decisions equal the summary CSV cells (5 classes 60/87.5/97.5/100/97.5, FA 57.5/45/20/0/20; 6 classes 40/45/95/100/97.5, FA 17.5/10/0/0/0). Arithmetic: `.venv/bin/python -c "print(10+17+2+0+1, 177-151, 16+14+8+0+8, 23+18+8+0+8, 18+21+2+0+1, round(11/200*100,2), round(57/200*100,2))"` → `30 26 46 57 42 5.5 28.5`.
+
+| Place | Numbers checked | Result |
+|---|---|---|
+| `README.md:236`, `:241` | 88.50, 28.5, 75.50, 21.00, 5.5; 30 of 32, 27 in S01+S02, 46 of 57, none new; per subject 5-class Acc 60.00/87.50/97.50/100.00/97.50, FA 57.5/45.0/20.0/0.0/20.0; 6-class Acc 40.00/45.00/95.00/100.00/97.50, missed 45.0/52.5/5.0/0.0/2.5, FA 17.5/10.0/0.0/0.0/0.0 | all equal the CSVs / recomputation |
+| `docs/report/v2/report.md:215` | same set as README (means, per subject, missed, counts) | equal |
+| `docs/progress_report/progress_report.md:131` | 88.50, 28.5, 75.50, 21.00, 5.5; ITR 45.3336 and 55.0978; 30 of 32, 27; 46 of 57 | equal (`ITR (bits/min)` Mean rows) |
+| `RESEARCH_LOG.md:510` (P20 entry) | 89.00, 74.00, 27.5, 5.0 labelled original non-reproducible run | equal `p20_original/summary_ccnn_{5,6}class.csv` Mean rows (89, 74, 27.5, 5) |
+| `RESEARCH_LOG.md:556-560` (P24 entry) | 88.50, 28.5, 55.0978; 75.50, 21.00, 5.5, 45.3336; 30/32/27; 46/57/0 | equal |
+| `CHANGELOG.md:497` | P20 89.00/74.00, 27.5 → 5.0; P24 88.50/75.50, 28.5 → 5.5 | equal |
+| `docs/infographic/methodology_infographic.svg:120-123, 162-163` | 88.50 %, 75.50 %, dagger footnote | equal |
+| `mas/state/reports/P20.md:426` (note, append-only: 2 added, 0 removed lines in 24a977a) | P20 89.00/27.50, 74.00/5.00; P24 88.50/28.50, 75.50/5.50; e2bd25d, afcd417 | equal |
+
+Residual search (`grep -n -i -E "pseudo|89\.00|74\.00|44\.56|56\.19|27\.5 ?%|absorb"` and a second pass on `false activ|mOO|rest class|ITR`) over the five documents and the SVG: no P20 value remains outside the labelled P20 passages. The `89.00` hits at `RESEARCH_LOG.md:141` and `CHANGELOG.md:98` are the S03 fusion-CNN cell of P05, unrelated.
+
+Claims built on the numbers (S-1):
+- "drop is mostly missed stimulus periods (30 of the 32 ..., 27 of them in S01 and S02)": supported. 30 of the 32 lost periods are missed, and 27 of those 30 are in S01+S02. If "them" is read as the 32 lost periods, the S01+S02 count is 29 (S01 10 missed + 2 wrong, S02 17). The wording is acceptable as written. If it is touched again, "27 of the 30 missed" removes the ambiguity.
+- "rest class absorbs false activations": removed from the pseudo-online passages and replaced by counts (46 of 57 removed, 0 new), with the mechanism explicitly not claimed. Correct, the outputs hold no rest-class probability.
+- N = 5 ITR: supported (scribe recomputation, max |diff| 0.000177 bits/min; script line 283 cited).
+- Not in the documents but checked because P20.md §5 depends on it: the P6 directions give the same outcome on the P24 values. (a) FA lower with 6 classes in 4 of 5 subjects, S04 floor 0 → 0. (b) Acc6 ≤ Acc5 in 5 of 5. (c) min(S03–S05) 97.5 > max(S01, S02) 87.5. The rest-segment timing reading (every false activation in the first 2 s) still holds: max `time_sec` of FA rest periods 1.96875 (5-class, 57 of 57 ≤ 2) and 1.46875 (6-class, 11 of 11). This closes the scribe's open item 3 for P6. No P20 direction flips.
+
+S-6: **PASS**.
+
+### S-2 label and S-3 split
+
+- S-2: **PASS.** The label sentence (P24 rerun, deterministic cuDNN, 2026-10-29, code at afcd417, seed 42 only; the P20 run of 2026-10-28 had no determinism flags and gave one non-reproducible draw) sits next to the numbers in README §3.7, report v2 §3.7, progress §7 and the SVG footnote (dagger on the box title). No "improved"/"changed" wording. No P24 − P20 difference is presented as an effect: the only side-by-side placements are CHANGELOG, RESEARCH_LOG P24 and the P20 note, and each carries "not a method comparison" or "no difference read as an effect".
+- S-3: **PASS.** The RESEARCH_LOG P20 entry keeps 89.00 / 74.00 with "original run without cuDNN determinism flags, not reproducible" and both P20 log paths. Its old readings (S01 50.00 %, 44.56 bits/min, "absorbs") are removed and deferred to the P24 entry. The P24 entry gives the new values with the `reports/logs/P24/` paths and the A = B = C identity. Minor, not blocking: the P20 entry cites `reports/pseudo_online/summary_ccnn_{5class,6class}.csv` "as written by the original run", and those files now hold the P24 values. The sentence names the git-ignored copy `mas/state/scratch/p24_fix2/p20_original/` next to it, so the reader can find the P20 values.
+- S-4, S-5: present and correct (P20.md note append-only; README `loso-all` row lists `scripts/diagnostics/network_seed_spread.py` and `reports/diagnostics/`).
+- SVG box title still reads "Pseudo-online (P20) †" over P24 values. Accepted: P20 names the phase of the method, and the dagger footnote states the run.
+
+### Scribe open item 2
+
+Confirmed correct as left. `docs/report/v2/report.md:254` ("Table 4 shows ... the rest class absorbing weak responses") refers to Table 4 in §3.3: the offline six-class harmonic-bank confusion matrix (`reports/n_subjects_benchmark_p17_harm_6class_confusion.csv`, rows "Sum", ten CV repeats, 2.0 s). It is not the pseudo-online run. The cells support "most stimulus errors go to rest". For example, row 101 has 172 errors to rest against 15 to the other stimulus classes, and row 105 has 280 against 30. The S-1 removal concerned the pseudo-online claim only.
+
+### make-all comparison outcome against V-1..V-8 and the afcd417 additions
+
+| Item | Ruling | Evidence |
+|---|---|---|
+| V-1 clone | met | fresh clone bb9c091, empty stamps, `NN_DEVICES="cpu cuda"`, threads 12 recorded |
+| V-2 path map | met | all mapped Era-A CSVs EXACT (maxabs 0.0) |
+| V-3 columns | met with the afcd417 addition | NBS extras (15 cohort summaries × 18 columns, 6 pairwise files × 4, 167 npz with `nbs_*` keys) as listed. `Normalization` in `loso_warmup/{cohort,summary}.csv` is now on the expected list (decisions afcd417, round 3 item 3), and the shared columns are equal. The verifier filed 3 ROWS files (`*_flips*.csv`, extra rows flagged only by the new `flip_NBS`/`flip_nbs` columns; shared rows equal) and 30 NO_MAIN NBS outputs (`connectivity_graph_size*`, `connectivity_nbs_sweep*`) separately. They are the same NBS schema drift and are accepted under V-3 (deviation A-1 below). |
+| V-4 exact CPU | met | 245 CSV EXACT, 13 txt byte-equal, every `.npy` hash identical (720 compared, 0 different), npz payload keys equal |
+| V-5 GPU | met after fix round 2 | every GPU output exact except pseudo-online. The pseudo-online cause was identified (no cuDNN flags), fixed (e2bd25d), and replaced by a three-run deterministic identity (F-4 `ALL EQUAL`), not by tolerance or by picking a draw. No stated direction flips (P6 above). |
+| V-6 not compared | met with the afcd417 addition | `loso-all` outputs, S06–S040 folders, baseline bytes, logs and metadata. `reports/diagnostics/` added (only `scripts/diagnostics/network_seed_spread.py` writes it). The clone docs test passes (`35 passed`). |
+| V-7 exits | met | one ignored exit, the p07 `-` demo (log line 1673). `compare_v1_v2 --check-regression` is unprefixed and `make` exited 0. |
+| V-8 runtime | met | stamp sum 567.6 min including the p18 suspend, 430.9 min without it, against 436.1 recorded, inside the authorisation. p19 took 10.2 min against 2.5 recorded and is not explained. That is below the stop rule, so it is noted only (A-5). |
+
+Two DIFF/BYTES_DIFF groups carry no numeric difference and need an explicit acceptance (A-2, A-3), because V-4 asks for value equality and strings are values.
+
+### Accepted deviations (for decisions.md)
+
+- **A-1 NBS schema drift beyond the column list.** In the make-all clone, 3 flip CSVs have extra rows (`connectivity_cohort_flips.csv` 14 vs 11, `_window200_vs_final` 18 vs 14, `connectivity_comparison/pairwise_flips.csv` 11 vs 8). The extra rows are flagged only by the P18 NBS flip columns, and the shared rows are equal. 30 NBS-only files have no main-tree counterpart. Accepted as the P18 NBS pass, same cause as the V-3 columns.
+- **A-2 `Data source` label strings.** 7 LOSO `summary.csv` files differ only in the `Data source` text: "(S01, S02, …)" vs "(S01-S05)", and "within-subject" vs "LOSO" for the P22 `within_lda` rows, where the main-tree P22 label was wrong and the code at HEAD writes the correct one. Every numeric column is equal. Accepted. The documents quote no `Data source` string from these files.
+- **A-3 Era-A classification-report label.** 6 `legacy_leaky/classification_report_*.txt` differ only in the line-1 parenthetical: clone "(two-tier gate (P07))", main "(original extractor limits)". The bodies are identical, so the replayed p05 output carries the post-P07 default label on Era-A numbers. Accepted, because the numbers are equal and no document quotes the label. The main-tree label is the historically correct one, so a make-all tree must not be used as the source for the gate label of P05.
+- **A-4 Pseudo-online values replaced.** The P20 draw (89.00 / 74.00) and the make-all clone draw (88.5 / 78.0, bb9c091) were non-reproducible. The documents now use the deterministic rerun at afcd417 (88.50 / 75.50, A = B = C exact), and the P20 values are kept and labelled in the RESEARCH_LOG P20 entry, CHANGELOG and the P20.md note. The P20 entry cites the canonical CSV path "as written by the original run". That path now holds P24 values, and the P20 values live only in the git-ignored `mas/state/scratch/p24_fix2/p20_original/` (sha256 in `manifest.txt`).
+- **A-5 p19 runtime.** 10.2 min in the clone against 2.5 recorded, not explained. It is inside the authorisation and below the stop rule. Recorded, not investigated.
+- **A-6 Scope of the round 2 rerun.** Only the two pseudo-online tags were rerun at afcd417. The other 22 phases stand on run 1 at bb9c091, and `src/` is unchanged between the two heads.
+
+### Era matrix
+
+P24 is documentation plus `make all` in Era C. No legacy violation is prescribed for this phase. The legacy paths replayed by `make all` (P02–P15) write to `reports/legacy_leaky/` with labels, which is the frozen-snapshot requirement. R9 is met: per-subject pseudo-online values are given in README, report v2 and RESEARCH_LOG (P24) with the data source (OO → mOO, session files). R10 is met for the new citations, which are paths opened in this run. R11: no reference access dated 2026-10-29 (`06_verify.md`).
+
+Verdict: APPROVE
