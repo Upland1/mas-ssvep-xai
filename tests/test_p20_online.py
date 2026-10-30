@@ -242,3 +242,74 @@ def test_pseudo_online_channel_check_uses_only_the_first_seconds():
   W[late, 1] = rng.normal(0, 80, (late.sum(), n_win))              # channel 1 bad only after 30 s
   W[~late, 2] = rng.normal(0, 80, ((~late).sum(), n_win))          # channel 2 bad inside the first 30 s
   assert P.check_channels(W, W, starts, n_win, fs, ["a", "b", "c"], q, 30.0) == {"c"}
+
+
+# --- P24 fix round 2: determinism of the pseudo-online training path ----------------------
+
+def _det_raw(tmp_path):
+  raw = tmp_path / "raw"
+  S.write_ebr(raw / "S01" / "OO.ebr", S.make_block(n_trials=10, seed=1))
+  S.write_ebr(raw / "S01" / "mOO.ebr", S.make_block(n_trials=10, seed=2))
+  return raw
+
+
+def _det_run(tmp_path, raw, device, name, monkeypatch, extra=()):
+  seen = {}
+  orig = P.score_stream
+
+  def spy(mark, fs, starts, proba, valid, *a, **k):
+    seen["proba"] = np.array(proba)
+    return orig(mark, fs, starts, proba, valid, *a, **k)
+
+  monkeypatch.setattr(P, "score_stream", spy)
+  out = tmp_path / name
+  assert P.main(["--subjects", "S01", "--raw-dir", str(raw), "--window-sec", "1", "--max-epochs", "4", "--device",
+                 device, "--seed", "42", "--out-dir", str(out), *extra]) == 0
+  return seen["proba"], pd.read_csv(out / "decisions_ccnn_5class.csv"), pd.read_csv(out / "summary_ccnn_5class.csv")
+
+
+def test_pseudo_online_same_seed_gives_identical_probabilities_and_decisions_cpu(tmp_path, monkeypatch):
+  """Known answer: two runs with seed 42 on the same fake recordings give bit-identical stream probabilities, decisions
+  and summary (CPU; this case also passes without the cudnn flags, the CPU kernels used here are deterministic)."""
+  raw = _det_raw(tmp_path)
+  p1, d1, s1 = _det_run(tmp_path, raw, "cpu", "a", monkeypatch)
+  p2, d2, s2 = _det_run(tmp_path, raw, "cpu", "b", monkeypatch)
+  assert np.array_equal(p1, p2, equal_nan=True)
+  pd.testing.assert_frame_equal(d1, d2)
+  pd.testing.assert_frame_equal(s1.drop(columns="Seconds"), s2.drop(columns="Seconds"))
+
+
+def test_pseudo_online_sets_cudnn_determinism_when_device_is_cuda(tmp_path, monkeypatch):
+  """`main` sets `cudnn.deterministic = True` and `cudnn.benchmark = False` before training on CUDA, as every other
+  network script does (P24 verify: the 6-class summary changed between two CUDA runs with seed 42). Device resolution
+  and training are stubbed, so this runs without a GPU; it FAILS on the code before the fix (flags left untouched).
+  On CPU the flags are not touched."""
+  import torch
+  raw = _det_raw(tmp_path)
+  seen = []
+
+  def fake_subject(subject, args, cfg, q, raw_dir, device, sos_of):
+    seen.append((device, torch.backends.cudnn.deterministic, torch.backends.cudnn.benchmark))
+    raise ValueError("stub: no training")
+
+  monkeypatch.setattr(torch.backends.cudnn, "deterministic", False)
+  monkeypatch.setattr(torch.backends.cudnn, "benchmark", True)
+  monkeypatch.setattr(P, "run_subject", fake_subject)
+  monkeypatch.setattr(P, "resolve_device", lambda name: name)
+  P.main(["--subjects", "S01", "--raw-dir", str(raw), "--device", "cpu", "--out-dir", str(tmp_path / "c")])
+  P.main(["--subjects", "S01", "--raw-dir", str(raw), "--device", "cuda", "--out-dir", str(tmp_path / "g")])
+  assert seen == [("cpu", False, True), ("cuda", True, False)]
+
+
+@pytest.mark.skipif(not __import__("torch").cuda.is_available(), reason="CUDA not available")
+def test_pseudo_online_same_seed_gives_identical_probabilities_cuda(tmp_path, monkeypatch):
+  """Known answer on CUDA: two runs with seed 42 give bit-identical probabilities and decisions (needs the flags)."""
+  import torch
+  monkeypatch.setattr(torch.backends.cudnn, "deterministic", False)
+  monkeypatch.setattr(torch.backends.cudnn, "benchmark", False)
+  raw = _det_raw(tmp_path)
+  extra = ["--max-epochs", "15", "--patience", "15"]
+  p1, d1, _ = _det_run(tmp_path, raw, "cuda", "a", monkeypatch, extra)
+  p2, d2, _ = _det_run(tmp_path, raw, "cuda", "b", monkeypatch, extra)
+  assert np.array_equal(p1, p2, equal_nan=True)
+  pd.testing.assert_frame_equal(d1, d2)
