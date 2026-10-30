@@ -28,3 +28,4 @@
 | 7 Round 3 audit | scientific-reviewer | 2026-10-29 | PASS (8e333c6); V-6 +reports/diagnostics, V-3 +Normalization (decisions); F-1..F-6 verifier, S-1..S-6 scribe | 2 | V-3, V-6 | none | |
 | 8 Verify round 2 | verifier | 2026-10-29 | PASS (7a084c4): pseudo-online A/B/C identical (F-4) at afcd417; new means 5-class 88.5, 6-class 75.5 (reports/pseudo_online/); suite 1569 passed; clone docs test 35 passed | 2 | F-1..F-6 | none | scribe S-1..S-6 next |
 | 11 Privacy fixes | verifier, synthetic-tester | 2026-10-29 | b656ab6 (06_verify wording), 556db0f (term fragments); net diff scan 0 hits; earlier commits with hits (9daac09, cd708ac/7a084c4) added to the squash list | 2 | | none | |
+| 9 Results review | scientific-reviewer | 2026-10-29 | APPROVE (795296f); S-6 pass; A-1..A-6 copied to decisions | 2 | R9, R10 | none | |
