@@ -13,3 +13,4 @@
 | 8 Verify | verifier | 2026-10-29 | FAIL (5300347): R-8 CCNN params 14,817 vs 27,977; R-13 cells; 3 sources defects; suite 1563 passed 6 skipped; autonomy 21/25 phases without consultation | 1 | R-x table | none | fix round 1 |
 | 5 Fix round 1 | deep-learning; scientific-reviewer | 2026-10-29 | dispatched: CCNN layout to R-8 + tests + regeneration list; R-13 ruling | 1 | R-8, R-13, R6 | none | |
 | 7 R-13 ruling | scientific-reviewer | 2026-10-29 | 987742b: R-13 mixed target, explained (probable) pending a pre-registered seed check; commit swept in deep-learning staged files (noted, not rewritten) | 1 | R-13, R7 | none | |
+| 5 Fix round 1 build | deep-learning | 2026-10-29 | CCNN single-map [real|imag] layout with conv biases (code in 987742b, handoff 1a848fa); R-8 counts 27,977 / 32,309 pinned; 8 tests fail on old code; suite 1571 dots, no F/E; regeneration list ~2 h GPU | 1 | R-8, R6 | none | |
