@@ -144,3 +144,53 @@ All numbers are copied from the CSVs listed above, read with `.venv/bin/python -
 9. DATA — `mas/state/reports/P20.md`, `P21.md`, `P23.md`, `P24.md` (pre-P25 values quoted for the "old" column; read as the record). Used for: the old values in the claim table.
 10. GIT — repository history: `32dbde8` (P22 report commit; resolves citation [23] in `mas/state/reports/P22.md`). Opened as history metadata in this run.
 11. DATA — `reports/pseudo_online/`, `reports/loso_w1_s01-s05/`, `reports/nn_sweep/` directory listing and CSV headers (existence and column names only). Used for: the column names in the commands above.
+
+## Close round (final P25 report, close entries, squash list)
+
+Status: READY
+
+ACK 07_review.md "Results review (after fix round 1)" and "Binding items for P25.md (scribe)" (S-4, S-5, S-6) scribe 2026-10-30
+
+Scope: the final report `mas/state/reports/P25.md` (task 5), the close entries of `RESEARCH_LOG.md` and `CHANGELOG.md`, and the replacement of the two "results review pending" statements. Not done here, by design: the gate (merge `--no-ff`, `p25-done`, `v1.0`; orchestrator), `log.md`, `decisions.md`, the generated outputs, logs, the original answer-key repository, data.
+
+### Files changed in this round
+
+| File | NEW / MODIFIED | Change |
+|---|---|---|
+| `mas/state/reports/P25.md` | NEW | final phase report, §1–§13 (verdicts, clean-machine evidence, leakage audit, module diff, R-x table, autonomy, sources, CCNN fix, deviations, open questions, squash list, close, sources, verdicts) |
+| `RESEARCH_LOG.md` | MODIFIED | the pending sentence of the P25 entry replaced by the review outcome (`0e28c4f`); a "Close of P25" paragraph; a "Status at the end of P25" section; Sources items 21–24 appended. No line of an earlier entry rewritten |
+| `CHANGELOG.md` | MODIFIED | the "Report" line of the P25 section now names `mas/state/reports/P25.md`; "Results review of this round: pending" replaced by APPROVE (`0e28c4f`); "Open" replaced by "Closed" and "Open" lists |
+| `mas/state/phases/P25-final-audit/03_changes_scribe.md` | MODIFIED | this close round (append only) |
+
+### S-4 / S-5 / S-6 check (binding items of §6, as written)
+
+- S-5: the R-13 split-half wording is "confirmed", the six-draw range, 13 of 19 inside, expected 13.6; "probable" is dropped for the split-half cells only (`P25.md` §4.5, binding wording).
+- S-4 summary: four substantive flips plus three superseded descriptive values; the #20 wording is used ("ccnn − lda −2.73 pp, not a difference under R-P5; no ranking; the P21 'tie' wording superseded"). The GNN 2-tap comparison uses the per-seed value 89.91 (`nodes+F`); the ensemble value is not repeated (`P25.md` §5.4).
+- S-6: the reviewer's R11 verification read (`fde4b5a:src/models/cnn/ccnn.py`, log lines 57–59) and the 12 task-4 accesses (lines 45–56) are listed in `P25.md` §4.6 and §8; the statement that the deep-learning agent did not open the reference is listed; the review's own results section opened nothing in the answer-key repository.
+
+### Checks run in this round (shown commands in `P25.md`)
+
+- Suite counts from the progress characters of `mas/state/scratch/p25_fix1/g0_pytest.log`: `1565 .`, `6 s`, 0 F, 0 E.
+- Module table: 38 data rows (31 `both`, 7 `missing in original`), counted with the `awk` command in `P25.md` §4.4. The review's text says 37; this report uses 38 and says so.
+- Pseudo-online claim numbers recomputed from `reports/pseudo_online/decisions_ccnn_{5class,6class}.csv`: rest false activations 59 and 10; maximum rest `time_sec` 2.4375 and 1.46875; next-target hits 15 of 59 and 4 of 10 with `scipy.stats.binomtest` p = 0.1876 and 0.1209 over the full denominators; five-class false activations absent with six classes 50, new with six classes 1 (S01, 50.0312 s).
+- Cohort-5 means from `reports/loso_w1_s01-s05*/summary.csv` (85.88, 83.45, 85.32; 2-tap 87.25, 85.24, 87.27); three-seed means 84.88 and 86.59; ccnn − lda −2.73 (`.venv/bin/python -I -c "print(round(84.88-87.61,2))"`).
+- Cohort-39 (`reports/loso_w1/summary.csv`): ccnn 72.08 / 73.91; lda 72.54; `reports/loso_w1/folds.csv` 156 rows, 39 per method.
+- GPU steps: `.venv/bin/python -I -c "g=975+31+81+30+63+1028+428+440+5308; print(g, round(g/3600,2))"` → `8384 2.33` (`mas/state/scratch/p25_fix1/steps.txt`).
+- Autonomy: `.venv/bin/python -I -c "c={'P05','P06','P11','P15'}; n=25; print(len(c), n-len(c), round(100*(n-len(c))/n,1))"` → `4 21 84.0`; with P25 counted, `print(round(100*21/26,1))` → `80.8`.
+- Squash-list shas: `git cat-file -t` returned `commit` for all 15 (d3e0a09, 8d872f0, 37af70c, 466ebb4, ec48847, 89bb7d4, 61131b9, f5700bd, 5f73505, 1519dd5, d6d4899, 9daac09, cd708ac, 7a084c4, 987742b); subjects from `git log -1 --format=%s`; `git branch -r --contains` shows only d3e0a09 and 8d872f0 on `origin/main`.
+- Privacy scan (term list built from fragments; not stored in the repository) on the added lines of `P25.md`, `RESEARCH_LOG.md` and `CHANGELOG.md`: 0 matches; nothing staged before the commit.
+
+### Deviations from the reviewer's text (recorded, not corrected in the review)
+
+1. Module-diff row count: 37 in `07_review.md` ("my audit section (37 rows)"), 38 in its table. `P25.md` §4.4 reports 38.
+2. The fde4b5a verification read is three log lines (57–59): one `git log -S`, one `git grep`, two `git show` reads. It is one consultation.
+
+## Sources
+
+1. REPORT — `mas/state/reports/P25.md` (sections §4 to §13 of this round; §12 holds the full source list of the report).
+2. REVIEW — `mas/state/phases/P25-final-audit/07_review.md` ("Results review (after fix round 1)", §1–§6; "Fix round 1 audit (CCNN)", binding items S-1 to S-6 and G-0 to G-7; "Module diff").
+3. VERIFY — `mas/state/phases/P25-final-audit/06_verify.md` ("Fix round 1 rerun (CCNN)"; §A R-x table; §B autonomy; §C sources).
+4. DATA — `reports/pseudo_online/decisions_ccnn_{5class,6class}.csv`, `reports/pseudo_online/summary_ccnn_{5class,6class}.csv`, `reports/loso_w1_s01-s05{,_seed43,_seed44}/summary.csv`, `reports/loso_w1/{summary,folds}.csv`, `reports/loso_gnn/seeds.csv`, `reports/nn_sweep/summary.csv` (values in the commands above).
+5. LOG — `mas/state/scratch/p25_fix1/g0_pytest.log`, `mas/state/scratch/p25_fix1/steps.txt`, `mas/state/scratch/reference_access.log` (scratch, git-ignored).
+6. GIT (own) — `git cat-file -t`, `git log -1 --format=%s`, `git branch -r --contains` for the squash list (`P25.md` §10).
+7. RULE — `mas/RULES.md` R7 and R11; `mas/04_REFERENCE_RESULTS.md` R-13 (tolerance and targets).
