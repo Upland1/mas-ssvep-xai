@@ -146,5 +146,64 @@ Non-blocking, to fix before merge (no re-review needed):
 
 Verdict: PASS
 
+## Round 3 audit (fix round 2)
+
+Reads: `06_verify.md` (FAIL, cd708ac), `mas/state/decisions.md` rows 178-181, `03_changes_data-signal.md` and `04_tests.md` "Round 2 (fix)", `git show e2bd25d 35bd278 1d1f60d`, `scripts/benchmarks/pseudo_online.py` (seed, device and output lines), `reports/logs/P20/pseudo_online_6class.log`, `Makefile` (p20, `diagnostics`, `seed_spread`), `scripts/benchmarks/benchmark_loso_warmup.py:50-56`, the headers of the main-tree and clone `reports/loso_warmup/summary.csv`, and the pseudo-online sentences of the five documents (`grep -n`).
+
+| Item | Ruling | Evidence |
+|---|---|---|
+| 1a Fix | PASS | e2bd25d sets `cudnn.deterministic = True`, `benchmark = False` in `main` after `resolve_device`, before any `run_subject`. This is the same idiom as the network scripts whose CUDA outputs matched exactly in the clone (`dynamic_stopping/` trains the same `ccnn` through `fit_network` on CUDA). CPU is untouched. |
+| 1b Tests | PASS | The flag test fails on the old code and runs without a GPU, so it is the CI guard. The CUDA identity test is the behavioural proof: it fails on the old code on this GPU (handoff: `2 failed, 1 passed` against the old script). The CPU identity test passes on the old code too. The tester says so, and it is kept as a regression guard. In `_det_run`, `extra` repeats `--max-epochs`. argparse keeps the last value, so the CUDA case trains 15 epochs. |
+| 1c Other nondeterminism | none found by me; the empirical proof is the run in item 4 | Seeds: `fit_network` (`torch.manual_seed`), seeded DataLoader generator, `num_workers=0`, augmentation `default_rng(seed)`, inner `StratifiedGroupKFold(random_state=seed)`. The sets only feed membership tests. No wall-clock input; the replay uses a fixed sample clock. Residual risk: non-cuDNN CUDA kernels with atomics, since `use_deterministic_algorithms` is not set anywhere in `src/` or `scripts/` (`grep`). The other CUDA scripts were exact without it, so I do not require it. If the item-4 runs disagree, that is the next suspect. It is not to be patched around. |
+| 1d Remedy | PASS | The P20 numbers were one draw of a nondeterministic trajectory. No code path reproduces them, so a fresh deterministic main-tree run is the only honest remedy. Neither the P20 draw nor the clone draw may be chosen for the documents: the deterministic rerun replaces both. The 10.0 pp S01 6-class gap and the 4.0 pp mean gap (`06_verify.md`) are run-to-run variability of one seed. They are not a method effect, and the documents must not compare P20 and P24 values as one. |
+| 2 Cited-path rule | PASS | The rule is narrow. It applies only in a tree with `reports/legacy_leaky/` and without `reports/logs/`. V-6 prefixes match exactly or by `prefix + "/"`, and V-2 holds only if the mapped copy exists. The synthetic test covers the non-V-6 neighbour, the missing V-2 copy and the bare tree. The main tree still requires every path as written. `reports/diagnostics` is accepted: no Makefile target writes there (`grep -n "diagnostics\|seed_spread" Makefile` shows only `scripts.diagnostics.*` demos, and the clone has no `reports/diagnostics/`). Its only cited file comes from `scripts/diagnostics/network_seed_spread.py`, which `all` does not run. The orchestrator records the addition in `02_plan.md` V-6, or in a decisions row citing this audit. If a later target ever writes under `reports/diagnostics/`, the prefix must narrow to the file. |
+| 3 `Normalization` column | accepted as expected; no rerun | 06cd42d (2026-10-29 00:19, in `main` via the P23 merge) adds a constant label column, `benchmark_loso_warmup.py:56`. The main-tree files date from 2026-10-28 23:27, before the commit. The column holds no numbers. The other 21 and 20 columns are equal (`06_verify.md` V-3). The R2 test-time-normalization labels it carries already appear in the documents' text. The orchestrator adds it to the V-3 expected list. Documents must not say the main-tree CSV contains the column. |
+
+### Binding run items for the verifier (fix round 2 rerun)
+
+- **F-1 Preserve first.** Before any run, copy `reports/pseudo_online/` (4 CSVs) and `reports/logs/P20/pseudo_online_{5,6}class.log` to `mas/state/scratch/p24_fix2/p20_original/`. Also copy the clone's `reports/pseudo_online/` to `mas/state/scratch/p24_fix2/clone_bb9c091/`. Record the sha256 of all of them in `manifest.txt` there. `reports/logs/P20/` is never written to.
+- **F-2 Head.** All three runs use the code at one recorded head (`git rev-parse HEAD`), with `pseudo_online.py` byte-identical to e2bd25d (`git diff e2bd25d HEAD -- scripts/benchmarks/pseudo_online.py src/` empty). The exceptions are documentation-only commits, which must be listed.
+- **F-3 Runs.** These are the two Makefile p20 commands (handoff "Run commands"), each tag run three times:
+  - Main A writes the canonical `reports/pseudo_online/`.
+  - Main B uses `--out-dir mas/state/scratch/p24_fix2/main_B/`.
+  - Clone C runs in a clean checkout at the same head, with its own `--out-dir` under `mas/state/scratch/p24_fix2/clone_C/`.
+  - All runs use the same `--raw-dir`. Do not pass `--resume`. The device line must read `device cuda, seed 42` in all six logs.
+  - Main-tree logs go to `reports/logs/P24/pseudo_online_{5,6}class_{A,B}.log`. Clone logs go outside the clone's `reports/`, so the clone stays a make-all tree for `test_p24_docs.py`.
+- **F-4 Identity.** For each tag, A = B = C on every column of `summary_*.csv` except `Seconds`, and on every cell of `decisions_*.csv`. The per-subject `best epoch` and `val acc` lines in the logs must also be equal.
+  - The bar is exact; no tolerance applies.
+  - Any difference: stop. Report the cells and do not run again to obtain agreement. The orchestrator then decides under hard stop 2.
+- **F-5 Report.** Give the old (P20) and new per-subject accuracy, false activations, missed and ITR for both tags, read from the files. Mark them as two runs of one seed, not as a comparison.
+- **F-6 Tests.** Run the full suite once in the main tree at the head. Also run `P24_DOCS_ROOT=<clone> pytest tests/test_p24_docs.py` on the clean clone.
+
+### Binding items for the scribe (after F-4 passes)
+
+- **S-1 Re-copy** every pseudo-online number from the new CSVs, and re-check every claim built on them. Places, from `grep -n`:
+  - `README.md:242`
+  - `RESEARCH_LOG.md:510`
+  - `docs/report/v2/report.md:215`, and Table 7 / §3.7 if they hold pseudo-online cells
+  - `docs/progress_report/progress_report.md:131`
+  - `docs/infographic/methodology_infographic.svg:121-123`
+  - any other hit of `pseudo` or of `89.00`, `74.00`, `27.5`, `44.56`
+  
+  Claims that stay only if the new CSV supports them:
+  - the 6-class drop is due to missed periods in S01 and S02
+  - the rest class absorbs false activations (5-class versus 6-class false-activation rate)
+  - the N = 5 ITR value
+  
+  Drop or rewrite any claim the new CSV no longer supports.
+- **S-2 Label.** One sentence next to the numbers in README, report v2 and progress report, and in the SVG footnote line. It says the values come from the P24 rerun with deterministic cuDNN (date, head), one seed (42), and that the P20 run (2026-10-28) had no determinism flags, so its values were one non-reproducible draw. No "improved" or "changed" wording, and no difference P24 − P20 presented as an effect.
+- **S-3 RESEARCH_LOG.** The P20 entry keeps 89.00 % / 74.00 %, labelled "original run without cuDNN determinism flags, not reproducible", with the P20 log path. The P24 entry gives the new values with the `reports/logs/P24/` paths and the main-to-main and clone identity of F-4.
+- **S-4 `mas/state/reports/P20.md`.** The scribe appends a dated "Note (P24, 2026-10-29)" at the end and edits no original line. The note covers:
+  - the nondeterminism (no cuDNN flags)
+  - the fix commit e2bd25d
+  - the old and new means for both tags
+  - a pointer to the P24 report
+  
+  The orchestrator commits it with the P24 gate (`docs:`).
+- **S-5 README.** The "outside `all`" sentence lists the standalone `scripts/diagnostics/network_seed_spread.py` (`reports/diagnostics/`) next to `make loso-all`.
+- **S-6** The final review re-checks every S-1 number against the new CSVs before the gate.
+
+Verdict: PASS
+
 ## Questions
 <!-- receivers append: ACK <agent> <YYYY-MM-DD>, then questions; answers appended, never deleted -->
