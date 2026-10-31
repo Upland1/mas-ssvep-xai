@@ -701,3 +701,8 @@ Changed
 - Review fixes (same branch): §2.3 SFS sentence rewritten with its configuration and the R-4 reconstruction, cited to the review's R11 read (`mas/state/scratch/reference_access.log`); pointers to §2.3 in §3.10, §4, §5 and the Abstract; §2.4 per-subject P04 values listed and the legacy count sentence reworded ("three of the four legacy networks"); §3.6 2-tap column explained with the seed-42 means; §5 original-side statements with the same citation.
 
 Note: the `ccnn` values are the P25 regenerated ones (R-8 layout); the Abstract and §6 are unchanged.
+
+## v1.0.4 (2026-10-30)
+
+Fixed
+- `docs/report/v2/report.md` §5: the future-work sentence named "LOSO with the rest class" and said the original leaves it open. The original's open item (planning note of 2026-10-20, results never produced) is LOSO normalization from the held-out subject's fixation-cross (201) windows instead of its first K trials, five classes. Reworded, with the planning note cited as source [34]; Granger and mutual-information connectivity unchanged. No number changed.
