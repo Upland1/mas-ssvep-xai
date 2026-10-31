@@ -682,3 +682,20 @@ Changed
 - `## Sources` extended to [26]; §6 and the Abstract are unchanged.
 
 Note: the top-level `reports/feature_space_benchmark_S03.csv` and `reports/feature_selection_ablation_S03.csv` hold the grouped P11 rerun; the legacy values are read from `reports/legacy_leaky/`.
+
+## v1.0.3 (2026-10-30)
+
+Added to `docs/report/v2/report.md` (MODIFIED): five coverage additions requested by Sebastian; no existing result changed.
+- §3.6, Tables 6 and 6b: LOSO networks `ccnn` and `eegnet` (seeds 42, 43, 44) and `compact_eegnet` (seed 42), in-fold, 1.0 s, seven common channels; seed-42 per-subject values, three-seed cohort means and ranges, and the fold check (no degenerate fold).
+- §2.4: `DualBranchFusionCNN` (P04, legacy, 10,005 parameters) in the network list, with its P04 batch results labelled legacy and the full-data export caveat; the legacy network count is corrected to four.
+- §2.6: the LOSO networks named as run under the same protocol.
+- §2.3: one sentence on the sequential forward selection row as a reconstruction from the R-4 record (D-1).
+- §4 Pseudo-online session pairs: `--train-session` and `--test-session` in `scripts/benchmarks/pseudo_online.py`; the limitation is the delivered data.
+- §5: future-work sentence (LOSO with the rest class; Granger-causality and mutual-information connectivity not implemented), with the grep evidence in `## Sources` [31].
+- §3.6 39-subject paragraph: the 39-subject `ccnn` value (72.08 %, three channels, P25 regenerated) added with its comparability caveat.
+- `## Sources` extended to [32].
+
+Changed
+- §3.6 Table 6: protocol label of `fbcca` is "LOSO (no fitting)" and of `lda` is "LOSO, in-fold"; no value changed.
+
+Note: the `ccnn` values are the P25 regenerated ones (R-8 layout); the Abstract and §6 are unchanged.
