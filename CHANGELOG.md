@@ -692,10 +692,12 @@ Added to `docs/report/v2/report.md` (MODIFIED): five coverage additions requeste
 - §2.3: one sentence on the sequential forward selection row as a reconstruction from the R-4 record (D-1).
 - §4 Pseudo-online session pairs: `--train-session` and `--test-session` in `scripts/benchmarks/pseudo_online.py`; the limitation is the delivered data.
 - §5: future-work sentence (LOSO with the rest class; Granger-causality and mutual-information connectivity not implemented), with the grep evidence in `## Sources` [31].
+- `notebooks/loso_colab.ipynb` (MODIFIED): settings cell default `BRANCH = "main"` (was `phase/P21-loso-colab`, which is not on GitHub and carries the pre-P25 CCNN); JSON valid.
 - §3.6 39-subject paragraph: the 39-subject `ccnn` value (72.08 %, three channels, P25 regenerated) added with its comparability caveat.
 - `## Sources` extended to [32].
 
 Changed
 - §3.6 Table 6: protocol label of `fbcca` is "LOSO (no fitting)" and of `lda` is "LOSO, in-fold"; no value changed.
+- Review fixes (same branch): §2.3 SFS sentence rewritten with its configuration and the R-4 reconstruction, cited to the review's R11 read (`mas/state/scratch/reference_access.log`); pointers to §2.3 in §3.10, §4, §5 and the Abstract; §2.4 per-subject P04 values listed and the legacy count sentence reworded ("three of the four legacy networks"); §3.6 2-tap column explained with the seed-42 means; §5 original-side statements with the same citation.
 
 Note: the `ccnn` values are the P25 regenerated ones (R-8 layout); the Abstract and §6 are unchanged.
